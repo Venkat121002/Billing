@@ -1,0 +1,11 @@
+{
+  "scripts": {
+    "build:frontend": "cd frontend && npm run build",
+    "build:electron": "cd frontend && npm run electron:build",
+    "dist": "npm run build:frontend && npm run build:electron"
+  },
+  "devDependencies": {
+    "electron": "^39.2.7",
+    "electron-builder": "^26.4.0"
+  }
+}

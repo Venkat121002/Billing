@@ -1,0 +1,57 @@
+{
+    "functions": [
+        {
+            "source": "backend",
+            "codebase": "default",
+            "runtime": "nodejs20",
+            "ignore": [
+                "node_modules",
+                ".git",
+                "firebase-debug.log",
+                "firebase-debug.*.log",
+                "*.local"
+            ]
+        }
+    ],
+    "firestore": {
+        "rules": "firestore.rules",
+        "indexes": "firestore.indexes.json"
+    },
+    "hosting": [
+        {
+            "target": "swordnex-softwares",
+            "public": "frontend/dist",
+            "ignore": [
+                "firebase.json",
+                "**/.*",
+                "**/node_modules/**"
+            ],
+            "headers": [
+                {
+                    "source": "**",
+                    "headers": [
+                        {
+                            "key": "Cross-Origin-Opener-Policy",
+                            "value": "unsafe-none"
+                        },
+                        {
+                            "key": "Cross-Origin-Embedder-Policy",
+                            "value": "unsafe-none"
+                        }
+                    ]
+                }
+            ],
+            "rewrites": [
+               
+                {
+                    "source": "/api/**",
+                    "function": "billingApi"
+                },
+                {
+                    "source": "**",
+                    "destination": "/index.html"
+                }
+            ]
+        }
+    ]
+}

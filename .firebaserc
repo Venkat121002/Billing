@@ -1,0 +1,15 @@
+{
+  "projects": {
+    "default": "swordnex-softwares"
+  },
+  "targets": {
+    "swordnex-softwares": {
+      "hosting": {
+        "swordnex-softwares": [
+          "swordnex-softwares"
+        ]
+      }
+    }
+  },
+  "etags": {}
+}

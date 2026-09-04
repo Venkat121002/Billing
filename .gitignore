@@ -1,0 +1,35 @@
+node_modules/
+dist/
+build/
+
+# Environment files
+.env
+.env.*
+*.env
+
+# Service account credentials
+serviceAccountKey.json
+
+# Firebase / Google credentials
+*-service-account.json
+
+# Logs and local output
+*.log
+*.txt
+
+# Local databases
+*.sqlite
+*.sqlite3
+*.db
+
+# Firebase generated cache
+.firebase/
+
+# Temporary files
+temp/
+
+# Generated Vite files
+*.timestamp-*.mjs
+
+# IDE
+.vscode/
