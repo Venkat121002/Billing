@@ -108,5 +108,6 @@ function SubscriptionRoute({ children }) {
       );
     }
   }
+}
 
 export default SubscriptionRoute;
