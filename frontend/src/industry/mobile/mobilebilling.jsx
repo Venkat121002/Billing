@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import axios from "axios";
 import {
   Search,
   ShoppingCart,
@@ -10,24 +11,53 @@ import {
 } from "lucide-react";
 import BillingLayout from "../../Layout/BillingLayout/AdminLayout";
 import { useAuth } from "../../contexts/AuthContext";
-import { db } from "../../config/FirebaseConfig";
-import {
-  collection,
-  addDoc,
-  doc,
-  updateDoc,
-  serverTimestamp,
-} from "firebase/firestore";
-import { useCollectionData } from "react-firebase-hooks/firestore";
+import API_URL from "../../config/api";
 
 const MobileBilling = () => {
   const { currentUser } = useAuth();
 
-  const mobilesRef = currentUser
-    ? collection(db, "users", currentUser.uid, "mobiles")
-    : null;
+  const [mobiles, setMobiles] = useState([]);
 
-  const [mobiles] = useCollectionData(mobilesRef, { idField: "id" });
+  // =========================
+  // LOAD MOBILES (PRODUCTS WITH AN IMEI) FROM BACKEND API
+  // (Same REST endpoint every other screen uses — respects DB_TYPE:
+  // MongoDB locally, Firestore in production. Do NOT read Firestore
+  // directly here, or local dev would bypass the local database.)
+  // =========================
+  useEffect(() => {
+    let retries = 0;
+    const MAX_RETRIES = 10;
+
+    const fetchMobiles = async () => {
+      if (!currentUser) return;
+      const token = sessionStorage.getItem("token");
+
+      if (!token) {
+        if (retries < MAX_RETRIES) {
+          retries++;
+          return setTimeout(fetchMobiles, 1000);
+        }
+        return;
+      }
+
+      try {
+        const res = await axios.get(`${API_URL}/products`, {
+          headers: { "x-auth-token": token },
+        });
+        // Mobiles are products tracked by IMEI (single-unit inventory)
+        setMobiles(res.data.filter((p) => p.imei1));
+      } catch (err) {
+        if (retries < MAX_RETRIES) {
+          retries++;
+          console.warn(`Mobile inventory fetch attempt ${retries} failed, retrying...`);
+          return setTimeout(fetchMobiles, 1000);
+        }
+        console.error("Failed to load mobile inventory:", err);
+      }
+    };
+
+    fetchMobiles();
+  }, [currentUser]);
 
   const [keyword, setKeyword] = useState("");
   const [cart, setCart] = useState([]);
@@ -92,7 +122,7 @@ const MobileBilling = () => {
   const change = cash - getTotal();
 
   // =========================
-  // COMPLETE SALE
+  // COMPLETE SALE (via backend API — respects DB_TYPE)
   // =========================
   const completeSale = async () => {
     if (!currentUser) return;
@@ -102,35 +132,48 @@ const MobileBilling = () => {
       return;
     }
 
-    await addDoc(
-      collection(db, "users", currentUser.uid, "mobileSales"),
-      {
-        items: cart,
-        total: getTotal(),
-        paymentMethod,
-        createdAt: serverTimestamp(),
-      }
-    );
-
-    // Mark mobiles as sold
-    for (const item of cart) {
-      const mobileRef = doc(
-        db,
-        "users",
-        currentUser.uid,
-        "mobiles",
-        item.id
-      );
-
-      await updateDoc(mobileRef, {
-        sold: true,
-        soldAt: serverTimestamp(),
-      });
+    const token = sessionStorage.getItem("token");
+    if (!token) {
+      alert("Session expired. Please log in again.");
+      return;
     }
 
-    clearCart();
-    setCash(0);
-    alert("Mobile Sale Completed!");
+    const config = { headers: { "x-auth-token": token } };
+
+    try {
+      await axios.post(
+        `${API_URL}/billing/bills`,
+        {
+          items: cart,
+          total: getTotal(),
+          paymentMethod,
+          createdAt: new Date().toISOString(),
+        },
+        config
+      );
+
+      // Mark sold mobiles
+      const soldAt = new Date().toISOString();
+      const stockUpdates = cart.map((item) =>
+        axios
+          .put(
+            `${API_URL}/products/${item.id}`,
+            { sold: true, soldAt },
+            config
+          )
+          .catch((err) =>
+            console.error(`Failed to mark ${item.brand} ${item.model} as sold:`, err)
+          )
+      );
+      await Promise.all(stockUpdates);
+
+      clearCart();
+      setCash(0);
+      alert("Mobile Sale Completed!");
+    } catch (err) {
+      console.error("Error completing sale:", err);
+      alert(err.response?.data?.msg || "Failed to complete sale. Please try again.");
+    }
   };
 
   const filteredMobiles =
@@ -308,4 +351,3 @@ const MobileBilling = () => {
 };
 
 export default MobileBilling;
-

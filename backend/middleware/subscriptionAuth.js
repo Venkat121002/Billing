@@ -1,4 +1,8 @@
 const { db } = require('../config/firebase');
+const { Owner: OwnerModel } = require('../models/mongodb');
+
+// Determine which database to use
+const DB_TYPE = process.env.DB_TYPE || 'firestore';
 
 /**
  * Middleware to ensure the owner's subscription is active.
@@ -13,19 +17,36 @@ const subscriptionAuth = async (req, res, next) => {
             return res.status(401).json({ msg: "Missing tenant or owner context" });
         }
 
-        const ownerDoc = await db.collection('SwordNexBillingSoftware')
-            .doc(tenantId)
-            .collection('owner')
-            .doc(ownerId)
-            .get();
+        let subStatus, subEndDate;
 
-        if (!ownerDoc.exists) {
-            return res.status(404).json({ msg: "Owner account not found" });
+        // === MONGODB MODE ===
+        if (DB_TYPE === 'mongodb') {
+            const owner = await OwnerModel.findOne({ userId: ownerId, tenantId });
+
+            if (!owner) {
+                return res.status(404).json({ msg: "Owner account not found" });
+            }
+
+            subStatus = owner.subscription?.status || 'Inactive';
+            subEndDate = owner.subscription?.endDate ? new Date(owner.subscription.endDate) : null;
+
+        } else {
+            // === FIRESTORE MODE ===
+            const ownerDoc = await db.collection('SwordNexBillingSoftware')
+                .doc(tenantId)
+                .collection('owner')
+                .doc(ownerId)
+                .get();
+
+            if (!ownerDoc.exists) {
+                return res.status(404).json({ msg: "Owner account not found" });
+            }
+
+            const ownerData = ownerDoc.data();
+            subStatus = ownerData.subscription?.status || 'Inactive';
+            subEndDate = ownerData.subscription?.endDate ? new Date(ownerData.subscription.endDate) : null;
         }
 
-        const ownerData = ownerDoc.data();
-        const subStatus = ownerData.subscription?.status || 'Inactive';
-        const subEndDate = ownerData.subscription?.endDate ? new Date(ownerData.subscription.endDate) : null;
         const now = new Date();
 
         if (subStatus !== 'Active' || (subEndDate && subEndDate < now)) {

@@ -216,7 +216,7 @@ const Login = () => {
           <button
             onClick={handleGoogleLogin}
             disabled={isLoading}
-            className="w-full h-11 flex items-center justify-center gap-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition text-sm"
+            className="w-full h-11 flex items-center justify-center gap-2 border border-gray-300 rounded-lg text-black hover:bg-gray-50 transition text-sm"
           >
             <img
               src="https://developers.google.com/identity/images/g-logo.png"

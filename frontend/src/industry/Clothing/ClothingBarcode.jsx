@@ -96,7 +96,7 @@ const ClothingBarcodePage = () => {
                             <ArrowLeft size={20} />
                             Back
                         </button>
-                        <h1 className="text-2xl font-bold text-gray-800">{currentUser.companyDetails.industry !=="grocery_store" ? (
+                        <h1 className="text-2xl font-bold text-gray-800">{currentUser.companyDetails.industry === "mobile_shop" ? (
                                 "Device Barcode"
                             ):(
                                 "Product Barcode"
@@ -124,14 +124,14 @@ const ClothingBarcodePage = () => {
                             {/* Product Info Grid */}
                             <div className="grid grid-cols-2 gap-6">
                                 <div className="space-y-1">
-                                    <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">{currentUser.companyDetails.industry !=="grocery_store" ? (
+                                    <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">{currentUser.companyDetails.industry === "mobile_shop" ? (
                                 "Color"
                             ):(
                                 "SKU"
                             )}</p>
                                     <div className="flex items-center gap-2 text-gray-700">
                                         <Palette size={16} className="text-[#f74faf]" />
-                                        <span className="font-semibold">{currentUser.companyDetails.industry !=="grocery_store" ? (
+                                        <span className="font-semibold">{currentUser.companyDetails.industry === "mobile_shop" ? (
                                 `${product.color || "N/A"}`
                             ):(
                                 `${product.sku}`
@@ -139,14 +139,14 @@ const ClothingBarcodePage = () => {
                                     </div>
                                 </div>
                                 <div className="space-y-1">
-                                    <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">{currentUser.companyDetails.industry !=="grocery_store" ? (
+                                    <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">{currentUser.companyDetails.industry === "mobile_shop" ? (
                                 "IMEI 1"
                             ):(
                                "Category"
                             )}</p>
                                     <div className="flex items-center gap-2 text-gray-700">
                                         <Hash size={16} className="text-[#f74faf]" />
-                                        <span className="font-semibold">{currentUser.companyDetails.industry !=="grocery_store" ? (
+                                        <span className="font-semibold">{currentUser.companyDetails.industry === "mobile_shop" ? (
                                 `${product.imei1}`
                             ):(
                                 `${product.category}`
@@ -163,14 +163,14 @@ const ClothingBarcodePage = () => {
                                         {"@page { size: auto; margin: 5mm; }"}
                                     </style>
                                     <div className="mb-2 text-xs font-bold uppercase tracking-widest text-gray-800">
-                                       {currentUser.companyDetails.industry !=="grocery_store" ? (
+                                       {currentUser.companyDetails.industry === "mobile_shop" ? (
                                 `${product.brand} ${product.model}`
                             ):(
                                 `${product.name}`
                             )} 
                                     </div>
                                     <Barcode
-                                        value={currentUser.companyDetails.industry !=="grocery_store" ? (
+                                        value={currentUser.companyDetails.industry === "mobile_shop" ? (
                                 `${product.imei1}`
                             ):(
                                 `${product.barcode}`
@@ -181,7 +181,7 @@ const ClothingBarcodePage = () => {
                                         margin={0}
                                     />
                                     <div className="mt-1 text-[10px] font-medium text-gray-600">
-                                       {currentUser.companyDetails.industry !=="grocery_store" ? (
+                                       {currentUser.companyDetails.industry === "mobile_shop" ? (
                                  `IMEI: ${product.imei1}`
                             ):(
                                 `Sales Date: ${product.salesDate}`

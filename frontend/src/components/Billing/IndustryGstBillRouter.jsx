@@ -1,7 +1,6 @@
 import { useAuth } from "../../contexts/AuthContext";
 import GroceryGSTBill from "../../industry/grocery/groceryGstBill";
 import SDGSTBill from "../../industry/SoftwareDevelopment/SDGstBill";
-import GenerateGSTBill from "./GenerateGSTBill";
 import ClothingGSTBill from "../../industry/Clothing/ClothingGstBill";
 import AcademyGSTBill from "../../industry/academy/academygstbill";
 
@@ -32,20 +31,19 @@ export default function IndustryGstBillRouter() {
 
     return <SDGSTBill />;
   }
-    if (industryLower.includes("grocery_store")) {
-
-    return <GroceryGSTBill />;
-  }
  if (industryLower.includes("clothing")) {
 
     return <ClothingGSTBill />;
   }
   if (industryLower.includes("academy")) {
-    
+
     return <AcademyGSTBill />;
   }
   // For any other case, including "grocery" or if no specific match is found,
-  // fall back to the default GroceryInventory.
+  // fall back to the default GroceryGSTBill (matches the pattern used by
+  // every other Industry*Router — grocery tenants use the "grocery" value,
+  // not "grocery_store", so an explicit check for "grocery_store" here never
+  // matched and grocery tenants were falling through to the generic screen).
 
-  return <GenerateGSTBill />;
+  return <GroceryGSTBill />;
 }

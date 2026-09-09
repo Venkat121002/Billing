@@ -1,9 +1,16 @@
 const { db } = require('../config/firebase');
+const { getModel } = require('../models/mongodb');
+const { MongoCollectionReference } = require('./mongoAdapter');
+
+// Determine which database to use
+const DB_TYPE = process.env.DB_TYPE || 'firestore';
 
 /**
- * Gets the correct Firestore collection reference based on user role and production structure.
- * Owner: SwordNexBillingSoftware/{tenantId}/owner/{ownerId}/{subCollection}
- * Sub-user: SwordNexBillingSoftware/{tenantId}/owner/{ownerId}/subuser/{subuserId}/{subuserCollection}
+ * Gets the correct collection reference based on user role and database type.
+ * Supports both Firestore and MongoDB seamlessly.
+ *
+ * Firestore: SwordNexBillingSoftware/{tenantId}/owner/{ownerId}/{subCollection}
+ * MongoDB: Mongoose model with query filters {tenantId, ownerId, subuserId}
  */
 const getCollection = (req, subCollection) => {
     const tenantId = process.env.TENANT_ID;
@@ -13,14 +20,48 @@ const getCollection = (req, subCollection) => {
         throw new Error("Server Configuration Error: TENANT_ID not set");
     }
 
-    // Determine the root owner document path
+    // Determine the effective owner ID
     const effectiveOwnerId = role === 'owner' ? userId : ownerId;
 
     if (!effectiveOwnerId) {
         throw new Error("Session missing owner identification. Please re-login.");
     }
 
-    // Path: SwordNexBillingSoftware/{tenantId}/owner/{ownerId}
+    // === MONGODB MODE ===
+    if (DB_TYPE === 'mongodb') {
+        // Map collection names for sub-users
+        let targetCollection = subCollection;
+        if (role === 'subuser') {
+            if (subCollection === 'products') targetCollection = 'subuserproducts';
+            if (subCollection === 'customers') targetCollection = 'subusercustomer';
+            if (subCollection === 'gstBills') targetCollection = 'subusergstbill';
+            if (subCollection === 'credit_customers') targetCollection = 'subusercredit';
+            if (subCollection === 'suppliers') targetCollection = 'subusersupplier';
+            if (subCollection === 'bills') targetCollection = 'subuserbills';
+            if (subCollection === 'transactions') targetCollection = 'subusertransactions';
+            if (subCollection === 'cashbook') targetCollection = 'subusertransactions';
+        }
+
+        const Model = getModel(targetCollection);
+        if (!Model) {
+            throw new Error(`MongoDB model not found for collection: ${targetCollection}`);
+        }
+
+        // Build base query with tenant and owner scoping
+        const baseQuery = {
+            tenantId,
+            ownerId: effectiveOwnerId
+        };
+
+        // Add subuser scoping if applicable
+        if (role === 'subuser') {
+            baseQuery.subuserId = subuserId || userId;
+        }
+
+        return new MongoCollectionReference(Model, baseQuery);
+    }
+
+    // === FIRESTORE MODE (Original Logic) ===
     const ownerDocRef = db.collection('SwordNexBillingSoftware')
         .doc(tenantId)
         .collection('owner')
@@ -29,10 +70,9 @@ const getCollection = (req, subCollection) => {
     if (role === 'owner') {
         return ownerDocRef.collection(subCollection);
     } else {
-        // Sub-user logic: SwordNexBillingSoftware/{tenantId}/owner/{ownerId}/subuser/{subuserId}/{targetCollection}
+        // Sub-user logic
         const targetSubUserId = subuserId || userId;
 
-        // Map collection names for sub-users as per production requirements
         let targetCollection = subCollection;
         if (subCollection === 'products') targetCollection = 'subuserproducts';
         if (subCollection === 'customers') targetCollection = 'subusercustomer';
@@ -56,6 +96,7 @@ const getCollection = (req, subCollection) => {
  */
 const fetchUnifiedData = async (req, subCollection, options = {}) => {
     const { userId, role } = req.user;
+    const tenantId = process.env.TENANT_ID;
 
     // 1. Get owner's own records
     const ownerRef = getCollection(req, subCollection);
@@ -68,15 +109,55 @@ const fetchUnifiedData = async (req, subCollection, options = {}) => {
     }));
 
     if (role === 'owner') {
-        const tenantId = process.env.TENANT_ID;
-
-        // SKIP sub-user fetching for products if role is owner (as per user request)
-        // UNLESS explicitly requested via options (e.g. for Staff Records page)
+        // SKIP sub-user fetching for products if role is owner (unless requested)
         if (subCollection === 'products' && !options.includeSubuserProducts) {
             return unifiedRecords;
         }
 
-        // 2. Get all sub-users for this owner
+        // === MONGODB MODE ===
+        if (DB_TYPE === 'mongodb') {
+            const SubUserModel = getModel('subuser');
+            const subusers = await SubUserModel.find({ tenantId, ownerId: userId }).exec();
+
+            const subuserFetchPromises = subusers.map(async (subuser) => {
+                const subuserId = subuser.userId || subuser._id.toString();
+                let targetCollection = subCollection;
+                if (subCollection === 'products') targetCollection = 'subuserproducts';
+                if (subCollection === 'customers') targetCollection = 'subusercustomer';
+                if (subCollection === 'gstBills') targetCollection = 'subusergstbill';
+                if (subCollection === 'credit_customers') targetCollection = 'subusercredit';
+                if (subCollection === 'suppliers') targetCollection = 'subusersupplier';
+                if (subCollection === 'bills') targetCollection = 'subuserbills';
+                if (subCollection === 'transactions') targetCollection = 'subusertransactions';
+                if (subCollection === 'cashbook') targetCollection = 'subusertransactions';
+
+                const Model = getModel(targetCollection);
+                if (!Model) return [];
+
+                const records = await Model.find({ tenantId, ownerId: userId, subuserId }).exec();
+                return records.map(doc => {
+                    const data = doc.toObject();
+                    const docId = doc._id.toString();
+                    delete data._id;
+                    delete data.__v;
+                    return {
+                        id: docId,
+                        ...data,
+                        source: `${subuser.firstName} ${subuser.lastName}`.trim() || 'Subuser',
+                        createdBy: subuserId
+                    };
+                });
+            });
+
+            const subuserRecordsArrays = await Promise.all(subuserFetchPromises);
+            subuserRecordsArrays.forEach(records => {
+                unifiedRecords = [...unifiedRecords, ...records];
+            });
+
+            return unifiedRecords;
+        }
+
+        // === FIRESTORE MODE ===
         const subusersRef = db.collection('SwordNexBillingSoftware')
             .doc(tenantId)
             .collection('owner')
@@ -85,12 +166,10 @@ const fetchUnifiedData = async (req, subCollection, options = {}) => {
 
         const subusersSnapshot = await subusersRef.get();
 
-        // 3. For each sub-user, fetch their records from their specific collection
         const subuserFetchPromises = subusersSnapshot.docs.map(async (subuserDoc) => {
             const subuserData = subuserDoc.data();
             const subuserId = subuserDoc.id;
 
-            // Re-use logic for sub-user collection mapping
             let targetCollection = subCollection;
             if (subCollection === 'products') targetCollection = 'subuserproducts';
             if (subCollection === 'customers') targetCollection = 'subusercustomer';

@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
+import axios from "axios";
 import {
   Search,
   ShoppingCart,
@@ -12,24 +13,52 @@ import {
 } from "lucide-react";
 import BillingLayout from "../../Layout/BillingLayout/AdminLayout";
 import { useAuth } from "../../contexts/AuthContext";
-import { db } from "../../config/FirebaseConfig";
-import {
-  collection,
-  addDoc,
-  doc,
-  updateDoc,
-  serverTimestamp,
-} from "firebase/firestore";
-import { useCollectionData } from "react-firebase-hooks/firestore";
+import API_URL from "../../config/api";
 
 const Billing = () => {
   const { currentUser } = useAuth();
 
-  const productsRef = currentUser
-    ? collection(db, "users", currentUser.uid, "products")
-    : null;
+  const [products, setProducts] = useState([]);
 
-  const [products] = useCollectionData(productsRef, { idField: "id" });
+  // =========================
+  // LOAD PRODUCTS FROM BACKEND API
+  // (Same REST endpoint every other screen uses — respects DB_TYPE:
+  // MongoDB locally, Firestore in production. Do NOT read Firestore
+  // directly here, or local dev would bypass the local database.)
+  // =========================
+  useEffect(() => {
+    let retries = 0;
+    const MAX_RETRIES = 10;
+
+    const fetchProducts = async () => {
+      if (!currentUser) return;
+      const token = sessionStorage.getItem("token");
+
+      if (!token) {
+        if (retries < MAX_RETRIES) {
+          retries++;
+          return setTimeout(fetchProducts, 1000);
+        }
+        return;
+      }
+
+      try {
+        const res = await axios.get(`${API_URL}/products`, {
+          headers: { "x-auth-token": token },
+        });
+        setProducts(res.data);
+      } catch (err) {
+        if (retries < MAX_RETRIES) {
+          retries++;
+          console.warn(`Product fetch attempt ${retries} failed, retrying...`);
+          return setTimeout(fetchProducts, 1000);
+        }
+        console.error("Failed to load products:", err);
+      }
+    };
+
+    fetchProducts();
+  }, [currentUser]);
 
   const [keyword, setKeyword] = useState("");
   const [cart, setCart] = useState([]);
@@ -87,7 +116,7 @@ const Billing = () => {
         {
           ...product,
           qty: 1,
-          price: product.salesPrice || 0,
+          price: product.salePrice || 0,
         },
       ]);
     }
@@ -113,7 +142,7 @@ const Billing = () => {
   const change = cash - getTotal();
 
   // =========================
-  // COMPLETE SALE
+  // COMPLETE SALE (via backend API — respects DB_TYPE)
   // =========================
   const completeSale = async () => {
     if (!currentUser) return;
@@ -123,36 +152,47 @@ const Billing = () => {
       return;
     }
 
-    await addDoc(
-      collection(db, "users", currentUser.uid, "sales"),
-      {
-        items: cart,
-        total: getTotal(),
-        paymentMethod,
-        createdAt: serverTimestamp(),
-      }
-    );
-
-    for (const item of cart) {
-      const productRef = doc(
-        db,
-        "users",
-        currentUser.uid,
-        "products",
-        item.id
-      );
-
-      await updateDoc(productRef, {
-        quantity: Math.max(
-          (item.quantity || 0) - item.qty,
-          0
-        ),
-      });
+    const token = sessionStorage.getItem("token");
+    if (!token) {
+      alert("Session expired. Please log in again.");
+      return;
     }
 
-    clearCart();
-    setCash(0);
-    alert("Sale Completed!");
+    const config = { headers: { "x-auth-token": token } };
+
+    try {
+      await axios.post(
+        `${API_URL}/billing/bills`,
+        {
+          items: cart,
+          total: getTotal(),
+          paymentMethod,
+          createdAt: new Date().toISOString(),
+        },
+        config
+      );
+
+      // Deduct stock for each sold item
+      const stockUpdates = cart.map((item) =>
+        axios
+          .put(
+            `${API_URL}/products/${item.id}`,
+            { quantity: Math.max((item.quantity || 0) - item.qty, 0) },
+            config
+          )
+          .catch((err) =>
+            console.error(`Failed to update stock for ${item.name}:`, err)
+          )
+      );
+      await Promise.all(stockUpdates);
+
+      clearCart();
+      setCash(0);
+      alert("Sale Completed!");
+    } catch (err) {
+      console.error("Error completing sale:", err);
+      alert(err.response?.data?.msg || "Failed to complete sale. Please try again.");
+    }
   };
 
   const filteredProducts =
@@ -204,7 +244,7 @@ const Billing = () => {
                 className="flex justify-between p-3 border-b cursor-pointer hover:bg-gray-50"
               >
                 <span>{product.name}</span>
-                <span>₹{product.salesPrice}</span>
+                <span>₹{product.salePrice}</span>
               </div>
             ))}
           </div>

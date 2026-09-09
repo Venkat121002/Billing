@@ -1,7 +1,13 @@
-const { db } = require('../config/firebase');
+const { db, admin } = require('../config/firebase');
 const { getCollection, fetchUnifiedData } = require('../utils/dbUtils');
 const razorpay = require('../config/razorpay');
 const crypto = require('crypto');
+
+// MongoDB models
+const { Owner: OwnerModel, SubscriptionDetail: SubscriptionDetailModel } = require('../models/mongodb');
+
+// Determine which database to use
+const DB_TYPE = process.env.DB_TYPE || 'firestore';
 
 // Billing Plans Configuration
 const PLANS = {
@@ -100,56 +106,115 @@ exports.verifySubscriptionPayment = async (req, res) => {
         else if (billingCycle === 'yearly') endDate.setFullYear(endDate.getFullYear() + 1);
         else if (billingCycle === '3years') endDate.setFullYear(endDate.getFullYear() + 3);
 
-        const batch = db.batch();
-        // Path: SwordNexBillingSoftware/{TENANT_ID}/owner/{UID}
-        const ownerDocRef = db.collection('SwordNexBillingSoftware').doc(tenantId).collection('owner').doc(req.user.userId);
+        let ownerEmail, ownerName;
 
-        // Fetch Key User Details for Email/PDF
-        const ownerDoc = await ownerDocRef.get();
-        const ownerData = ownerDoc.exists ? ownerDoc.data() : {};
-        const ownerEmail = ownerData.email || req.user.email; // Fallback if email not in doc
-        const ownerName = ownerData.name || ownerData.username || "Valued Customer";
+        // === MONGODB MODE ===
+        if (DB_TYPE === 'mongodb') {
+            const owner = await OwnerModel.findOne({ userId: req.user.userId, tenantId });
+            const ownerData = owner ? owner.toObject() : {};
+            ownerEmail = ownerData.email || req.user.email;
+            ownerName = ownerData.firstName || ownerData.companyDetails?.name || "Valued Customer";
 
-        // 3. Update Tenant Subscription or Additional Users
-        if (plan === 'additional_users') {
-            const count = parseInt(req.body.count) || 0;
-            batch.update(ownerDocRef, {
-                'additionalSubUsers': db.FieldValue.increment(count),
-                'lastPaymentId': paymentId,
-                'lastOrderId': orderId
+            // 3. Update Tenant Subscription or Additional Users
+            if (plan === 'additional_users') {
+                const count = parseInt(req.body.count) || 0;
+                await OwnerModel.updateOne(
+                    { userId: req.user.userId, tenantId },
+                    {
+                        $inc: { additionalSubUsers: count },
+                        $set: { lastPaymentId: paymentId, lastOrderId: orderId }
+                    }
+                );
+            } else {
+                await OwnerModel.updateOne(
+                    { userId: req.user.userId, tenantId },
+                    {
+                        $set: {
+                            'subscription.plan': plan,
+                            'subscription.status': 'Active',
+                            'subscription.startDate': startDate.toISOString(),
+                            'subscription.endDate': endDate.toISOString(),
+                            'subscription.billingCycle': billingCycle,
+                            'subscription.paymentId': paymentId,
+                            'subscription.orderId': orderId,
+                            'subscription.amount': req.body.amount || 0,
+                            'subscription.paymentMethod': 'razorpay',
+                            'subscription.check': 'active' // legacy/compatibility
+                        }
+                    }
+                );
+            }
+
+            // 4. Add Subscription History
+            await SubscriptionDetailModel.create({
+                tenantId,
+                ownerId: req.user.userId,
+                plan,
+                billingCycle,
+                amount: req.body.amount || 0,
+                paymentId,
+                orderId,
+                signature,
+                paymentMethod: 'razorpay',
+                startDate: startDate.toISOString(),
+                endDate: endDate.toISOString(),
+                createdAt: new Date().toISOString(),
+                createdBy: req.user.userId
             });
+
         } else {
-            batch.update(ownerDocRef, {
-                'subscription.plan': plan,
-                'subscription.status': 'Active',
-                'subscription.startDate': startDate.toISOString(),
-                'subscription.endDate': endDate.toISOString(),
-                'subscription.billingCycle': billingCycle,
-                'subscription.paymentId': paymentId,
-                'subscription.orderId': orderId,
-                'subscription.amount': req.body.amount || 0,
-                'subscription.paymentMethod': 'razorpay',
-                'subscription.check': 'active' // legacy/compatibility
+            // === FIRESTORE MODE (Original Logic) ===
+            const batch = db.batch();
+            // Path: SwordNexBillingSoftware/{TENANT_ID}/owner/{UID}
+            const ownerDocRef = db.collection('SwordNexBillingSoftware').doc(tenantId).collection('owner').doc(req.user.userId);
+
+            // Fetch Key User Details for Email/PDF
+            const ownerDoc = await ownerDocRef.get();
+            const ownerData = ownerDoc.exists ? ownerDoc.data() : {};
+            ownerEmail = ownerData.email || req.user.email; // Fallback if email not in doc
+            ownerName = ownerData.name || ownerData.username || "Valued Customer";
+
+            // 3. Update Tenant Subscription or Additional Users
+            if (plan === 'additional_users') {
+                const count = parseInt(req.body.count) || 0;
+                batch.update(ownerDocRef, {
+                    'additionalSubUsers': admin.firestore.FieldValue.increment(count),
+                    'lastPaymentId': paymentId,
+                    'lastOrderId': orderId
+                });
+            } else {
+                batch.update(ownerDocRef, {
+                    'subscription.plan': plan,
+                    'subscription.status': 'Active',
+                    'subscription.startDate': startDate.toISOString(),
+                    'subscription.endDate': endDate.toISOString(),
+                    'subscription.billingCycle': billingCycle,
+                    'subscription.paymentId': paymentId,
+                    'subscription.orderId': orderId,
+                    'subscription.amount': req.body.amount || 0,
+                    'subscription.paymentMethod': 'razorpay',
+                    'subscription.check': 'active' // legacy/compatibility
+                });
+            }
+
+            // 4. Add Subscription History
+            const subHistoryRef = ownerDocRef.collection('subscriptiondetails').doc();
+            batch.set(subHistoryRef, {
+                plan,
+                billingCycle,
+                amount: req.body.amount || 0,
+                paymentId,
+                orderId,
+                signature,
+                paymentMethod: 'razorpay',
+                startDate: startDate.toISOString(),
+                endDate: endDate.toISOString(),
+                createdAt: new Date().toISOString(),
+                createdBy: req.user.userId
             });
+
+            await batch.commit();
         }
-
-        // 4. Add Subscription History
-        const subHistoryRef = ownerDocRef.collection('subscriptiondetails').doc();
-        batch.set(subHistoryRef, {
-            plan,
-            billingCycle,
-            amount: req.body.amount || 0,
-            paymentId,
-            orderId,
-            signature,
-            paymentMethod: 'razorpay',
-            startDate: startDate.toISOString(),
-            endDate: endDate.toISOString(),
-            createdAt: new Date().toISOString(),
-            createdBy: req.user.userId
-        });
-
-        await batch.commit();
 
         // 5. Send Email with PDF Invoice
         if (ownerEmail) {
@@ -231,48 +296,108 @@ exports.activateTrial = async (req, res) => {
             return res.status(400).json({ msg: "User ID missing. Please re-login." });
         }
 
-        const ownerDocRef = db.collection('SwordNexBillingSoftware').doc(tenantId).collection('owner').doc(req.user.userId);
+        const userId = req.user.userId;
+        console.log(`[DEBUG] activateTrial: DB_TYPE=${DB_TYPE}, TenantID=${tenantId}, UserID=${userId}`);
 
-        console.log(`[DEBUG] activateTrial: TenantID=${tenantId}, UserID=${req.user.userId}`);
-        console.log(`[DEBUG] activateTrial: Path=${ownerDocRef.path}`);
+        let data, ownerEmail, ownerName;
 
-        const doc = await ownerDocRef.get();
+        // === MONGODB MODE ===
+        if (DB_TYPE === 'mongodb') {
+            const owner = await OwnerModel.findOne({ userId, tenantId });
 
-        if (!doc.exists) {
-            console.error(`[ERROR] activateTrial: Document NOT FOUND at ${ownerDocRef.path}`);
-            return res.status(404).json({ msg: "Owner record not found", path: ownerDocRef.path, tenantId, userId: req.user.userId });
+            if (!owner) {
+                console.error(`[ERROR] activateTrial: Owner NOT FOUND in MongoDB`);
+                return res.status(404).json({
+                    msg: "Owner record not found",
+                    database: 'mongodb',
+                    tenantId,
+                    userId
+                });
+            }
+
+            if (owner.trialUsed) {
+                return res.status(400).json({ msg: "Trial already used" });
+            }
+
+            // Prevent if already on a paid plan
+            if (owner.subscription && owner.subscription.status === 'Active' &&
+                owner.subscription.plan !== 'Trial' &&
+                owner.subscription.plan !== 'Basic') {
+                return res.status(400).json({ msg: "Active subscription exists" });
+            }
+
+            const startDate = new Date();
+            const endDate = new Date(startDate);
+            endDate.setDate(endDate.getDate() + 15); // 15 Days Trial
+
+            await OwnerModel.updateOne(
+                { userId, tenantId },
+                {
+                    $set: {
+                        'subscription.plan': 'Trial',
+                        'subscription.status': 'Active',
+                        'subscription.startDate': startDate.toISOString(),
+                        'subscription.endDate': endDate.toISOString(),
+                        'trialUsed': true
+                    }
+                }
+            );
+
+            ownerEmail = owner.email;
+            ownerName = owner.firstName || owner.companyDetails?.name || "User";
+
+        } else {
+            // === FIRESTORE MODE ===
+            const ownerDocRef = db.collection('SwordNexBillingSoftware').doc(tenantId).collection('owner').doc(userId);
+            console.log(`[DEBUG] activateTrial: Path=${ownerDocRef.path}`);
+
+            const doc = await ownerDocRef.get();
+
+            if (!doc.exists) {
+                console.error(`[ERROR] activateTrial: Document NOT FOUND at ${ownerDocRef.path}`);
+                return res.status(404).json({
+                    msg: "Owner record not found",
+                    path: ownerDocRef.path,
+                    tenantId,
+                    userId
+                });
+            }
+
+            data = doc.data();
+            if (data.trialUsed) {
+                return res.status(400).json({ msg: "Trial already used" });
+            }
+
+            // Prevent if already on a paid plan
+            if (data.subscription && data.subscription.status === 'Active' &&
+                data.subscription.plan !== 'Trial' &&
+                data.subscription.plan !== 'Basic') {
+                return res.status(400).json({ msg: "Active subscription exists" });
+            }
+
+            const startDate = new Date();
+            const endDate = new Date(startDate);
+            endDate.setDate(endDate.getDate() + 15); // 15 Days Trial
+
+            await ownerDocRef.update({
+                'subscription.plan': 'Trial',
+                'subscription.status': 'Active',
+                'subscription.startDate': startDate.toISOString(),
+                'subscription.endDate': endDate.toISOString(),
+                'trialUsed': true
+            });
+
+            ownerEmail = data.email || req.user.email;
+            ownerName = data.name || "User";
         }
-
-        const data = doc.data();
-        if (data.trialUsed) {
-            return res.status(400).json({ msg: "Trial already used" });
-        }
-
-        // Prevent if already on a paid plan
-        if (data.subscription && data.subscription.status === 'Active' &&
-            data.subscription.plan !== 'Trial' &&
-            data.subscription.plan !== 'Basic') {
-            return res.status(400).json({ msg: "Active subscription exists" });
-        }
-
-        const startDate = new Date();
-        const endDate = new Date(startDate);
-        endDate.setDate(endDate.getDate() + 15); // 15 Days Trial
-
-        await ownerDocRef.update({
-            'subscription.plan': 'Trial',
-            'subscription.status': 'Active',
-            'subscription.startDate': startDate.toISOString(),
-            'subscription.endDate': endDate.toISOString(),
-            'trialUsed': true
-        });
 
         // Send Welcome Email
-        const ownerEmail = data.email || req.user.email;
-        const ownerName = data.name || "User";
-
         if (ownerEmail) {
             try {
+                const startDate = new Date();
+                const endDate = new Date(startDate);
+                endDate.setDate(endDate.getDate() + 15);
+
                 const emailSubject = `Free Trial Successful - SwordNex`;
                 const emailHtml = `
                     <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; border: 1px solid #e5e7eb; border-radius: 12px; overflow: hidden;">
@@ -282,7 +407,7 @@ exports.activateTrial = async (req, res) => {
                         <div style="padding: 30px;">
                             <p>Dear ${ownerName},</p>
                             <p>Your free trial was successful! Thank you for choosing SwordNex Billing Software.</p>
-                            
+
                             <div style="background-color: #f9fafb; padding: 20px; border-radius: 8px; margin: 20px 0;">
                                 <p style="margin: 0; font-weight: bold; color: #374151;">Subscription Details:</p>
                                 <table style="width: 100%; margin-top: 10px; font-size: 14px;">
@@ -292,11 +417,11 @@ exports.activateTrial = async (req, res) => {
                                     <tr><td style="padding: 5px 0; color: #6b7280;">End Date</td><td style="padding: 5px 0; font-weight: bold; text-align: right;">${endDate.toLocaleDateString()}</td></tr>
                                 </table>
                             </div>
-                            
+
                             <div style="text-align: center; margin-top: 30px;">
                                 <a href="https://swordnex-billing.web.app/login" style="display: inline-block; background-color: #CA8A04; color: white; padding: 12px 30px; text-decoration: none; border-radius: 8px; font-weight: bold;">Login and Continue</a>
                             </div>
-                            
+
                             <p style="margin-top: 30px; font-size: 14px; color: #6b7280;">Explore all premium features immediately. If you have any questions, feel free to reply to this email.</p>
                             <p style="margin-top: 20px;">Best regards,<br>The SwordNex Team</p>
                         </div>

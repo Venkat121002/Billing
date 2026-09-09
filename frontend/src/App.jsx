@@ -32,21 +32,22 @@ import IndustryGstBillRouter from "./components/Billing/IndustryGstBillRouter";
 import Credit from "./components/Billing/credit";
 import ChangePassword from "./components/Auth/ChangePassword";
 import SuperAdmin from "./components/Auth/SuperAdmin";
+import SuperAdminLogin from "./components/Auth/SuperAdminLogin";
+import SuperAdminRegister from "./components/Auth/SuperAdminRegister";
 import { Sessionrecord } from "./components/Auth/Sessionrecord";
 import Support from "./components/Billing/Support";
 import AdminLogin from "./components/Auth/AdminLogin";
 import ForgotPassword from "./components/Auth/forgot";
 import Reports from "./components/Billing/Reports";
 
-
 import BarcodePage from "./industry/mobile/BarcodePage";
-
 import SubUserRecordsPage from "./industry/mobile/SubUserRecordsPage";
 import AcademyInventry from "./industry/academy/academyinventry";
 import Trainer from "./components/Billing/Trainer";
 import SoftwareDevelopmentInventory from "./industry/SoftwareDevelopment/SoftwareDevelopmentInventory";
 import AddClient from "./industry/SoftwareDevelopment/AddClient";
 import AddSoftwareService from "./industry/SoftwareDevelopment/AddSoftwareService";
+import SoftwareBilling from "./industry/SoftwareDevelopment/SoftwareBilling";
 import GroceryInventory from "./industry/grocery/groceryInventory";
 import IndustryBarcodeRouter from "./components/Billing/IndustryBarcodeRouter";
 import IndustryAddCustomerRouter from "./components/Billing/IndustryAddCustomerRouter";
@@ -117,9 +118,9 @@ const protectedRoutes = employerRoutes; // All employer routes are now protected
 function IndustryBillingResolver() {
   const { currentUser } = useAuth();
   const industry = currentUser?.industry?.toLowerCase() || "";
-  
-  if (industry.includes("software_development")) {
-    return <SoftwareDevelopmentBilling />;
+
+  if (industry.includes("software_development") || industry.includes("software")) {
+    return <SoftwareBilling />;
   }
   return <IndustryBillingRouter />;
 }
@@ -146,6 +147,8 @@ function App() {
 
               {/* <Route path="/credit" element={<Credit />}/> */}
               <Route path="/superadmin" element={<SuperAdmin />} />
+              <Route path="/superadmin/login" element={<SuperAdminLogin />} />
+              <Route path="/superadmin/register" element={<SuperAdminRegister />} />
               <Route path="/support" element={<Support />} />
               <Route path="/adminlogin" element={<AdminLogin />} />
               <Route path="/forgot" element={<ForgotPassword />} />

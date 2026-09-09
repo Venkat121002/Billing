@@ -1,11 +1,20 @@
 
-const { db, admin } = require('../config/firebase'); // Firestore instance & Admin for Auth
-const axios = require('axios'); // For Identity Platform REST API
+const { db, admin } = require('../config/firebase');
+const axios = require('axios');
 const { sendEmail } = require('../utils/emailService');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 
-// Helper: Generate Unique ID
+// MongoDB models
+const { Owner: OwnerModel, SubUser: SubUserModel } = require('../models/mongodb');
+
+// Determine which database to use
+const DB_TYPE = process.env.DB_TYPE || 'firestore';
+
+// Helper: Generate Secure ID
 const generateId = () => {
-    return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+    const crypto = require('crypto');
+    return crypto.randomBytes(16).toString('hex');
 };
 
 // @desc    Register Owner & Create Tenant
@@ -22,88 +31,132 @@ exports.register = async (req, res) => {
         return res.status(400).json({ msg: "Please enter required fields" });
     }
 
-    // Get Tenant ID from Environment
     const tenantId = process.env.TENANT_ID;
     if (!tenantId) {
         return res.status(500).json({ msg: "Server Configuration Error: TENANT_ID not set" });
     }
 
     try {
-        // 1. Create User in Specific Identity Platform Tenant
-        const tenantAuth = admin.auth().tenantManager().authForTenant(tenantId);
+        let userId;
 
-        let userRecord;
-        try {
-            userRecord = await tenantAuth.createUser({
-                email: email,
-                password: password,
-                displayName: `${firstName} ${lastName}`,
-                emailVerified: false
-            });
-        } catch (authError) {
-            if (authError.code === 'auth/email-already-exists') {
-                return res.status(400).json({ msg: "User already exists in this Tenant" });
+        // === MONGODB MODE ===
+        if (DB_TYPE === 'mongodb') {
+            const existingUser = await OwnerModel.findOne({ email, tenantId });
+            if (existingUser) {
+                return res.status(400).json({ msg: "User already exists" });
             }
-            throw authError;
+
+            userId = generateId();
+            const hashedPassword = await bcrypt.hash(password, 10);
+
+            const ownerData = {
+                userId,
+                tenantId,
+                firstName,
+                lastName,
+                email,
+                mobile,
+                password: hashedPassword,
+                role: 'owner',
+                companyDetails: {
+                    name: businessName,
+                    type: businessType || '',
+                    industry: industry || '',
+                    subIndustry: subIndustry || '',
+                    employees: employees || '',
+                    email: email,
+                    gstin: gstin || '',
+                    pan: pan || ''
+                },
+                address: {
+                    street: street || '',
+                    city: city || '',
+                    state: state || '',
+                    pincode: pincode || '',
+                    country: country || 'India'
+                },
+                subscription: {
+                    plan: plan || 'Free',
+                    status: 'Active',
+                    startDate: null,
+                    endDate: null
+                },
+                createdAt: new Date().toISOString(),
+                lastLogin: null
+            };
+
+            await OwnerModel.create(ownerData);
+
+        } else {
+            // === FIRESTORE MODE ===
+            const tenantAuth = admin.auth().tenantManager().authForTenant(tenantId);
+
+            let userRecord;
+            try {
+                userRecord = await tenantAuth.createUser({
+                    email: email,
+                    password: password,
+                    displayName: `${firstName} ${lastName}`,
+                    emailVerified: false
+                });
+            } catch (authError) {
+                if (authError.code === 'auth/email-already-exists') {
+                    return res.status(400).json({ msg: "User already exists in this Tenant" });
+                }
+                throw authError;
+            }
+
+            userId = userRecord.uid;
+            const ownerDocRef = db.collection('SwordNexBillingSoftware').doc(tenantId).collection('owner').doc(userId);
+
+            const ownerData = {
+                firstName,
+                lastName,
+                email,
+                mobile,
+                role: 'owner',
+                userId: userId,
+                companyDetails: {
+                    name: businessName,
+                    type: businessType || '',
+                    industry: industry || '',
+                    subIndustry: subIndustry || '',
+                    employees: employees || '',
+                    email: email,
+                    gstin: gstin || '',
+                    pan: pan || ''
+                },
+                address: {
+                    street: street || '',
+                    city: city || '',
+                    state: state || '',
+                    pincode: pincode || '',
+                    country: country || ''
+                },
+                subscription: {
+                    plan: plan || null,
+                    status: 'Inactive',
+                    startDate: null,
+                    endDate: null
+                },
+                createdAt: new Date().toISOString(),
+                lastLogin: null
+            };
+
+            await ownerDocRef.set(ownerData);
         }
 
-        const userId = userRecord.uid; // The Firebase UID
-        const ownerSaaSId = generateId(); // Generate an internal ID if needed, or just use UID
-
-        // 2. Create Owner Document in: billingSoftware/{TENANT_ID}/owner/{userId}
-        const ownerDocRef = db.collection('SwordNexBillingSoftware').doc(tenantId).collection('owner').doc(userId);
-
-        const ownerData = {
-            firstName,
-            lastName,
-            email,
-            mobile,
-            role: 'owner',
-            userId: userId,       // The Firebase UID
-            companyDetails: {
-                name: businessName,
-                type: businessType || '',
-                industry: industry || '',
-                subIndustry: subIndustry || '',
-                employees: employees || '',
-                email: email,
-                gstin: gstin || '',
-                pan: pan || ''
-            },
-            address: {
-                street: street || '',
-                city: city || '',
-                state: state || '',
-                pincode: pincode || '',
-                country: country || ''
-            },
-            subscription: {
-                plan: plan || null,
-                status: 'Inactive',
-                startDate: null,
-                endDate: null
-            },
-            createdAt: new Date().toISOString(),
-            lastLogin: null
-        };
-
-        await ownerDocRef.set(ownerData);
-
-        // 3. Generate Backend Token
+        // Generate JWT Token
         const payload = {
             user: {
                 userId: userId,
-                ownerId: userId, // Boss is self
+                ownerId: userId,
                 subuserId: null,
                 role: 'owner'
             }
         };
 
-        const token = require('jsonwebtoken').sign(
-            payload,
-            process.env.JWT_SECRET,
-            { expiresIn: 360000 }
-        );
+        const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '24h' });
 
         res.json({
             token,
@@ -117,23 +170,11 @@ exports.register = async (req, res) => {
             }
         });
 
-        // 4. Send Welcome Email via Brevo (Non-blocking)
+        // Send Welcome Email (Non-blocking)
         const welcomeHtml = `
             <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
                 <h1 style="color: #CA8A04;">Welcome to SwordNex, ${firstName}!</h1>
                 <p>Thank you for choosing SwordNex Billing Software for <strong>${businessName}</strong>.</p>
-                <p>We are excited to help you manage your business more efficiently. With SwordNex, you can easily handle:</p>
-                <ul>
-                    <li>Professional Billing & GST Invoices</li>
-                    <li>Inventory Management</li>
-                    <li>Cashbook & Expense Tracking</li>
-                    <li>Credit Management</li>
-                    <li>Comprehensive Business Reports</li>
-                </ul>
-                <p>You can get started right away by exploring your dashboard:</p>
-                <a href="https://swordnex-billing.web.app/dashboard" style="display: inline-block; background-color: #CA8A04; color: white; padding: 12px 25px; text-decoration: none; border-radius: 8px; font-weight: bold; margin-top: 10px;">Go to Dashboard</a>
-                <p style="margin-top: 20px;">If you have any questions, feel free to reply to this email or contact our support team.</p>
-                <p>Best regards,<br>The SwordNex Team</p>
             </div>
         `;
 
@@ -161,119 +202,185 @@ exports.login = async (req, res) => {
     }
 
     const tenantId = process.env.TENANT_ID;
-    const apiKey = process.env.FB_WEB_API_KEY;
 
-    if (!tenantId || !apiKey) {
-        return res.status(500).json({ msg: "Server Configuration Error: TENANT_ID or API_KEY not set" });
+    if (!tenantId) {
+        return res.status(500).json({ msg: "Server Configuration Error: TENANT_ID not set" });
     }
 
     try {
-        // 1. Authenticate against Identity Platform Tenant
-        const authUrl = `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${apiKey}`;
+        let uid, userData, isSubUser = false, ownerId, bossData;
 
-        const authResponse = await axios.post(authUrl, {
-            email,
-            password,
-            tenantId,
-            returnSecureToken: true
-        });
+        // === MONGODB MODE ===
+        if (DB_TYPE === 'mongodb') {
+            // Try to find owner first
+            let user = await OwnerModel.findOne({ email, tenantId });
 
-        const { localId: uid } = authResponse.data;
+            if (user) {
+                // Verify password
+                const isMatch = await bcrypt.compare(password, user.password);
+                if (!isMatch) {
+                    return res.status(401).json({ msg: "Authentication failed: INVALID_PASSWORD" });
+                }
 
-        // 2. Fetch User Data from Production Structure (SwordNexBillingSoftware/{tenantId}/owner/{uid})
-        let userDocRef = db.collection('SwordNexBillingSoftware').doc(tenantId).collection('owner').doc(uid);
-        let userDoc = await userDocRef.get();
-        let userData;
-        let isSubUser = false;
-        let ownerId;
+                uid = user.userId;
+                ownerId = uid;
+                userData = user.toObject();
+                bossData = userData;
 
-        if (userDoc.exists) {
-            console.log("✅ User found in 'owner' collection:", uid);
-            userData = userDoc.data();
-            ownerId = uid;
-        } else {
-            console.log("🔍 User not found in 'owner', searching in 'subuser' collection group...");
-            // Identify owner by searching in subuser collections (using firebaseUid matching)
-            // const subuserQuery = db.collectionGroup('subuser').where('firebaseUid', '==', uid);
-            // const subuserSnapshot = await subuserQuery.get();
-            const ownersSnapshot = await db
-                .collection('SwordNexBillingSoftware')
-                .doc(tenantId)
-                .collection('owner')
-                .get();
+            } else {
+                // Try to find subuser
+                user = await SubUserModel.findOne({ email, tenantId });
 
-            let found = false;
+                if (!user) {
+                    return res.status(401).json({ msg: "Authentication failed: EMAIL_NOT_FOUND" });
+                }
 
-            for (const owner of ownersSnapshot.docs) {
-                const subSnap = await owner.ref
-                    .collection('subuser')
-                    .where('firebaseUid', '==', uid)
-                    .get();
+                const isMatch = await bcrypt.compare(password, user.password);
+                if (!isMatch) {
+                    return res.status(401).json({ msg: "Authentication failed: INVALID_PASSWORD" });
+                }
 
-                if (!subSnap.empty) {
-                    const subuserDoc = subSnap.docs[0];
-                    userData = subuserDoc.data();
-                    isSubUser = true;
-                    ownerId = userData.ownerId;
-                    userDocRef = subuserDoc.ref;
-                    found = true;
-                    break;
+                uid = user.userId;
+                ownerId = user.ownerId;
+                isSubUser = true;
+                userData = user.toObject();
+
+                // Fetch boss data
+                const boss = await OwnerModel.findOne({ userId: ownerId, tenantId });
+                if (!boss) {
+                    return res.status(403).json({ msg: "Owner account not found. Access denied." });
+                }
+                bossData = boss.toObject();
+
+                // Check subscription
+                const subStatus = bossData.subscription?.status || 'Inactive';
+                const subEndDate = bossData.subscription?.endDate ? new Date(bossData.subscription.endDate) : null;
+                const now = new Date();
+
+                if (subStatus !== 'Active' || (subEndDate && subEndDate < now)) {
+                    return res.status(403).json({
+                        msg: "Owner's subscription has expired or is inactive. Access denied.",
+                        subscriptionStatus: subStatus
+                    });
                 }
             }
 
-            if (!found) {
-                return res.status(401).json({ msg: "User record not found in system." });
+            // Enforce Login Type Portal Separation
+            if (loginType === 'admin' && isSubUser) {
+                return res.status(403).json({ msg: "Team members must log in through the Team Portal." });
             }
-        }
-
-        // 2.5 Enforce Login Type Portal Separation
-        if (loginType === 'admin' && isSubUser) {
-            return res.status(403).json({ msg: "Team members must log in through the Team Portal." });
-        }
-        if (loginType === 'team' && !isSubUser) {
-            return res.status(403).json({ msg: "Owner accounts must log in through the Admin Portal." });
-        }
-
-
-        // 3. Subscription Check for Sub-users
-        let bossData;
-        if (isSubUser) {
-            if (!ownerId) {
-                console.error("❌ Sub-user missing ownerId:", uid);
-                return res.status(401).json({ msg: "Sub-user record is incomplete (missing owner association)." });
+            if (loginType === 'team' && !isSubUser) {
+                return res.status(403).json({ msg: "Owner accounts must log in through the Admin Portal." });
             }
 
-            const bossDoc = await db.collection('SwordNexBillingSoftware').doc(tenantId).collection('owner').doc(ownerId).get();
-            if (!bossDoc.exists) {
-                console.error("❌ Owner account not found for sub-user:", ownerId);
-                return res.status(403).json({ msg: "Owner account not found. Access denied." });
+            // Update Last Login
+            if (isSubUser) {
+                await SubUserModel.updateOne({ userId: uid, tenantId }, { lastLogin: new Date().toISOString() });
+            } else {
+                await OwnerModel.updateOne({ userId: uid, tenantId }, { lastLogin: new Date().toISOString() });
             }
-            bossData = bossDoc.data();
 
-            // Validate owner's subscription is Active
-            const subStatus = bossData.subscription?.status || 'Inactive';
-            const subEndDate = bossData.subscription?.endDate ? new Date(bossData.subscription.endDate) : null;
-            const now = new Date();
-
-            if (subStatus !== 'Active' || (subEndDate && subEndDate < now)) {
-                return res.status(403).json({
-                    msg: "Owner's subscription has expired or is inactive. Access denied.",
-                    subscriptionStatus: subStatus
-                });
-            }
         } else {
-            bossData = userData;
+            // === FIRESTORE MODE (Original Logic) ===
+            const apiKey = process.env.FB_WEB_API_KEY;
+            if (!apiKey) {
+                return res.status(500).json({ msg: "Server Configuration Error: API_KEY not set" });
+            }
+
+            const authUrl = `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${apiKey}`;
+
+            const authResponse = await axios.post(authUrl, {
+                email,
+                password,
+                tenantId,
+                returnSecureToken: true
+            });
+
+            uid = authResponse.data.localId;
+
+            let userDocRef = db.collection('SwordNexBillingSoftware').doc(tenantId).collection('owner').doc(uid);
+            let userDoc = await userDocRef.get();
+
+            if (userDoc.exists) {
+                userData = userDoc.data();
+                ownerId = uid;
+            } else {
+                const ownersSnapshot = await db
+                    .collection('SwordNexBillingSoftware')
+                    .doc(tenantId)
+                    .collection('owner')
+                    .get();
+
+                let found = false;
+
+                for (const owner of ownersSnapshot.docs) {
+                    const subSnap = await owner.ref
+                        .collection('subuser')
+                        .where('firebaseUid', '==', uid)
+                        .get();
+
+                    if (!subSnap.empty) {
+                        const subuserDoc = subSnap.docs[0];
+                        userData = subuserDoc.data();
+                        isSubUser = true;
+                        ownerId = userData.ownerId;
+                        userDocRef = subuserDoc.ref;
+                        found = true;
+                        break;
+                    }
+                }
+
+                if (!found) {
+                    return res.status(401).json({ msg: "User record not found in system." });
+                }
+            }
+
+            // Enforce Login Type Portal Separation
+            if (loginType === 'admin' && isSubUser) {
+                return res.status(403).json({ msg: "Team members must log in through the Team Portal." });
+            }
+            if (loginType === 'team' && !isSubUser) {
+                return res.status(403).json({ msg: "Owner accounts must log in through the Admin Portal." });
+            }
+
+            // Subscription Check for Sub-users
+            if (isSubUser) {
+                if (!ownerId) {
+                    console.error("❌ Sub-user missing ownerId:", uid);
+                    return res.status(401).json({ msg: "Sub-user record is incomplete (missing owner association)." });
+                }
+
+                const bossDoc = await db.collection('SwordNexBillingSoftware').doc(tenantId).collection('owner').doc(ownerId).get();
+                if (!bossDoc.exists) {
+                    console.error("❌ Owner account not found for sub-user:", ownerId);
+                    return res.status(403).json({ msg: "Owner account not found. Access denied." });
+                }
+                bossData = bossDoc.data();
+
+                const subStatus = bossData.subscription?.status || 'Inactive';
+                const subEndDate = bossData.subscription?.endDate ? new Date(bossData.subscription.endDate) : null;
+                const now = new Date();
+
+                if (subStatus !== 'Active' || (subEndDate && subEndDate < now)) {
+                    return res.status(403).json({
+                        msg: "Owner's subscription has expired or is inactive. Access denied.",
+                        subscriptionStatus: subStatus
+                    });
+                }
+            } else {
+                bossData = userData;
+            }
+
+            if (!bossData) {
+                console.error("❌ No bossData available for UID:", uid);
+                return res.status(500).json({ msg: "Internal Server Error: Missing tenant context." });
+            }
+
+            // Update Last Login
+            await userDocRef.update({ lastLogin: new Date().toISOString() });
         }
 
-        if (!bossData) {
-            console.error("❌ No bossData available for UID:", uid);
-            return res.status(500).json({ msg: "Internal Server Error: Missing tenant context." });
-        }
-
-        // 4. Update Last Login
-        await userDocRef.update({ lastLogin: new Date().toISOString() });
-
-        // 5. Generate Response & JWT with { userId, ownerId, subuserId, role }
+        // Generate JWT Token
         const payload = {
             user: {
                 userId: uid,
@@ -283,11 +390,7 @@ exports.login = async (req, res) => {
             }
         };
 
-        const jwtToken = require('jsonwebtoken').sign(
-            payload,
-            process.env.JWT_SECRET,
-            { expiresIn: '24h' }
-        );
+        const jwtToken = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '24h' });
 
         res.json({
             token: jwtToken,
@@ -298,19 +401,17 @@ exports.login = async (req, res) => {
                 role: isSubUser ? 'subuser' : 'owner',
                 firstName: userData.firstName || '',
                 lastName: userData.lastName || '',
-                email: userData.email, 
+                email: userData.email,
                 mobile: isSubUser ? userData.subbranchMobile || '' : userData.mobile || '',
                 Tenant: {
                     ...(bossData.companyDetails || {}),
                     subscription_status: bossData.subscription?.status || 'Inactive',
                     subscription_plan: bossData.subscription?.plan || 'Free',
                     subscription_expiry: bossData.subscription?.endDate || null,
-                    // Business address
                     street: bossData.address?.street || '',
                     city: bossData.address?.city || '',
                     state: bossData.address?.state || '',
                     pincode: bossData.address?.pincode || '',
-                    // GST & Printer settings with subuser fallback
                     purchase_gst: userData.purchase_gst !== undefined ? userData.purchase_gst : (bossData.purchase_gst || 0),
                     purchase_tax_type: userData.purchase_tax_type !== undefined ? userData.purchase_tax_type : (bossData.purchase_tax_type || 'exclusive'),
                     sales_gst: userData.sales_gst !== undefined ? userData.sales_gst : (bossData.sales_gst || 0),
@@ -324,11 +425,6 @@ exports.login = async (req, res) => {
     } catch (err) {
         console.error("Login Error Full:", JSON.stringify(err, Object.getOwnPropertyNames(err), 2));
 
-        if (err.code === 9) {
-            console.error("🔥 Firestore Index Required. Check this link in your terminal or Google Cloud Console for the creation link.");
-        }
-
-        // Handle Axios Error Response (e.g. from Identity Platform)
         if (err.response && err.response.data) {
             const errorData = err.response.data;
             const errorMessage = errorData.error && errorData.error.message ? errorData.error.message : "Authentication Failed";
@@ -340,18 +436,13 @@ exports.login = async (req, res) => {
 
 // @desc    Update Owner Profile & Business Details
 // @route   PUT /api/v2/auth/update-profile
-// @desc    Update Owner Profile & Business Details
-// @route   PUT /api/v2/auth/update-profile
 exports.updateProfile = async (req, res) => {
     try {
         const { userId, ownerId, role } = req.user;
         const tenantId = process.env.TENANT_ID;
 
-        console.log(`📡 [Backend] updateProfile: role=${role}, userId=${userId}, ownerId=${ownerId}, tenantId=${tenantId}`);
-
         if (!tenantId) {
-            console.error("❌ [Backend] updateProfile: TENANT_ID is MISSING in process.env");
-            return res.status(500).json({ msg: "Server Config Error" });
+            return res.status(500).json({ msg: "Server Config Error: TENANT_ID not set" });
         }
 
         const {
@@ -363,23 +454,102 @@ exports.updateProfile = async (req, res) => {
             printer_configs, printer_auto_print
         } = req.body;
 
+        // === MONGODB MODE ===
+        if (DB_TYPE === 'mongodb') {
+            const owner = await OwnerModel.findOne({ userId: ownerId, tenantId });
+            if (!owner) {
+                return res.status(404).json({ msg: "Owner record not found" });
+            }
+
+            const businessUpdates = {};
+            const personalUpdates = {};
+
+            if (firstName) personalUpdates.firstName = firstName;
+            if (lastName) personalUpdates.lastName = lastName;
+            if (mobile) personalUpdates.mobile = mobile;
+
+            const subuserSettings = {};
+            if (purchase_gst !== undefined) subuserSettings.purchase_gst = purchase_gst;
+            if (purchase_tax_type !== undefined) subuserSettings.purchase_tax_type = purchase_tax_type;
+            if (sales_gst !== undefined) subuserSettings.sales_gst = sales_gst;
+            if (sales_tax_type !== undefined) subuserSettings.sales_tax_type = sales_tax_type;
+            if (printer_configs !== undefined) subuserSettings.printer_configs = printer_configs;
+            if (printer_auto_print !== undefined) subuserSettings.printer_auto_print = printer_auto_print;
+
+            if (businessName || industry || businessType || gstin || pan) {
+                businessUpdates.companyDetails = {
+                    ...(owner.companyDetails || {}),
+                    ...(businessName && { name: businessName }),
+                    ...(industry && { industry }),
+                    ...(businessType && { type: businessType }),
+                    ...(gstin && { gstin }),
+                    ...(pan && { pan })
+                };
+            }
+
+            if (street || city || state || pincode) {
+                businessUpdates.address = {
+                    ...(owner.address || {}),
+                    ...(street && { street }),
+                    ...(city && { city }),
+                    ...(state && { state }),
+                    ...(pincode && { pincode })
+                };
+            }
+
+            if (invoice_prefix !== undefined || next_invoice_number !== undefined) {
+                businessUpdates.invoiceSettings = {
+                    ...(owner.invoiceSettings || {}),
+                    ...(invoice_prefix !== undefined && { prefix: invoice_prefix }),
+                    ...(next_invoice_number !== undefined && { sequence: next_invoice_number })
+                };
+                if (invoice_prefix !== undefined) businessUpdates.invoice_prefix = invoice_prefix;
+                if (next_invoice_number !== undefined) businessUpdates.next_invoice_number = next_invoice_number;
+            }
+
+            if (role === 'owner') {
+                if (purchase_gst !== undefined) businessUpdates.purchase_gst = purchase_gst;
+                if (purchase_tax_type !== undefined) businessUpdates.purchase_tax_type = purchase_tax_type;
+                if (sales_gst !== undefined) businessUpdates.sales_gst = sales_gst;
+                if (sales_tax_type !== undefined) businessUpdates.sales_tax_type = sales_tax_type;
+                if (printer_configs !== undefined) businessUpdates.printer_configs = printer_configs;
+                if (printer_auto_print !== undefined) businessUpdates.printer_auto_print = printer_auto_print;
+
+                await OwnerModel.updateOne(
+                    { userId: ownerId, tenantId },
+                    { $set: { ...businessUpdates, ...personalUpdates } }
+                );
+            } else if (role === 'subuser') {
+                if (Object.keys(businessUpdates).length > 0) {
+                    await OwnerModel.updateOne(
+                        { userId: ownerId, tenantId },
+                        { $set: businessUpdates }
+                    );
+                }
+                await SubUserModel.updateOne(
+                    { userId, tenantId },
+                    { $set: { ...personalUpdates, ...subuserSettings } }
+                );
+            }
+
+            return res.json({ msg: "Profile updated successfully", businessUpdates, personalUpdates, subuserSettings });
+        }
+
+        // === FIRESTORE MODE ===
         const ownerDocRef = db.collection('SwordNexBillingSoftware').doc(tenantId).collection('owner').doc(ownerId);
         const ownerDoc = await ownerDocRef.get();
 
         if (!ownerDoc.exists) {
-            console.error(`❌ [Backend] updateProfile: Owner doc NOT FOUND at path: SwordNexBillingSoftware/${tenantId}/owner/${ownerId}`);
             return res.status(404).json({ msg: "Owner record not found" });
         }
 
         const businessUpdates = {};
         const personalUpdates = {};
 
-        // Personal details apply to the current user (owner or subuser)
         if (firstName) personalUpdates.firstName = firstName;
         if (lastName) personalUpdates.lastName = lastName;
         if (mobile) personalUpdates.mobile = mobile;
 
-        // Subuser-specific settings (GST, Printer)
         const subuserSettings = {};
         if (purchase_gst !== undefined) subuserSettings.purchase_gst = purchase_gst;
         if (purchase_tax_type !== undefined) subuserSettings.purchase_tax_type = purchase_tax_type;
@@ -388,7 +558,6 @@ exports.updateProfile = async (req, res) => {
         if (printer_configs !== undefined) subuserSettings.printer_configs = printer_configs;
         if (printer_auto_print !== undefined) subuserSettings.printer_auto_print = printer_auto_print;
 
-        // Business details always apply to the owner's document
         if (businessName || industry || businessType || gstin || pan) {
             businessUpdates.companyDetails = {
                 ...(ownerDoc.data().companyDetails || {}),
@@ -420,7 +589,6 @@ exports.updateProfile = async (req, res) => {
             if (next_invoice_number !== undefined) businessUpdates.next_invoice_number = next_invoice_number;
         }
 
-        // If owner, these are business-wide defaults
         if (role === 'owner') {
             if (purchase_gst !== undefined) businessUpdates.purchase_gst = purchase_gst;
             if (purchase_tax_type !== undefined) businessUpdates.purchase_tax_type = purchase_tax_type;
@@ -430,12 +598,10 @@ exports.updateProfile = async (req, res) => {
             if (printer_auto_print !== undefined) businessUpdates.printer_auto_print = printer_auto_print;
         }
 
-        // 1. Update Owner Document (for business details and if user is owner)
         if (Object.keys(businessUpdates).length > 0 || role === 'owner') {
             await ownerDocRef.update({ ...businessUpdates, ...(role === 'owner' ? personalUpdates : {}) });
         }
 
-        // 2. Update Subuser Document (if user is subuser)
         if (role === 'subuser') {
             const subUserRef = ownerDocRef.collection('subuser').doc(userId);
             const updates = { ...personalUpdates, ...subuserSettings };
@@ -457,7 +623,7 @@ exports.updateProfile = async (req, res) => {
 exports.getMe = async (req, res) => {
     try {
         const { userId } = req.user;
-        const tenantId = process.env.TENANT_ID; // From Env for now, or from Token if we stored it
+        const tenantId = process.env.TENANT_ID;
 
         if (!tenantId) {
             return res.status(500).json({ msg: "Server Config Error" });
@@ -466,51 +632,73 @@ exports.getMe = async (req, res) => {
         let userData;
         let ownerId;
         let isSubUser = false;
+        let bossData;
 
-        // 1. Try finding in owner collection
-        const ownerDocRef = db.collection('SwordNexBillingSoftware').doc(tenantId).collection('owner').doc(userId);
-        const ownerDoc = await ownerDocRef.get();
+        // === MONGODB MODE ===
+        if (DB_TYPE === 'mongodb') {
+            let user = await OwnerModel.findOne({ userId, tenantId });
 
-        if (ownerDoc.exists) {
-            userData = ownerDoc.data();
-            ownerId = userId;
+            if (user) {
+                userData = user.toObject();
+                ownerId = userId;
+                bossData = userData;
+            } else {
+                user = await SubUserModel.findOne({ userId, tenantId });
+                if (!user) {
+                    return res.status(404).json({ msg: "User account not found" });
+                }
+                userData = user.toObject();
+                isSubUser = true;
+                ownerId = userData.ownerId;
+
+                const boss = await OwnerModel.findOne({ userId: ownerId, tenantId });
+                bossData = boss ? boss.toObject() : userData;
+            }
+
+            delete userData.password;
+            if (bossData) delete bossData.password;
+
         } else {
-            // 2. Try finding in subuser collection group
-            // const subuserQuery = db.collectionGroup('subuser').where('firebaseUid', '==', userId);
-            // const subuserSnapshot = await subuserQuery.get();
+            // === FIRESTORE MODE ===
+            const ownerDocRef = db.collection('SwordNexBillingSoftware').doc(tenantId).collection('owner').doc(userId);
+            const ownerDoc = await ownerDocRef.get();
 
-            const ownersSnapshot = await db
-                .collection('SwordNexBillingSoftware')
-                .doc(tenantId)
-                .collection('owner')
-                .get();
-
-            let found = false;
-
-            for (const owner of ownersSnapshot.docs) {
-                const subSnap = await owner.ref
-                    .collection('subuser')
-                    .where('firebaseUid', '==', userId)
+            if (ownerDoc.exists) {
+                userData = ownerDoc.data();
+                ownerId = userId;
+            } else {
+                const ownersSnapshot = await db
+                    .collection('SwordNexBillingSoftware')
+                    .doc(tenantId)
+                    .collection('owner')
                     .get();
 
-                if (!subSnap.empty) {
-                    const subuserDoc = subSnap.docs[0];
-                    userData = subuserDoc.data();
-                    isSubUser = true;
-                    ownerId = userData.ownerId;
-                    found = true;
-                    break;
+                let found = false;
+
+                for (const owner of ownersSnapshot.docs) {
+                    const subSnap = await owner.ref
+                        .collection('subuser')
+                        .where('firebaseUid', '==', userId)
+                        .get();
+
+                    if (!subSnap.empty) {
+                        const subuserDoc = subSnap.docs[0];
+                        userData = subuserDoc.data();
+                        isSubUser = true;
+                        ownerId = userData.ownerId;
+                        found = true;
+                        break;
+                    }
+                }
+
+                if (!found) {
+                    return res.status(404).json({ msg: "User account not found" });
                 }
             }
 
-            if (!found) {
-                return res.status(404).json({ msg: "User account not found" });
-            }
+            const bossDoc = await db.collection('SwordNexBillingSoftware').doc(tenantId).collection('owner').doc(ownerId).get();
+            bossData = bossDoc.exists ? bossDoc.data() : userData;
         }
-
-        // 3. Fetch boss data for tenant info
-        const bossDoc = await db.collection('SwordNexBillingSoftware').doc(tenantId).collection('owner').doc(ownerId).get();
-        const bossData = bossDoc.exists ? bossDoc.data() : userData;
 
         if (!bossData) {
             return res.status(500).json({ msg: "Internal Server Error: Missing tenant context." });
@@ -527,12 +715,10 @@ exports.getMe = async (req, res) => {
                 subscription_status: bossData.subscription?.status || 'Inactive',
                 subscription_plan: bossData.subscription?.plan || 'Free',
                 subscription_expiry: bossData.subscription?.endDate || null,
-                // Business address
                 street: bossData.address?.street || '',
                 city: bossData.address?.city || '',
                 state: bossData.address?.state || '',
                 pincode: bossData.address?.pincode || '',
-                // GST & Printer settings with subuser fallback
                 purchase_gst: userData.purchase_gst !== undefined ? userData.purchase_gst : (bossData.purchase_gst || 0),
                 purchase_tax_type: userData.purchase_tax_type !== undefined ? userData.purchase_tax_type : (bossData.purchase_tax_type || 'exclusive'),
                 sales_gst: userData.sales_gst !== undefined ? userData.sales_gst : (bossData.sales_gst || 0),
@@ -547,4 +733,3 @@ exports.getMe = async (req, res) => {
         res.status(500).json({ msg: "Server Error" });
     }
 };
-

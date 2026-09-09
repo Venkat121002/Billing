@@ -1,8 +1,12 @@
 const { db, admin } = require('../config/firebase');
 const { getCollection } = require('../utils/dbUtils');
+const { MongoBatch } = require('../utils/mongoAdapter');
 const { parseExcel } = require('../utils/excelParser');
 const { validateProductSchema, validateCashbookSchema, validateCustomerSchema, validateCreditSchema, validateGstBillSchema } = require('../utils/validator');
 const { mapFields } = require('../utils/fieldMapper');
+
+// Determine which database to use
+const DB_TYPE = process.env.DB_TYPE || 'firestore';
 
 // Helper function to remove undefined values from an object recursively
 const removeUndefined = (obj) => {
@@ -124,7 +128,7 @@ exports.confirmImport = async (req, res) => {
             }
         });
 
-        let batch = db.batch();
+        let batch = DB_TYPE === 'mongodb' ? new MongoBatch() : db.batch();
         let count = 0;
         let importedCount = 0;
         let skippedCount = 0;
@@ -153,7 +157,9 @@ exports.confirmImport = async (req, res) => {
                 id: newDocRef.id,
                 createdBy: userId || null,
                 source: "Owner",
-                createdAt: admin?.firestore?.FieldValue?.serverTimestamp() || new Date().toISOString(),
+                createdAt: DB_TYPE === 'mongodb'
+                    ? new Date().toISOString()
+                    : (admin?.firestore?.FieldValue?.serverTimestamp() || new Date().toISOString()),
                 updatedAt: new Date().toISOString()
             };
             
@@ -177,10 +183,10 @@ exports.confirmImport = async (req, res) => {
             count++;
             importedCount++;
 
-            // Firestore batch limit is 500
+            // Firestore batch limit is 500 (MongoDB batches are sequential, but we chunk the same way for consistency)
             if (count === 500) {
                 await batch.commit();
-                batch = db.batch();
+                batch = DB_TYPE === 'mongodb' ? new MongoBatch() : db.batch();
                 count = 0;
             }
         }

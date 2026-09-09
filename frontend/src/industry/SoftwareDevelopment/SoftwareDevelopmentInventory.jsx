@@ -100,7 +100,7 @@ const SoftwareDevelopmentInventory = () => {
     });
   };
 
-  const handleDelete = async (id) => {o
+  const handleDelete = async (id) => {
     if (!currentUser) return;
     const token = sessionStorage.getItem("token");
     if (!token) return;
