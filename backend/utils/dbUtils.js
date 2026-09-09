@@ -3,7 +3,7 @@ const { getModel } = require('../models/mongodb');
 const { MongoCollectionReference } = require('./mongoAdapter');
 
 // Determine which database to use
-const DB_TYPE = process.env.DB_TYPE || 'firestore';
+const DB_TYPE = process.env.DB_TYPE || 'mongodb';
 
 /**
  * Gets the correct collection reference based on user role and database type.

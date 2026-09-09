@@ -2,7 +2,7 @@ const { db } = require('../config/firebase');
 const { Owner: OwnerModel } = require('../models/mongodb');
 
 // Determine which database to use
-const DB_TYPE = process.env.DB_TYPE || 'firestore';
+const DB_TYPE = process.env.DB_TYPE || 'mongodb';
 
 /**
  * Middleware to ensure the owner's subscription is active.

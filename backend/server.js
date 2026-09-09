@@ -7,7 +7,7 @@ const dotenv = require('dotenv');
 dotenv.config({ path: '.env.custom' });
 
 // Database Configuration
-const DB_TYPE = process.env.DB_TYPE || 'firestore';
+const DB_TYPE = process.env.DB_TYPE || 'mongodb';
 
 // Database initialization function
 async function initializeDatabase() {

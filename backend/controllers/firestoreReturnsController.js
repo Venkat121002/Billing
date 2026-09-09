@@ -1,205 +1,87 @@
-// const { db, admin } = require('../config/firebase');
-
-
-// const { getCollection } = require('../utils/dbUtils');
-
-// /**
-//  * Process Purchase Return
-//  * Decreases stock and saves return record
-//  */
-// exports.processPurchaseReturn = async (req, res) => {
-//     try {
-//         const { vendorId, purchaseInvoiceNo, returnDate, reason, items, totals, createdBy } = req.body;
-//         const batch = db.batch();
-        
-//         // 1. Create Return Record
-//         const returnRef = getCollection(req, 'inventory_returns').doc();
-//         batch.set(returnRef, {
-//             type: 'purchase',
-//             vendorId,
-//             purchaseInvoiceNo,
-//             returnDate,
-//             reason,
-//             items,
-//             totals,
-//             createdBy,
-//             createdAt: admin.firestore.FieldValue.serverTimestamp()
-//         });
-
-//         // 2. Update Stock
-//         for (const item of items) {
-//             if (!item.productId) continue;
-//             const productRef = getCollection(req, 'products').doc(item.productId);
-//             const productDoc = await productRef.get();
-            
-//             if (productDoc.exists) {
-//                 const product = productDoc.data();
-//                 const unitMultiplier = Number(product.unit) || 1;
-//                 const totalUnitsBefore = Number(product.quantity || 0) * unitMultiplier;
-                
-//                 // Purchase return decreases stock (sending back to vendor)
-//                 const newTotalUnits = Math.max(totalUnitsBefore - Number(item.returnQuantity), 0);
-//                 const newQty = newTotalUnits / unitMultiplier;
-                
-//                 batch.update(productRef, { quantity: newQty });
-//             }
-//         }
-
-//         await batch.commit();
-//         res.status(201).json({ msg: "Purchase return processed successfully", id: returnRef.id });
-//     } catch (err) {
-//         console.error("Purchase Return Error:", err);
-//         res.status(500).json({ msg: "Failed to process purchase return" });
-//     }
-// };
-
-// /**
-//  * Process Sales Return
-//  * Increases stock and saves return record
-//  */
-// exports.processSalesReturn = async (req, res) => {
-//     try {
-//         const { customerId, customerName, salesInvoiceNo, returnDate, reason, items, totals, createdBy } = req.body;
-//         const batch = db.batch();
-        
-//         // 1. Create Return Record
-//         const returnRef = getCollection(req, 'inventory_returns').doc();
-//         batch.set(returnRef, {
-//             type: 'sales',
-//             customerId,
-//             customerName,
-//             salesInvoiceNo,
-//             returnDate,
-//             reason,
-//             items,
-//             totals,
-//             createdBy,
-//             createdAt: admin.firestore.FieldValue.serverTimestamp()
-//         });
-
-//         // 2. Update Stock
-//         for (const item of items) {
-//             if (!item.productId) continue;
-//             const productRef = getCollection(req, 'products').doc(item.productId);
-//             const productDoc = await productRef.get();
-            
-//             if (productDoc.exists) {
-//                 const product = productDoc.data();
-//                 const unitMultiplier = Number(product.unit) || 1;
-//                 const totalUnitsBefore = Number(product.quantity || 0) * unitMultiplier;
-                
-//                 // Sales return increases stock (receiving back from customer)
-//                 const newTotalUnits = totalUnitsBefore + Number(item.returnQuantity);
-//                 const newQty = newTotalUnits / unitMultiplier;
-                
-//                 batch.update(productRef, { quantity: newQty });
-//             }
-//         }
-
-//         await batch.commit();
-//         res.status(201).json({ msg: "Sales return processed successfully", id: returnRef.id });
-//     } catch (err) {
-//         console.error("Sales Return Error:", err);
-//         res.status(500).json({ msg: "Failed to process sales return" });
-//     }
-// };
-
-
-
-const { db, admin } = require('../config/firebase');
 const { getCollection } = require('../utils/dbUtils');
 
 /**
- * Process Purchase Return
+ * Adjust a single product's stock by `delta` total units.
+ * Shared by purchase (negative delta) and sales (positive delta) returns.
+ */
+async function adjustStock(req, item, direction) {
+    if (!item.productId) return;
+
+    const returnQty = Number(item.returnQuantity || 0);
+    if (returnQty <= 0) return;
+
+    const productRef = getCollection(req, 'products').doc(String(item.productId));
+    const productDoc = await productRef.get();
+    if (!productDoc.exists) return;
+
+    const product = productDoc.data();
+    const unitMultiplier = Math.max(Number(product.unit || 1) || 1, 1);
+    const totalUnitsBefore = Number(product.quantity || 0) * unitMultiplier;
+
+    const newTotalUnits = direction === 'increase'
+        ? totalUnitsBefore + returnQty
+        : Math.max(totalUnitsBefore - returnQty, 0);
+
+    const newQty = Number((newTotalUnits / unitMultiplier).toFixed(3));
+    if (!isNaN(newQty) && isFinite(newQty)) {
+        await productRef.update({ quantity: newQty });
+    }
+}
+
+/**
+ * Process Purchase Return — decreases stock, saves a return record.
+ * Sequential writes (no batch) so this works identically in MongoDB mode and,
+ * later, in a future Firestore mode.
  */
 exports.processPurchaseReturn = async (req, res) => {
     try {
         const { vendorId, purchaseInvoiceNo, returnDate, reason, items = [], totals = {}, createdBy } = req.body;
 
-        // ✅ Validation
         if (!Array.isArray(items)) {
             return res.status(400).json({ msg: "Items must be an array" });
         }
 
-        const batch = db.batch();
-
-        // Strip undefined fields which crash Firestore
         const sanitizedItems = JSON.parse(JSON.stringify(items));
         const sanitizedTotals = JSON.parse(JSON.stringify(totals));
 
-        // 1. Create Return Record
-        const returnRef = getCollection(req, 'inventory_returns').doc();
-        batch.set(returnRef, {
+        const { id } = await getCollection(req, 'inventory_returns').add({
             type: 'purchase',
             vendorId: vendorId || null,
             purchaseInvoiceNo: purchaseInvoiceNo || "",
-            returnDate,
-            reason,
+            returnDate: returnDate || new Date().toISOString(),
+            reason: reason || "",
             items: sanitizedItems,
             totals: sanitizedTotals,
-            createdBy,
-            createdAt: admin.firestore.FieldValue.serverTimestamp()
+            createdBy: createdBy || null,
+            createdAt: new Date().toISOString()
         });
 
-        // 2. Update Stock
         for (const item of items) {
-            if (!item.productId) continue;
-
-            const returnQty = Number(item.returnQuantity || 0);
-
-            const productRef = getCollection(req, 'products').doc(String(item.productId));
-            const productDoc = await productRef.get();
-
-            if (productDoc.exists) {
-                const product = productDoc.data();
-
-                const unitMultiplier = Number(product.unit || 1) || 1;
-                const totalUnitsBefore = Number(product.quantity || 0) * unitMultiplier;
-
-                const newTotalUnits = Math.max(totalUnitsBefore - returnQty, 0);
-                const newQty = newTotalUnits / unitMultiplier;
-
-                if (!isNaN(newQty) && isFinite(newQty)) {
-                    batch.update(productRef, { quantity: newQty });
-                }
-            }
+            await adjustStock(req, item, 'decrease');
         }
 
-        await batch.commit();
-
-        res.status(201).json({
-            msg: "Purchase return processed successfully",
-            id: returnRef.id
-        });
-
+        res.status(201).json({ msg: "Purchase return processed successfully", id });
     } catch (err) {
         console.error("Purchase Return FULL ERROR:", err);
         res.status(500).json({ error: err.message });
     }
 };
 
-
 /**
- * Process Sales Return
+ * Process Sales Return — increases stock (unless damaged), saves a return record.
  */
 exports.processSalesReturn = async (req, res) => {
     try {
         const { customerId, customerName, salesInvoiceNo, returnDate, reason = "", items = [], totals = {}, createdBy } = req.body;
 
-        // ✅ Validation
         if (!Array.isArray(items) || items.length === 0) {
             return res.status(400).json({ msg: "Items must be a non-empty array" });
         }
 
-        const batch = db.batch();
-
-        // Strip undefined fields to prevent 500 error
         const sanitizedItems = JSON.parse(JSON.stringify(items));
         const sanitizedTotals = JSON.parse(JSON.stringify(totals));
 
-        // 1. Create Return Record
-        const returnRef = getCollection(req, 'inventory_returns').doc();
-        batch.set(returnRef, {
+        const { id } = await getCollection(req, 'inventory_returns').add({
             type: 'sales',
             customerId: customerId ? String(customerId) : null,
             customerName: customerName ? String(customerName) : "Walk-in Customer",
@@ -209,48 +91,20 @@ exports.processSalesReturn = async (req, res) => {
             items: sanitizedItems,
             totals: sanitizedTotals,
             createdBy: createdBy || null,
-            createdAt: admin.firestore.FieldValue.serverTimestamp()
+            createdAt: new Date().toISOString()
         });
 
-        // 2. Update Stock (Only if NOT damaged)
+        // Damaged goods don't go back into sellable stock.
         const isDamaged = String(reason || "").toLowerCase().includes('damage');
-        
         if (!isDamaged) {
             for (const item of items) {
-                if (!item.productId) continue;
-
-                const returnQty = Number(item.returnQuantity || 0);
-                if (returnQty <= 0) continue;
-
-                const productRef = getCollection(req, 'products').doc(String(item.productId));
-                const productDoc = await productRef.get();
-
-                if (productDoc.exists) {
-                    const product = productDoc.data();
-                    
-                    // Safely handle unit multipliers
-                    const unitMultiplier = Math.max(Number(product.unit || 1), 1);
-                    const totalUnitsBefore = Number(product.quantity || 0) * unitMultiplier;
-
-                    const newTotalUnits = totalUnitsBefore + returnQty;
-                    const newQty = Number((newTotalUnits / unitMultiplier).toFixed(3));
-
-                    if (!isNaN(newQty) && isFinite(newQty)) {
-                        batch.update(productRef, { quantity: newQty });
-                    }
-                }
+                await adjustStock(req, item, 'increase');
             }
         }
 
-        await batch.commit();
-
-        res.status(201).json({
-            msg: "Sales return processed successfully",
-            id: returnRef.id
-        });
-
+        res.status(201).json({ msg: "Sales return processed successfully", id });
     } catch (err) {
-        console.error("❌ Sales Return FULL ERROR:", err.message);
+        console.error("Sales Return FULL ERROR:", err.message);
         res.status(500).json({ error: err.message });
     }
 };
@@ -262,7 +116,7 @@ exports.getReturns = async (req, res) => {
     try {
         const returnsRef = getCollection(req, 'inventory_returns');
         const snapshot = await returnsRef.get();
-        
+
         const returns = snapshot.docs.map(doc => ({
             id: doc.id,
             ...doc.data()

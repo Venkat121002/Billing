@@ -1,14 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { db } from "../../config/FirebaseConfig";
-import {
-  collection,
-  addDoc,
-  serverTimestamp,
-  doc,
-  getDocs,
-} from "firebase/firestore";
 import { useAuth } from "../../contexts/AuthContext";
-import { useDocumentData } from "react-firebase-hooks/firestore";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import axios from "axios";
@@ -191,14 +182,10 @@ function SDGSTBill() {
     invoice: true, items: true, summary: true, notes: false,
   });
 
-  const userProfileRef = currentUser?.uid
-    ? doc(db, "users", currentUser.uid)
-    : null;
-  const [userProfileData, userProfileLoading] =
-    useDocumentData(userProfileRef);
+  const userProfileLoading = false;
 
   useEffect(() => {
-    const effectiveUserData = authUserData || userProfileData;
+    const effectiveUserData = authUserData;
     if (effectiveUserData) {
       setSellerDetails((prev) => ({
         ...prev,
@@ -222,7 +209,7 @@ function SDGSTBill() {
           "",
       }));
     }
-  }, [userProfileData, authUserData]);
+  }, [authUserData]);
 
 
   const handleInputChange = (e, section, field, index = null) => {

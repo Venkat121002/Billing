@@ -43,19 +43,6 @@ import {
 } from "lucide-react";
 import BillingLayout from "../../Layout/BillingLayout/AdminLayout";
 import { useAuth } from "../../contexts/AuthContext";
-import { db } from "../../config/FirebaseConfig";
-import {
-  collection,
-  addDoc,
-  serverTimestamp,
-  doc,
-  getDoc,
-  updateDoc,
-  query,
-  where,
-  getDocs,
-  orderBy,
-} from "firebase/firestore";
 import _ from "lodash";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";

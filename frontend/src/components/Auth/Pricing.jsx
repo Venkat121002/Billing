@@ -181,7 +181,7 @@ function Pricing() {
   //     }
 
   //     const options = {
-  //       key: "rzp_live_Rimr8JIVXNSKlr", // Replace with your Razorpay Key
+  //       key: "YOUR_RAZORPAY_KEY_ID", // set from backend create-order response
   //       amount: planAmount * 100,
   //       currency: "INR",
   //       name: "SwordNex Billing",

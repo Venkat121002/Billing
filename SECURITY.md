@@ -6,6 +6,13 @@ This file tracks known credential exposures and the actions required to close th
 It exists because several secrets were committed or stored in plaintext during
 early development.
 
+> **Fresh-start update (Sept 2026):** `backend/.env` (which held the live
+> Razorpay + Brevo keys) has been **deleted from disk**. Razorpay and Brevo are
+> now disabled until you add fresh keys to `backend/.env.custom`. Firebase is
+> removed from the codebase. The leaked strings below still live in git history,
+> so **rotation at the provider is still required** — deleting the file does not
+> undo the exposure.
+
 ## 1. Exposed credentials — ROTATION REQUIRED
 
 These values were present in committed source (`frontend/functions/config/db.js`,

@@ -4,7 +4,7 @@ const crypto = require('crypto');
 const { Owner: OwnerModel, SubUser: SubUserModel } = require('../models/mongodb');
 
 // Determine which database to use
-const DB_TYPE = process.env.DB_TYPE || 'firestore';
+const DB_TYPE = process.env.DB_TYPE || 'mongodb';
 
 // Helper: Generate Secure ID (matches firestoreAuthController.js)
 const generateId = () => crypto.randomBytes(16).toString('hex');

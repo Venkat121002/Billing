@@ -1,13 +1,12 @@
 import React, { useState, useEffect } from "react";
 import { EyeOffIcon, EyeIcon, Loader2 } from "lucide-react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext";
 import toast from "react-hot-toast";
 import icon1 from "../../assets/images/BILLING LOGO .png";
 
 const Login = () => {
-  const navigate = useNavigate();
-  const { employerLogin, employerGoogleSignIn } = useAuth();
+  const { employerLogin } = useAuth();
 
   const [formData, setFormData] = useState({ email: "", password: "" });
   const [showPassword, setShowPassword] = useState(false);
@@ -35,11 +34,6 @@ const Login = () => {
 
   const handleLogin = async (e) => {
     e.preventDefault();
-
-    if (formData.email === "sabilling@swordnex.com") {
-      navigate("/adminlogin");
-      return;
-    }
 
     if (!formData.email || !formData.password) {
       toast.error("Please enter both email and password.");
@@ -72,17 +66,9 @@ const Login = () => {
     }
   };
 
-  const handleGoogleLogin = async () => {
-    try {
-      setIsLoading(true);
-      await employerGoogleSignIn();
-      toast.success("Logged in with Google!");
-    } catch (error) {
-      toast.error(error.message || "Google sign-in failed.");
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  // Google sign-in is disabled while Firebase is removed.
+  // TODO: restore handleGoogleLogin + employerGoogleSignIn when a new
+  // Firebase project is configured.
 
   return (
     <div className="h-screen flex overflow-hidden">
@@ -205,26 +191,7 @@ const Login = () => {
             </button>
           </form>
 
-          {/* Divider */}
-          <div className="flex items-center gap-3 my-4">
-            <div className="flex-1 h-px bg-gray-200" />
-            <span className="text-xs text-gray-400">Or</span>
-            <div className="flex-1 h-px bg-gray-200" />
-          </div>
-
-          {/* Google */}
-          <button
-            onClick={handleGoogleLogin}
-            disabled={isLoading}
-            className="w-full h-11 flex items-center justify-center gap-2 border border-gray-300 rounded-lg text-black hover:bg-gray-50 transition text-sm"
-          >
-            <img
-              src="https://developers.google.com/identity/images/g-logo.png"
-              alt="Google"
-              className="h-4 w-4"
-            />
-            Continue with Google
-          </button>
+          {/* Google sign-in removed with Firebase — restore when reconfigured. */}
 
           <p className="text-center text-xs text-gray-500 mt-4">
             Don’t have an account?{" "}

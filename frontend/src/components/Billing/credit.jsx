@@ -1,16 +1,5 @@
 import React, { useState, useEffect } from "react";
 import { Search, PlusCircle, Edit3, Trash2, CircleX, Eye, Lock, Crown, Table, Mail } from "lucide-react";
-import {
-  collection,
-  addDoc,
-  updateDoc,
-  deleteDoc,
- 
-  doc,
-  onSnapshot,
-  serverTimestamp,
-} from "firebase/firestore";
-import { db } from "../../config/FirebaseConfig";
 import { useAuth } from "../../contexts/AuthContext";
 import BillingLayout from "../../Layout/BillingLayout/AdminLayout";
 import { Link } from "react-router-dom";
@@ -20,7 +9,6 @@ import { useRef } from "react";
 import { useReactToPrint } from "react-to-print";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
-import { useCollectionData } from "react-firebase-hooks/firestore";
 import axios from "axios";
 import API_URL from "../../config/api";
 
