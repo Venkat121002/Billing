@@ -1,13 +1,13 @@
 const { db, admin } = require('../config/firebase');
 const { getCollection, fetchUnifiedData } = require('../utils/dbUtils');
-const razorpay = require('../config/razorpay');
+const { instance: razorpay, enabled: razorpayEnabled } = require('../config/razorpay');
 const crypto = require('crypto');
 
 // MongoDB models
 const { Owner: OwnerModel, SubscriptionDetail: SubscriptionDetailModel } = require('../models/mongodb');
 
 // Determine which database to use
-const DB_TYPE = process.env.DB_TYPE || 'firestore';
+const DB_TYPE = process.env.DB_TYPE || 'mongodb';
 
 // Billing Plans Configuration
 const PLANS = {
@@ -30,6 +30,10 @@ const PLANS = {
 // @route   POST /api/v2/billing/create-order
 exports.createSubscriptionOrder = async (req, res) => {
     try {
+        if (!razorpayEnabled) {
+            return res.status(503).json({ msg: "Payments are not configured on this server." });
+        }
+
         const { plan, billingCycle } = req.body;
 
         if (!PLANS[plan]) {
@@ -86,6 +90,10 @@ const { sendEmail } = require('../utils/emailService');
 // @route   POST /api/v2/billing/verify-payment
 exports.verifySubscriptionPayment = async (req, res) => {
     try {
+        if (!razorpayEnabled) {
+            return res.status(503).json({ msg: "Payments are not configured on this server." });
+        }
+
         const { paymentId, orderId, signature, plan, billingCycle } = req.body;
         const tenantId = process.env.TENANT_ID;
 

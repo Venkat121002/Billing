@@ -34,17 +34,8 @@ import {
   CheckCircle,
   Printer
 } from "lucide-react";
-import {
-  collection,
-  onSnapshot,
-  query,
-  orderBy,
-  getDoc,
-  doc,
-} from "firebase/firestore";
 import axios from "axios";
 import API_URL from "../../config/api";
-import { db } from "../../config/FirebaseConfig";
 import { useAuth } from "../../contexts/AuthContext";
 import BillingLayout from "../../Layout/BillingLayout/AdminLayout";
 import * as XLSX from "xlsx";

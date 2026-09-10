@@ -30,8 +30,11 @@ exports.getGstBills = async (req, res) => {
 // @route   POST /api/v2/gst-bills
 exports.createGstBill = async (req, res) => {
     try {
+        const { userId, role, ownerId } = req.user;
         const data = {
             ...req.body,
+            ownerId: role === 'owner' ? userId : ownerId,
+            createdBy: userId,
             createdAt: new Date().toISOString()
         };
 

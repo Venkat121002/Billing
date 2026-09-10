@@ -1,19 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
-import {
-  collection,
-  addDoc,
-  updateDoc,
-  deleteDoc,
-  doc,
-  onSnapshot,
-  query,
-  orderBy,
-  serverTimestamp,
-  Timestamp,
-} from "firebase/firestore";
 import axios from "axios";
 import API_URL from "../../config/api";
-import { db } from "../../config/FirebaseConfig";
 import { useAuth } from "../../contexts/AuthContext";
 import {
   PlusCircle,

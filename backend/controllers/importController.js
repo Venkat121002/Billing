@@ -1,4 +1,3 @@
-const { db, admin } = require('../config/firebase');
 const { getCollection } = require('../utils/dbUtils');
 const { MongoBatch } = require('../utils/mongoAdapter');
 const { parseExcel } = require('../utils/excelParser');
@@ -6,7 +5,7 @@ const { validateProductSchema, validateCashbookSchema, validateCustomerSchema, v
 const { mapFields } = require('../utils/fieldMapper');
 
 // Determine which database to use
-const DB_TYPE = process.env.DB_TYPE || 'firestore';
+const DB_TYPE = process.env.DB_TYPE || 'mongodb';
 
 // Helper function to remove undefined values from an object recursively
 const removeUndefined = (obj) => {
@@ -107,6 +106,10 @@ exports.confirmImport = async (req, res) => {
             return res.status(400).json({ msg: "Import data is missing or not an array" });
         }
 
+        if (DB_TYPE !== 'mongodb') {
+            return res.status(501).json({ msg: "Import is only supported in MongoDB mode" });
+        }
+
         const collectionRef = getCollection(req, type);
         const userId = req.user?.uid || req.user?.userId || 'unknown'; // Ensure userId is always a string
 
@@ -114,7 +117,7 @@ exports.confirmImport = async (req, res) => {
         const existingRecords = await collectionRef.get();
         const existingKeys = new Set();
 
-        existingRecords.forEach(doc => {
+        existingRecords.docs.forEach(doc => {
             const data = doc.data();
             if (type === 'products') {
                 if (data.sku) existingKeys.add(String(data.sku || '').toLowerCase());
@@ -128,7 +131,7 @@ exports.confirmImport = async (req, res) => {
             }
         });
 
-        let batch = DB_TYPE === 'mongodb' ? new MongoBatch() : db.batch();
+        let batch = new MongoBatch();
         let count = 0;
         let importedCount = 0;
         let skippedCount = 0;
@@ -157,9 +160,7 @@ exports.confirmImport = async (req, res) => {
                 id: newDocRef.id,
                 createdBy: userId || null,
                 source: "Owner",
-                createdAt: DB_TYPE === 'mongodb'
-                    ? new Date().toISOString()
-                    : (admin?.firestore?.FieldValue?.serverTimestamp() || new Date().toISOString()),
+                createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString()
             };
             
@@ -186,7 +187,7 @@ exports.confirmImport = async (req, res) => {
             // Firestore batch limit is 500 (MongoDB batches are sequential, but we chunk the same way for consistency)
             if (count === 500) {
                 await batch.commit();
-                batch = DB_TYPE === 'mongodb' ? new MongoBatch() : db.batch();
+                batch = new MongoBatch();
                 count = 0;
             }
         }

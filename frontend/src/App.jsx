@@ -30,13 +30,8 @@ import BarcodeBilling from "./components/Billing/BarcodeBilling";
 import CashBook from "./components/Expenses/CashBook.jsx"
 import IndustryGstBillRouter from "./components/Billing/IndustryGstBillRouter";
 import Credit from "./components/Billing/credit";
-import ChangePassword from "./components/Auth/ChangePassword";
-import SuperAdmin from "./components/Auth/SuperAdmin";
-import SuperAdminLogin from "./components/Auth/SuperAdminLogin";
-import SuperAdminRegister from "./components/Auth/SuperAdminRegister";
 import { Sessionrecord } from "./components/Auth/Sessionrecord";
 import Support from "./components/Billing/Support";
-import AdminLogin from "./components/Auth/AdminLogin";
 import ForgotPassword from "./components/Auth/forgot";
 import Reports from "./components/Billing/Reports";
 
@@ -93,7 +88,7 @@ const employerRoutes = [
         <Route element={<SubscriptionRoute><ModuleRoute moduleKey="credit"><Credit /></ModuleRoute></SubscriptionRoute>} path="/credit" />
 
         <Route element={<SubscriptionRoute><ModuleRoute moduleKey="reports"><Reports /></ModuleRoute></SubscriptionRoute>} path="/reports" />
-        <Route element={<SubscriptionRoute><ChangePassword /></SubscriptionRoute>} path="/change" />
+        <Route element={<SubscriptionRoute><ForgotPassword /></SubscriptionRoute>} path="/change" />
         <Route element={<SubscriptionRoute><Sessionrecord /></SubscriptionRoute>} path="/session-records" />
         <Route element={<SubscriptionRoute><BarcodePage /></SubscriptionRoute>} path="/barcode/:productId" />
         
@@ -146,11 +141,7 @@ function App() {
               <Route path="/trainers" element={<Trainer />} />
 
               {/* <Route path="/credit" element={<Credit />}/> */}
-              <Route path="/superadmin" element={<SuperAdmin />} />
-              <Route path="/superadmin/login" element={<SuperAdminLogin />} />
-              <Route path="/superadmin/register" element={<SuperAdminRegister />} />
               <Route path="/support" element={<Support />} />
-              <Route path="/adminlogin" element={<AdminLogin />} />
               <Route path="/forgot" element={<ForgotPassword />} />
               <Route path="/forgot-password" element={<ForgotPassword />} />
               <Route path="/academyinventory" element={<AcademyInventry />} />

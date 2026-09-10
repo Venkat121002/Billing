@@ -44,19 +44,6 @@ import {
 } from "lucide-react";
 import BillingLayout from "../../Layout/BillingLayout/AdminLayout";
 import { useAuth } from "../../contexts/AuthContext";
-import { db } from "../../config/FirebaseConfig";
-import {
-  collection,
-  addDoc,
-  serverTimestamp,
-  doc,
-  getDoc,
-  updateDoc,
-  query,
-  where,
-  getDocs,
-  orderBy,
-} from "firebase/firestore";
 import _ from "lodash";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
@@ -714,16 +701,17 @@ const GroceryBilling = () => {
       const spp = Number(ls.spendPerPoint) || 100;
       const pe = Math.floor(totalAmount / spp);
       if (pe <= 0) return;
-      const ref = doc(db, "users", currentUser.uid, "billing_customers", customerId);
-      const snap = await getDoc(ref);
-      if (snap.exists()) {
-        let np = Number(snap.data().loyaltyPoints || 0) + pe;
-        let nw = Number(snap.data().walletBalance || 0);
-        const th = Number(ls.redemptionThreshold) || 100;
-        const ra = Number(ls.redemptionAmount) || 10;
-        if (np >= th) { const m = Math.floor(np / th); nw += m * ra; np -= m * th; }
-        await updateDoc(ref, { loyaltyPoints: np, walletBalance: nw, lastLoyaltyUpdate: serverTimestamp() });
-      }
+      const token = sessionStorage.getItem("token");
+      const config = { headers: { "x-auth-token": token } };
+      const custRes = await axios.get(`${API_URL}/customers`, config);
+      const customer = (custRes.data || []).find((c) => c.id === customerId);
+      if (!customer) return;
+      let np = Number(customer.loyaltyPoints || 0) + pe;
+      let nw = Number(customer.walletBalance || 0);
+      const th = Number(ls.redemptionThreshold) || 100;
+      const ra = Number(ls.redemptionAmount) || 10;
+      if (np >= th) { const m = Math.floor(np / th); nw += m * ra; np -= m * th; }
+      await axios.put(`${API_URL}/customers/${customerId}`, { loyaltyPoints: np, walletBalance: nw }, config);
     } catch (err) { console.error("Loyalty error:", err); }
   };
 

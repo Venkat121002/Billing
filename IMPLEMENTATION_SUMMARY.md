@@ -1,8 +1,15 @@
-# MongoDB + Firestore Dual-Database Implementation - COMPLETED ✅
+# MongoDB + Firestore Dual-Database Implementation
+
+> **Superseded (Sept 2026).** The project has since removed Firebase entirely and
+> runs on **MongoDB only** — see `DATABASE_ARCHITECTURE.md`. The `DB_TYPE` switch
+> and the `mongoAdapter` layer described below are still in place (so Firebase can
+> be re-added later as a fresh project), but the `firestore` mode is dormant and
+> `backend/config/firebase.js` is now a dependency-free stub. This document is
+> kept for historical context on how the abstraction was built.
 
 ## Implementation Summary
 
-Successfully implemented a **dual-database architecture** for the SwordNex Billing system that allows seamless switching between MongoDB (local development) and Firestore (production) via environment configuration.
+Implemented a **dual-database architecture** for the SwordNex Billing system that allows switching between MongoDB (local development) and Firestore (production) via environment configuration.
 
 ---
 

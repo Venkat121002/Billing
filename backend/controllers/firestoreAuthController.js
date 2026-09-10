@@ -9,7 +9,7 @@ const jwt = require('jsonwebtoken');
 const { Owner: OwnerModel, SubUser: SubUserModel } = require('../models/mongodb');
 
 // Determine which database to use
-const DB_TYPE = process.env.DB_TYPE || 'firestore';
+const DB_TYPE = process.env.DB_TYPE || 'mongodb';
 
 // Helper: Generate Secure ID
 const generateId = () => {
@@ -730,6 +730,136 @@ exports.getMe = async (req, res) => {
 
     } catch (err) {
         console.error("GetMe Error:", err.message);
+        res.status(500).json({ msg: "Server Error" });
+    }
+};
+
+// All models, for the delete-account cascade
+const mongoModels = require('../models/mongodb');
+
+// @desc    Logout (JWT is stateless — this just records the time, best-effort)
+// @route   POST /api/v2/auth/logout
+exports.logout = async (req, res) => {
+    try {
+        const { userId, role } = req.user;
+        const tenantId = process.env.TENANT_ID;
+        const Model = role === 'subuser' ? SubUserModel : OwnerModel;
+        await Model.updateOne({ userId, tenantId }, { $set: { lastLogout: new Date().toISOString() } });
+    } catch (err) {
+        console.error("Logout Error:", err.message);
+    }
+    res.json({ msg: "Logged out" });
+};
+
+// @desc    Delete the current account (and, for an owner, all of its tenant data)
+// @route   DELETE /api/v2/auth/delete-account
+exports.deleteAccount = async (req, res) => {
+    try {
+        const { userId, role } = req.user;
+        const tenantId = process.env.TENANT_ID;
+
+        if (role === 'subuser') {
+            await SubUserModel.deleteOne({ userId, tenantId });
+            return res.json({ msg: "Account deleted" });
+        }
+
+        // Owner: cascade delete everything scoped to this owner.
+        const ownedModels = [
+            mongoModels.SubUser, mongoModels.Product, mongoModels.Customer,
+            mongoModels.GstBill, mongoModels.Bill, mongoModels.Transaction,
+            mongoModels.Credit, mongoModels.Supplier, mongoModels.Trainer,
+            mongoModels.Client, mongoModels.Salesman, mongoModels.InventoryReturn,
+            mongoModels.SubscriptionDetail
+        ];
+        await Promise.all(
+            ownedModels.map(M => M.deleteMany({ tenantId, ownerId: userId }))
+        );
+        await OwnerModel.deleteOne({ userId, tenantId });
+
+        res.json({ msg: "Account deleted" });
+    } catch (err) {
+        console.error("DeleteAccount Error:", err.message);
+        res.status(500).json({ msg: "Server error: " + err.message });
+    }
+};
+
+// @desc    Start a password-reset flow (always responds the same, no email enumeration)
+// @route   POST /api/v2/auth/forgot-password
+exports.forgotPassword = async (req, res) => {
+    const { email } = req.body || {};
+    const tenantId = process.env.TENANT_ID;
+    const genericMsg = { msg: "If that email exists, a reset link has been sent." };
+
+    try {
+        if (!email) return res.status(400).json({ msg: "Email is required" });
+
+        const user =
+            (await OwnerModel.findOne({ email, tenantId })) ||
+            (await SubUserModel.findOne({ email, tenantId }));
+
+        if (user) {
+            const token = jwt.sign(
+                { email, tenantId, purpose: 'pwreset' },
+                process.env.JWT_SECRET,
+                { expiresIn: '30m' }
+            );
+            const base = process.env.FRONTEND_URL || 'http://localhost:5173';
+            const link = `${base}/forgot-password?oobCode=${token}`;
+            console.log('[forgot-password] reset link for', email, '→', link);
+            await sendEmail({
+                to: email,
+                subject: 'Reset your SwordNex password',
+                html: `<p>We received a request to reset your password. This link is valid for 30 minutes:</p>
+                       <p><a href="${link}">${link}</a></p>
+                       <p>If you didn't request this, you can ignore this email.</p>`
+            }).catch(e => console.error('forgot-password email failed:', e.message));
+        }
+
+        res.json(genericMsg);
+    } catch (err) {
+        console.error("ForgotPassword Error:", err.message);
+        res.json(genericMsg);
+    }
+};
+
+// @desc    Complete a password reset
+// @route   POST /api/v2/auth/reset-password
+exports.resetPassword = async (req, res) => {
+    const { token, password } = req.body || {};
+
+    try {
+        if (!token || !password) {
+            return res.status(400).json({ msg: "Token and new password are required" });
+        }
+        if (String(password).length < 6) {
+            return res.status(400).json({ msg: "Password must be at least 6 characters" });
+        }
+
+        let decoded;
+        try {
+            decoded = jwt.verify(token, process.env.JWT_SECRET);
+        } catch (e) {
+            return res.status(400).json({ msg: "Reset link is invalid or has expired" });
+        }
+        if (decoded.purpose !== 'pwreset') {
+            return res.status(400).json({ msg: "Invalid reset token" });
+        }
+
+        const { email, tenantId } = decoded;
+        const hash = await bcrypt.hash(password, 10);
+
+        const owner = await OwnerModel.findOne({ email, tenantId });
+        if (owner) {
+            await OwnerModel.updateOne({ _id: owner._id }, { $set: { password: hash } });
+        } else {
+            const sub = await SubUserModel.findOne({ email, tenantId });
+            if (!sub) return res.status(400).json({ msg: "Account not found" });
+            await SubUserModel.updateOne({ _id: sub._id }, { $set: { password: hash } });
+        }
+
+        res.json({ msg: "Password updated successfully" });
+    } catch (err) {
+        console.error("ResetPassword Error:", err.message);
         res.status(500).json({ msg: "Server Error" });
     }
 };

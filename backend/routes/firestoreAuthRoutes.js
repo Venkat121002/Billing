@@ -15,4 +15,16 @@ router.get('/me', auth, authController.getMe);
 // @route   PUT /api/v2/auth/update-profile
 router.put('/update-profile', auth, authController.updateProfile);
 
+// @route   POST /api/v2/auth/logout
+router.post('/logout', auth, authController.logout);
+
+// @route   DELETE /api/v2/auth/delete-account
+router.delete('/delete-account', auth, authController.deleteAccount);
+
+// @route   POST /api/v2/auth/forgot-password
+router.post('/forgot-password', authController.forgotPassword);
+
+// @route   POST /api/v2/auth/reset-password
+router.post('/reset-password', authController.resetPassword);
+
 module.exports = router;
