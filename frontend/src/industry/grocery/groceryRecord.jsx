@@ -206,13 +206,6 @@ const GroceryRecord = () => {
             purchaseGST: Number(data.purchaseGst) || 0,
             sku: data.sku || data.id || "N/A",
             reorderLevel: Number(data.reorderLevel) || 0,
-            brand: data.brand || "N/A",
-            model: data.model || "N/A",
-            imei1: data.imei1 || "N/A",
-            color: data.color || "N/A",
-            storage: data.storage || "N/A",
-            // storage: data.storage || "N/A",
-            duration: data.duration || "0",
             supplier: data.supplier || "N/A",
             purchaseGstAmount: Number(data.purchaseGstAmount) || 0,
             purchaseTotalAmount: Number(data.purchaseTotalAmount) || 0,
@@ -631,8 +624,6 @@ const GroceryRecord = () => {
       const term = searchTerm.toLowerCase();
       recordsList = records.filter((p) =>
         (p.supplier || "").toLowerCase().includes(term) ||
-        (p.brand || "").toLowerCase().includes(term) ||
-        (p.model || "").toLowerCase().includes(term) ||
         (p.type || "").toLowerCase().includes(term)
       );
 
@@ -1035,8 +1026,6 @@ const GroceryRecord = () => {
         SNO: i + 1,
         Supplier: p.supplier,
         Category: p.type,
-        Brand: p.brand,
-        Model: p.model,
         "Purchase Price": p.purchasePrice,
         "Purchase GST %": p.purchaseGST,
         "Purchase GST Amount": p.purchaseGstAmount,

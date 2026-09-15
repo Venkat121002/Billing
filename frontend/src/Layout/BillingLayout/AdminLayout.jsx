@@ -28,6 +28,7 @@ import API_URL from "../../config/api";
 import logo from "../../assets/images/BILLING LOGO .png";
 import logo1 from "../../assets/images/BILLING_LOGO_LARGE2.png"
 import { getSidebarItems } from "../../config/industryModules";
+import { resolveIndustryProfile } from "../../config/industryProfiles";
 import logo2 from "../../assets/images/SD_main_logo.png"
 import logo3 from "../../assets/images/SD_logo.png"
 
@@ -52,10 +53,7 @@ const BillingLayout = ({ children, hideHeader = false, hideSidebar = false }) =>
   const [isBellOpen, setIsBellOpen] = useState(false);
 
 
-  const industryKey =
-    userData?.Tenant?.industry ||
-    localStorage.getItem("selectedIndustry") ||   
-    "others";
+  const { key: industryKey } = resolveIndustryProfile(userData);
 
   const isSoftwareDev = industryKey === 'software_development';
   const isClothing=industryKey === 'clothing';

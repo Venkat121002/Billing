@@ -27,4 +27,7 @@ router.post('/forgot-password', authController.forgotPassword);
 // @route   POST /api/v2/auth/reset-password
 router.post('/reset-password', authController.resetPassword);
 
+// @route   POST /api/v2/auth/select-industry
+router.post('/select-industry', auth, authController.selectIndustry);
+
 module.exports = router;

@@ -4,6 +4,7 @@ import { format } from "date-fns";
 import axios from "axios";
 import API_URL from "../../config/api";
 import { useAuth } from "../../contexts/AuthContext";
+import IndustryNudgeBanner from "../Billing/IndustryNudgeBanner";
 import {
   Users,
   ShoppingCart,
@@ -688,6 +689,7 @@ function EmployerDashboard() {
   return (
     <BillingLayout hideSidebar={false}>
       <div className="min-h-screen bg-white -m-4 p-3">
+        <IndustryNudgeBanner currentUser={currentUser} />
         {/* ═══════════════ HEADER ═══════════════ */}
         <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-8">
           <div>

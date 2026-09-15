@@ -24,6 +24,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { handleEnterToNext } from '../utils/formUtils';
 import BillingLayout from '../Layout/BillingLayout/AdminLayout';
+import { resolveIndustryProfile, hasChosenIndustry, getSelectableProfiles } from '../config/industryProfiles';
 
 
 
@@ -34,10 +35,32 @@ const Settings = () => {
   const [savingProfile, setSavingProfile] = useState(false);
   const [supportQuery, setSupportQuery] = useState('');
   const [submittingSupport, setSubmittingSupport] = useState(false);
-  const { currentUser, updateProfile, getSubUsers, createSubUser, deleteSubUser, updateSubUser, createSubscriptionOrder, verifySubscriptionPayment } = useAuth();
+  const { currentUser, updateProfile, selectIndustry, getSubUsers, createSubUser, deleteSubUser, updateSubUser, createSubscriptionOrder, verifySubscriptionPayment } = useAuth();
   const userData = currentUser;
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+
+  // Industry (Company Profile) — one-time selection, locked once set.
+  const industryChosen = hasChosenIndustry(userData);
+  const industryProfile = resolveIndustryProfile(userData);
+  const [selectedIndustryKey, setSelectedIndustryKey] = useState('');
+  const [savingIndustry, setSavingIndustry] = useState(false);
+
+  const saveIndustry = async () => {
+    if (!selectedIndustryKey) return;
+    try {
+      setSavingIndustry(true);
+      await selectIndustry(selectedIndustryKey);
+      import('react-hot-toast').then(({ default: toast }) => toast.success('Industry saved!'));
+    } catch (err) {
+      console.error('Select industry error:', err);
+      import('react-hot-toast').then(({ default: toast }) =>
+        toast.error(err?.msg || 'Failed to save industry.')
+      );
+    } finally {
+      setSavingIndustry(false);
+    }
+  };
 
   const handleSupportSubmit = async (e) => {
     e.preventDefault();
@@ -121,7 +144,8 @@ const Settings = () => {
       lastName: userData?.lastName || '',
       mobile: userData?.mobile || '',
       businessName: userData?.companyDetails?.name || userData?.businessName || '',
-      industry: userData?.companyDetails?.industry || '',
+      // industry is intentionally not part of the generic edit form — it has
+      // its own one-time selection flow below (locked once set).
       businessType: userData?.companyDetails?.type || '',
       gstin: userData?.companyDetails?.gstin || '',
       pan: userData?.companyDetails?.pan || '',
@@ -729,7 +753,6 @@ const Settings = () => {
                   <div className="space-y-3">
                     {[
                       { label: 'Business Name', key: 'businessName', value: userData?.companyDetails?.name || userData?.businessName || userData?.Tenant?.name },
-                      { label: 'Industry', key: 'industry', value: userData?.companyDetails?.industry || userData?.Tenant?.industry },
                       { label: 'Business Type', key: 'businessType', value: userData?.companyDetails?.type || userData?.businessType || userData?.Tenant?.type },
                       { label: 'GSTIN', key: 'gstin', value: userData?.companyDetails?.gstin || userData?.gstin || userData?.Tenant?.gstin },
                       { label: 'PAN', key: 'pan', value: userData?.companyDetails?.pan || userData?.pan || userData?.Tenant?.pan },
@@ -749,6 +772,44 @@ const Settings = () => {
                         )}
                       </div>
                     ))}
+
+                    {/* Industry — one-time selection, locked once set. Not
+                        part of the generic edit form above: it has its own
+                        save flow via POST /v2/auth/select-industry. */}
+                    <div className="flex flex-col">
+                      <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-1">Industry</span>
+                      {industryChosen ? (
+                        <div>
+                          <span className="text-sm text-gray-800 font-medium">{industryProfile.label}</span>
+                          <p className="text-[11px] text-gray-400 mt-0.5">Contact support to change your industry.</p>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                          <select
+                            className="w-full sm:w-auto h-9 px-3 text-sm text-gray-900 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-300 focus:border-emerald-400 transition-all"
+                            value={selectedIndustryKey}
+                            onChange={(e) => setSelectedIndustryKey(e.target.value)}
+                          >
+                            <option value="">Select your industry…</option>
+                            {getSelectableProfiles().map((p) => (
+                              <option key={p.key} value={p.key}>{p.label}</option>
+                            ))}
+                          </select>
+                          <button
+                            onClick={saveIndustry}
+                            disabled={!selectedIndustryKey || savingIndustry}
+                            className="text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 px-4 py-2 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {savingIndustry ? 'Saving…' : 'Save Industry'}
+                          </button>
+                        </div>
+                      )}
+                      {!industryChosen && (
+                        <p className="text-[11px] text-gray-400 mt-1">
+                          This can't be changed later without contacting support — choose carefully.
+                        </p>
+                      )}
+                    </div>
                   </div>
                 </div>
 

@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation } from "react-router-dom";
 import axios from "axios";
 import API_URL from "../../config/api";
 import {
@@ -15,7 +15,6 @@ import {
   CreditCard,
   Smartphone,
   Tag,
-  Package,
   Loader2,
   Download,
   X,
@@ -23,22 +22,15 @@ import {
   MapPin,
   Phone,
   FileText,
-  ChevronDown,
   Receipt,
   IndianRupee,
   ScanBarcode,
   ArrowRight,
-  Clock,
   Banknote,
   Wallet,
-  TrendingUp,
   Hash,
   RotateCcw,
-  Zap,
-  AlertCircle,
   ChevronRight,
-  BadgeIndianRupee,
-  Bell,
   Calendar,
 } from "lucide-react";
 import BillingLayout from "../../Layout/BillingLayout/AdminLayout";
@@ -101,15 +93,12 @@ const AcademyBilling = () => {
   };
 
   const location = useLocation();
-  const navigate = useNavigate();
   const { currentUser, updateProfile } = useAuth();
   const userData = currentUser;
-   
 
   const [products, setProducts] = useState([]);
   const [productsLoading, setProductsLoading] = useState(true);
   const [productsError, setProductsError] = useState(null);
-   const getGST = (amount, percent) => (amount * percent) / 100;
 
 
   useEffect(() => {
@@ -177,20 +166,59 @@ const AcademyBilling = () => {
   const [categories, setCategories] = useState([]);
   const [isDueBill, setIsDueBill] = useState(false);
   const [printerFormat, setPrinterFormat] = useState("thermal");
-  const [currentTime, setCurrentTime] = useState(new Date());
   const [termDuration, setTermDuration] = useState("Monthly");
   const [creditPaymentData, setCreditPaymentData] = useState(null);
 
+  // Complete literal Tailwind strings per slot, per payment method — Tailwind's
+  // JIT content scanner only picks up classes it can see verbatim in source, so
+  // these must never be built from `${themeColor}`-style template interpolation
+  // (that was the previous approach here and silently produced unstyled elements
+  // in the production build for every payment method except whichever raw color
+  // string happened to appear literally elsewhere in the file).
   const themeStyles = {
-    cash: { main: "purple", sec: "indigo", card: "bg-gradient-to-br from-purple-700 to-indigo-700", btn: "bg-purple-600 border-purple-600 text-white", dot: "bg-white" },
-    card: { main: "blue", sec: "indigo", card: "bg-gradient-to-br from-blue-700 to-indigo-700", btn: "bg-blue-600 border-blue-600 text-white", dot: "bg-white" },
-    upi: { main: "emerald", sec: "teal", card: "bg-gradient-to-br from-emerald-700 to-teal-700", btn: "bg-emerald-600 border-emerald-600 text-white", dot: "bg-white" },
-    term: { main: "orange", sec: "rose", card: "bg-gradient-to-br from-orange-700 to-rose-700", btn: "bg-orange-600 border-orange-600 text-white", dot: "bg-white" }
+    cash: {
+      card: "bg-gradient-to-br from-purple-700 to-indigo-700",
+      text100: "text-purple-100", text200: "text-purple-200", icon400: "text-purple-400",
+      ring400: "focus:ring-purple-400", cashInput: "bg-purple-600 border-purple-600 focus:ring-purple-300/40",
+      completeSaleShadow: "shadow-purple-200/50", ringBorder300: "focus:ring-purple-300 focus:border-purple-300",
+      gradientBtn: "bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-800 hover:to-indigo-800 shadow-md shadow-purple-200/50",
+      border100: "border-purple-100", bg100: "bg-purple-100", text600: "text-purple-600",
+      bg50half: "bg-purple-50/50", border200: "border-purple-200", ring300: "focus:ring-purple-300",
+      printBtn: "border-purple-200 text-purple-600 hover:bg-purple-50",
+    },
+    card: {
+      card: "bg-gradient-to-br from-blue-700 to-indigo-700",
+      text100: "text-blue-100", text200: "text-blue-200", icon400: "text-blue-400",
+      ring400: "focus:ring-blue-400", cashInput: "bg-blue-600 border-blue-600 focus:ring-blue-300/40",
+      completeSaleShadow: "shadow-blue-200/50", ringBorder300: "focus:ring-blue-300 focus:border-blue-300",
+      gradientBtn: "bg-gradient-to-r from-blue-700 to-indigo-700 hover:from-blue-800 hover:to-indigo-800 shadow-md shadow-blue-200/50",
+      border100: "border-blue-100", bg100: "bg-blue-100", text600: "text-blue-600",
+      bg50half: "bg-blue-50/50", border200: "border-blue-200", ring300: "focus:ring-blue-300",
+      printBtn: "border-blue-200 text-blue-600 hover:bg-blue-50",
+    },
+    upi: {
+      card: "bg-gradient-to-br from-emerald-700 to-teal-700",
+      text100: "text-emerald-100", text200: "text-emerald-200", icon400: "text-emerald-400",
+      ring400: "focus:ring-emerald-400", cashInput: "bg-emerald-600 border-emerald-600 focus:ring-emerald-300/40",
+      completeSaleShadow: "shadow-emerald-200/50", ringBorder300: "focus:ring-emerald-300 focus:border-emerald-300",
+      gradientBtn: "bg-gradient-to-r from-emerald-700 to-teal-700 hover:from-emerald-800 hover:to-teal-800 shadow-md shadow-emerald-200/50",
+      border100: "border-emerald-100", bg100: "bg-emerald-100", text600: "text-emerald-600",
+      bg50half: "bg-emerald-50/50", border200: "border-emerald-200", ring300: "focus:ring-emerald-300",
+      printBtn: "border-emerald-200 text-emerald-600 hover:bg-emerald-50",
+    },
+    term: {
+      card: "bg-gradient-to-br from-orange-700 to-rose-700",
+      text100: "text-orange-100", text200: "text-orange-200", icon400: "text-orange-400",
+      ring400: "focus:ring-orange-400", cashInput: "bg-orange-600 border-orange-600 focus:ring-orange-300/40",
+      completeSaleShadow: "shadow-orange-200/50", ringBorder300: "focus:ring-orange-300 focus:border-orange-300",
+      gradientBtn: "bg-gradient-to-r from-orange-700 to-rose-700 hover:from-orange-800 hover:to-rose-800 shadow-md shadow-orange-200/50",
+      border100: "border-orange-100", bg100: "bg-orange-100", text600: "text-orange-600",
+      bg50half: "bg-orange-50/50", border200: "border-orange-200", ring300: "focus:ring-orange-300",
+      printBtn: "border-orange-200 text-orange-600 hover:bg-orange-50",
+    },
   };
 
   const activeTheme = themeStyles[paymentMethod] || themeStyles.cash;
-  const themeColor = activeTheme.main;
-  const themeSecondary = activeTheme.sec;
 
   // Dynamic Printer Format Resolution
   useEffect(() => {
@@ -205,16 +233,8 @@ const AcademyBilling = () => {
     }
   }, [cart, userData]);
 
-  const moneys = [100, 200, 500, 1000, 2000, 5000];
   const receiptContentRef = useRef(null);
   const printAreaRef = useRef(null);
-  const searchInputRef = useRef(null);
-
-  // Live clock
-  useEffect(() => {
-    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
-    return () => clearInterval(timer);
-  }, []);
 
   useEffect(() => { localStorage.setItem("pos-cart", JSON.stringify(cart)); }, [cart]);
   useEffect(() => { localStorage.setItem("pos-cash", cash.toString()); }, [cash]);
@@ -337,7 +357,6 @@ const AcademyBilling = () => {
     setCart(updatedCart);
   };
 
-  const addCash = (amount) => { setCash((prev) => (prev || 0) + amount); beep(); };
   const getItemsCount = () => _.sumBy(cart, "qty");
   const updateChange = () => setChange(cash - getTotals().grandTotal);
   const updateCashInput = (value) => {
@@ -929,95 +948,6 @@ const AcademyBilling = () => {
 
   </div>
 </div>
-  
-  
-    //        
-
-    //         
-
-
-    //         <tbody>
-    //           {cart.map((item, i) => (
-    //             <tr key={i} className="border-b">
-    //               <td className="p-2">{item.name}</td>
-    //               <td className="text-center">{item.qty}</td>
-    //               <td className="text-right">{numberFormat(item.price)}</td>
-    //               <td className="text-right">
-    //                 {numberFormat(item.qty * item.price)}
-    //               </td>
-    //             </tr>
-    //           ))}
-    //         </tbody>
-    //       </table>
-    //     </div>
-
-    //     {/* TOTAL SECTION */}
-    //     <div className="flex justify-end mt-6">
-    //       <div className="w-72 text-sm space-y-2">
-    //         <div className="flex justify-between">
-    //           <span>Subtotal:</span>
-    //           <span>{priceFormat(currentSubtotal)}</span>
-    //         </div>
-
-    //         <div className="flex justify-between">
-    //           <span>Total GST:</span>
-    //           <span>{priceFormat(currentTotalGst)}</span>
-    //         </div>
-
-    //         {discount > 0 && (
-    //           <div className="flex justify-between text-red-500">
-    //             <span>Discount:</span>
-    //             <span>-{priceFormat(discount)}</span>
-    //           </div>
-    //         )}
-
-    //         <div className="flex justify-between bg-blue-900 text-white px-3 py-2 font-semibold">
-    //           <span>Grand Total:</span>
-    //           <span>{priceFormat(currentGrandTotal)}</span>
-    //         </div>
-
-    //         {paymentMethod === "cash" && (
-    //           <>
-    //             <div className="flex justify-between">
-    //               <span>Amount Paid:</span>
-    //               <span>{priceFormat(cash)}</span>
-    //             </div>
-
-    //             <div className="flex justify-between bg-blue-900 text-white px-3 py-2 font-semibold">
-    //               <span>{isDueBill ? "Balance Due" : "Change"}</span>
-    //               <span>
-    //                 {isDueBill
-    //                   ? priceFormat(currentGrandTotal - cash)
-    //                   : priceFormat(change)}
-    //               </span>
-    //             </div>
-    //           </>
-    //         )}
-    //       </div>
-    //     </div>
-
-    //     {/* PAYMENT */}
-    //     <div className="mt-6 border-t pt-4 text-sm">
-    //       <p>
-    //         <span className="font-semibold">Payment Method:</span>{" "}
-    //         {paymentMethod}
-    //       </p>
-    //     </div>
-
-    //     {/* FOOTER */}
-    //     <div className="mt-8 flex justify-between items-end text-sm">
-    //       <p>Thank you for your purchase!</p>
-
-    //       <div className="text-center">
-    //         <p className="mb-6">Authorized Signature</p>
-    //         <div className="w-40 border-b"></div>
-    //       </div>
-    //     </div>
-
-    //   </div>
-    // </div>
-
-       
       );
     }
     const isDotMatrix = formatStr.includes("dotmatrix");
@@ -1161,7 +1091,6 @@ const AcademyBilling = () => {
                 size={14}
               />
               <input
-                ref={searchInputRef}
                 type="text"
                 placeholder="Search product..."
                 value={keyword}
@@ -1368,7 +1297,7 @@ const AcademyBilling = () => {
             <div className="p-3">
               <div className={`${activeTheme.card} rounded-2xl p-4 text-white w-full overflow-x-auto shadow-xl shadow-slate-200/50`}>
                 <div className="flex items-center justify-between mb-2">
-                  <span className={`text-${themeColor}-100 text-xs font-semibold uppercase tracking-wider`}>Amount Payable</span>
+                  <span className={`${activeTheme.text100} text-xs font-semibold uppercase tracking-wider`}>Amount Payable</span>
                   <div className="flex items-center gap-1 bg-white/15 px-1.5 py-0.5 rounded-full">
                     <Hash size={8} />
                     <span className="text-[9px] font-medium">{cart.length} items</span>
@@ -1383,11 +1312,11 @@ const AcademyBilling = () => {
                 {currentGrandTotal > 0 && (
                   <div className="mt-2.5 pt-2 border-t border-white/20 flex gap-4">
                     <div>
-                      <p className={`text-${themeColor}-200 text-[10px] uppercase tracking-wider`}>Excl. Tax</p>
+                      <p className={`${activeTheme.text200} text-[10px] uppercase tracking-wider`}>Excl. Tax</p>
                       <p className="text-white font-semibold text-sm">{priceFormat(currentSubtotal)}</p>
                     </div>
                     <div>
-                      <p className={`text-${themeColor}-200 text-[10px] uppercase tracking-wider`}>GST</p>
+                      <p className={`${activeTheme.text200} text-[10px] uppercase tracking-wider`}>GST</p>
                       <p className="text-white font-semibold text-sm">{priceFormat(currentTotalGst)}</p>
                     </div>
                   </div>
@@ -1401,13 +1330,13 @@ const AcademyBilling = () => {
                 <Tag size={10} /> Add Discount
               </label>
               <div className="relative">
-                <span className={`absolute left-3 top-1/2 -translate-y-1/2 text-${themeColor}-400 text-sm font-bold`}>₹</span>
+                <span className={`absolute left-3 top-1/2 -translate-y-1/2 ${activeTheme.icon400} text-sm font-bold`}>₹</span>
                 <input
                   type="number"
                   value={discount > 0 ? discount : ""}
                   onChange={(e) => setDiscount(parseFloat(e.target.value) || 0)}
                   placeholder="Discount Amount"
-                  className={`w-full h-10 pl-8 pr-3 text-[11px] bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-${themeColor}-400 transition-all font-semibold`}
+                  className={`w-full h-10 pl-8 pr-3 text-[11px] bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 ${activeTheme.ring400} transition-all font-semibold`}
                 />
               </div>
             </div>
@@ -1456,7 +1385,7 @@ const AcademyBilling = () => {
                     onChange={(e) => updateCashInput(e.target.value)}
                     type="text"
                     placeholder="0.00"
-                    className={`w-full h-11 pl-8 pr-3 text-right text-base font-bold bg-${themeColor}-600 text-white caret-white placeholder-white/70 border border-${themeColor}-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-${themeColor}-300/40 transition-all`}
+                    className={`w-full h-11 pl-8 pr-3 text-right text-base font-bold text-white caret-white placeholder-white/70 rounded-lg focus:outline-none focus:ring-2 transition-all border ${activeTheme.cashInput}`}
                   />
                 </div>
 
@@ -1548,7 +1477,7 @@ const AcademyBilling = () => {
               onClick={handleCompleteSaleClick}
               disabled={!submitable()}
               className={`w-full h-12 rounded-xl flex items-center justify-center gap-2 text-sm font-bold transition-all duration-300 ${submitable()
-                ? `${activeTheme.card} hover:brightness-110 text-white shadow-lg shadow-${themeColor}-200/50 active:scale-[0.98]`
+                ? `${activeTheme.card} hover:brightness-110 text-white shadow-lg ${activeTheme.completeSaleShadow} active:scale-[0.98]`
                 : "bg-gray-200 text-gray-400 cursor-not-allowed"
                 }`}
             >
@@ -1578,7 +1507,7 @@ const AcademyBilling = () => {
                 </div>
                 <div>
                   <h2 className="text-[13px] font-bold text-white">Customer Details</h2>
-                  <p className={`text-${themeColor}-100 text-[11px]`}>Add billing information</p>
+                  <p className={`${activeTheme.text100} text-[11px]`}>Add billing information</p>
                 </div>
               </div>
               <button onClick={() => setShowCustomerForm(false)} className="w-6 h-6 rounded-md bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors">
@@ -1598,13 +1527,13 @@ const AcademyBilling = () => {
                     {f.label} {f.required && <span className="text-red-400">*</span>}
                   </label>
                   <div className="relative">
-                    <span className={`absolute left-3 top-1/2 -translate-y-1/2 text-${themeColor}-400`}>{f.icon}</span>
+                    <span className={`absolute left-3 top-1/2 -translate-y-1/2 ${activeTheme.icon400}`}>{f.icon}</span>
                     <input
                       type="text"
                       name={f.name}
                       value={customerForm[f.name]}
                       onChange={handleCustomerChange}
-                      className={`w-full h-9 pl-8 pr-3 text-[11px] border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-${themeColor}-300 focus:border-${themeColor}-300 transition-all ${f.extra || ""}`}
+                      className={`w-full h-9 pl-8 pr-3 text-[11px] border border-gray-200 rounded-lg focus:outline-none focus:ring-2 ${activeTheme.ringBorder300} transition-all ${f.extra || ""}`}
                       placeholder={f.placeholder}
                     />
                   </div>
@@ -1616,7 +1545,7 @@ const AcademyBilling = () => {
               <button onClick={() => setShowCustomerForm(false)} className="flex-1 h-9 rounded-lg border border-gray-200 bg-gray-50 hover:bg-gray-100 text-gray-600 text-[11px] font-medium transition-colors">
                 Cancel
               </button>
-              <button onClick={handleCustomerSubmit} className={`flex-1 h-9 rounded-lg bg-gradient-to-r from-${themeColor}-700 to-${themeSecondary}-700 text-white text-[11px] font-bold hover:from-${themeColor}-800 hover:to-${themeSecondary}-800 shadow-md shadow-${themeColor}-200/50 transition-all flex items-center justify-center gap-1`}>
+              <button onClick={handleCustomerSubmit} className={`flex-1 h-9 rounded-lg text-white text-[11px] font-bold transition-all flex items-center justify-center gap-1 ${activeTheme.gradientBtn}`}>
                 Continue <ArrowRight size={12} />
               </button>
             </div>
@@ -1628,10 +1557,10 @@ const AcademyBilling = () => {
       {isShowModalReceipt && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl  max-w-3xl w-[95vw] h-[95vh] flex flex-col overflow-hidden animate-modal-in">
-            <div className={`flex items-center justify-between px-4 py-2.5 border-b border-${themeColor}-100 flex-shrink-0 bg-white`}>
+            <div className={`flex items-center justify-between px-4 py-2.5 border-b ${activeTheme.border100} flex-shrink-0 bg-white`}>
               <div className="flex items-center gap-2">
-                <div className={`w-7 h-7 rounded-lg bg-${themeColor}-100 flex items-center justify-center`}>
-                  <Receipt size={13} className={`text-${themeColor}-600`} />
+                <div className={`w-7 h-7 rounded-lg ${activeTheme.bg100} flex items-center justify-center`}>
+                  <Receipt size={13} className={activeTheme.text600} />
                 </div>
                 <h2 className="text-[11px] font-bold text-gray-800">Receipt Preview</h2>
               </div>
@@ -1640,11 +1569,11 @@ const AcademyBilling = () => {
               </button>
             </div>
 
-            <div className={`flex items-center justify-between px-4 py-2 bg-${themeColor}-50/50 border-b border-${themeColor}-100 flex-shrink-0`}>
+            <div className={`flex items-center justify-between px-4 py-2 ${activeTheme.bg50half} border-b ${activeTheme.border100} flex-shrink-0`}>
               <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-1">
                 <Printer size={10} /> Format
               </span>
-              <select value={printerFormat} onChange={(e) => setPrinterFormat(e.target.value)} className={`text-[11px] border border-${themeColor}-200 rounded-md focus:ring-2 focus:ring-${themeColor}-300 px-2 py-1 bg-white`}>
+              <select value={printerFormat} onChange={(e) => setPrinterFormat(e.target.value)} className={`text-[11px] border ${activeTheme.border200} rounded-md focus:ring-2 ${activeTheme.ring300} px-2 py-1 bg-white`}>
                 <option value="A4">A4</option>
                 <option value="A4 GST Invoice">A4 GST Invoice</option>
                 <option value="A5">A5</option>
@@ -1673,14 +1602,14 @@ const AcademyBilling = () => {
               </div>
             </div>
 
-            <div className={`border-t border-${themeColor}-100 p-3 flex flex-wrap gap-1.5 flex-shrink-0 bg-white print:hidden`}>
+            <div className={`border-t ${activeTheme.border100} p-3 flex flex-wrap gap-1.5 flex-shrink-0 bg-white print:hidden`}>
               <button onClick={handleDownloadPdf} className="flex-1 min-w-[100px] h-9 rounded-lg flex items-center justify-center gap-1 text-[11px] font-semibold bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 transition-all">
                 <Download size={12} /> PDF
               </button>
-              <button onClick={handlePrint} className={`flex-1 min-w-[100px] h-9 rounded-lg flex items-center justify-center gap-1 text-[11px] font-semibold bg-white border border-${themeColor}-200 text-${themeColor}-600 hover:bg-${themeColor}-50 transition-all`}>
+              <button onClick={handlePrint} className={`flex-1 min-w-[100px] h-9 rounded-lg flex items-center justify-center gap-1 text-[11px] font-semibold bg-white border transition-all ${activeTheme.printBtn}`}>
                 <Printer size={12} /> Print
               </button>
-              <button onClick={printAndProceed} className={`flex-1 min-w-[120px] h-9 rounded-lg flex items-center justify-center gap-1 text-[11px] font-bold bg-gradient-to-r from-${themeColor}-700 to-${themeSecondary}-700 text-white hover:from-${themeColor}-800 hover:to-${themeSecondary}-800 shadow-md shadow-${themeColor}-200/50 transition-all`}>
+              <button onClick={printAndProceed} className={`flex-1 min-w-[120px] h-9 rounded-lg flex items-center justify-center gap-1 text-[11px] font-bold text-white transition-all ${activeTheme.gradientBtn}`}>
                 <CheckCircle size={12} /> Finalize
               </button>
             </div>

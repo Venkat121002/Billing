@@ -186,14 +186,14 @@ const AcademySubUsers = () => {
                     {/* Stats Grid */}
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                         {[
-                            { label: "Total Activities", value: filteredRecords.length, icon: Activity, color: "blue" },
-                            { label: "Staff Members", value: subusers.length, icon: UserCheck, color: "purple" },
-                            { label: "Current Session", value: "Active", icon: Briefcase, color: "emerald" },
-                            { label: "Sync Status", value: "Live", icon: LayoutDashboard, color: "indigo" }
+                            { label: "Total Activities", value: filteredRecords.length, icon: Activity, iconBg: "bg-blue-50", iconColor: "text-blue-600" },
+                            { label: "Staff Members", value: subusers.length, icon: UserCheck, iconBg: "bg-purple-50", iconColor: "text-purple-600" },
+                            { label: "Current Session", value: "Active", icon: Briefcase, iconBg: "bg-emerald-50", iconColor: "text-emerald-600" },
+                            { label: "Sync Status", value: "Live", icon: LayoutDashboard, iconBg: "bg-indigo-50", iconColor: "text-indigo-600" }
                         ].map((stat, i) => (
                             <div key={i} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
-                                <div className={`w-12 h-12 rounded-xl bg-${stat.color}-50 flex items-center justify-center`}>
-                                    <stat.icon className={`text-${stat.color}-600`} size={24} />
+                                <div className={`w-12 h-12 rounded-xl ${stat.iconBg} flex items-center justify-center`}>
+                                    <stat.icon className={stat.iconColor} size={24} />
                                 </div>
                                 <div>
                                     <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">{stat.label}</p>

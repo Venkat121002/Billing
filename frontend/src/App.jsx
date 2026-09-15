@@ -22,13 +22,8 @@ import Login from "./components/Auth/Login";
 import Signup from "./components/Auth/SignUp";
 import Onboarding from "./components/Auth/Onboarding";
 import Settings from "./pages/Settings";
-import IndustryBillingRouter from "./components/Billing/IndustryBillingRouter";
-import IndustryInventoryRouter from "./components/Billing/IndustryInventoryRouter";
-import IndustryAddProductRouter from "./components/Billing/IndustryAddProductRouter";
-import IndustryRecordRouter from "./components/Billing/IndustryRecordRouter";
-import BarcodeBilling from "./components/Billing/BarcodeBilling";
+import IndustryScreen from "./components/Billing/IndustryScreen";
 import CashBook from "./components/Expenses/CashBook.jsx"
-import IndustryGstBillRouter from "./components/Billing/IndustryGstBillRouter";
 import Credit from "./components/Billing/credit";
 import { Sessionrecord } from "./components/Auth/Sessionrecord";
 import Support from "./components/Billing/Support";
@@ -36,16 +31,11 @@ import ForgotPassword from "./components/Auth/forgot";
 import Reports from "./components/Billing/Reports";
 
 import BarcodePage from "./industry/mobile/BarcodePage";
-import SubUserRecordsPage from "./industry/mobile/SubUserRecordsPage";
 import AcademyInventry from "./industry/academy/academyinventry";
 import Trainer from "./components/Billing/Trainer";
 import SoftwareDevelopmentInventory from "./industry/SoftwareDevelopment/SoftwareDevelopmentInventory";
 import AddClient from "./industry/SoftwareDevelopment/AddClient";
 import AddSoftwareService from "./industry/SoftwareDevelopment/AddSoftwareService";
-import SoftwareBilling from "./industry/SoftwareDevelopment/SoftwareBilling";
-import GroceryInventory from "./industry/grocery/groceryInventory";
-import IndustryBarcodeRouter from "./components/Billing/IndustryBarcodeRouter";
-import IndustryAddCustomerRouter from "./components/Billing/IndustryAddCustomerRouter";
 
 
 
@@ -63,7 +53,7 @@ const employerRoutes = [
     element: (
       <SubscriptionRoute>
         <ModuleRoute moduleKey="billing">
-          <IndustryBillingResolver />
+          <IndustryScreen kind="billing" />
         </ModuleRoute>
       </SubscriptionRoute>
     )
@@ -75,15 +65,13 @@ const employerRoutes = [
         <Route element={<SubscriptionRoute><EmployerDashboard /></SubscriptionRoute>} path="dashboard" />
         <Route element={<SubscriptionRoute><Settings /></SubscriptionRoute>} path="settings" />
         <Route element={<SubscriptionRoute><Pricing /></SubscriptionRoute>} path="pricing" />
-        <Route element={<SubscriptionRoute><ModuleRoute moduleKey="barcode_billing"><BarcodeBilling /></ModuleRoute></SubscriptionRoute>} path="barcode-billing" />
         <Route element={<SubscriptionRoute><ModuleRoute moduleKey="cashbook"><CashBook /></ModuleRoute></SubscriptionRoute>} path="cashbook" />
-        <Route element={<SubscriptionRoute><ModuleRoute moduleKey="inventory"><IndustryInventoryRouter /></ModuleRoute></SubscriptionRoute>} path="inventory" />
-                <Route element={<SubscriptionRoute><ModuleRoute moduleKey="gst"><IndustryGstBillRouter /></ModuleRoute></SubscriptionRoute>} path="gst" />
-        <Route element={<SubscriptionRoute><ModuleRoute moduleKey="barcodes"><IndustryBarcodeRouter /></ModuleRoute></SubscriptionRoute>} path="barcodes" />
-        <Route element={<SubscriptionRoute><ModuleRoute moduleKey="record"><IndustryRecordRouter /></ModuleRoute></SubscriptionRoute>} path="record" />
-                <Route element={<SubscriptionRoute><ModuleRoute moduleKey="billing"><IndustryBillingRouter /></ModuleRoute></SubscriptionRoute>} path="billing" />
-        <Route element={<SubscriptionRoute><IndustryAddProductRouter /></SubscriptionRoute>} path="add-product" />
-        <Route element={<SubscriptionRoute><IndustryAddCustomerRouter /></SubscriptionRoute>} path="add-customer" />
+        <Route element={<SubscriptionRoute><ModuleRoute moduleKey="inventory"><IndustryScreen kind="inventory" /></ModuleRoute></SubscriptionRoute>} path="inventory" />
+        <Route element={<SubscriptionRoute><ModuleRoute moduleKey="gst"><IndustryScreen kind="gst" /></ModuleRoute></SubscriptionRoute>} path="gst" />
+        <Route element={<SubscriptionRoute><ModuleRoute moduleKey="barcodes"><IndustryScreen kind="barcodes" /></ModuleRoute></SubscriptionRoute>} path="barcodes" />
+        <Route element={<SubscriptionRoute><ModuleRoute moduleKey="record"><IndustryScreen kind="record" /></ModuleRoute></SubscriptionRoute>} path="record" />
+        <Route element={<SubscriptionRoute><IndustryScreen kind="addProduct" /></SubscriptionRoute>} path="add-product" />
+        <Route element={<SubscriptionRoute><IndustryScreen kind="addCustomer" /></SubscriptionRoute>} path="add-customer" />
 
         <Route element={<SubscriptionRoute><ModuleRoute moduleKey="credit"><Credit /></ModuleRoute></SubscriptionRoute>} path="/credit" />
 
@@ -92,7 +80,7 @@ const employerRoutes = [
         <Route element={<SubscriptionRoute><Sessionrecord /></SubscriptionRoute>} path="/session-records" />
         <Route element={<SubscriptionRoute><BarcodePage /></SubscriptionRoute>} path="/barcode/:productId" />
         
-        <Route element={<SubscriptionRoute><SubUserRecordsPage /></SubscriptionRoute>} path="/staff-records" />
+        <Route element={<SubscriptionRoute><IndustryScreen kind="subUsers" /></SubscriptionRoute>} path="/staff-records" />
         <Route element={<SubscriptionRoute><AcademyInventry /></SubscriptionRoute>} path="/academyinventory" />
         <Route element={<SubscriptionRoute><Trainer /></SubscriptionRoute>} path="/trainers" />
         <Route element={<SubscriptionRoute><SoftwareDevelopmentInventory /></SubscriptionRoute>} path="/softwaredevelopmentinventory" />
@@ -108,17 +96,6 @@ const employerRoutes = [
 ];
 
 const protectedRoutes = employerRoutes; // All employer routes are now protected
-
-// Helper component to switch billing based on industry
-function IndustryBillingResolver() {
-  const { currentUser } = useAuth();
-  const industry = currentUser?.industry?.toLowerCase() || "";
-
-  if (industry.includes("software_development") || industry.includes("software")) {
-    return <SoftwareBilling />;
-  }
-  return <IndustryBillingRouter />;
-}
 
 function App() {
   return (
