@@ -4,16 +4,138 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import axios from "axios";
 import API_URL from "../../config/api";
+import toast from "react-hot-toast";
+import { resolveIndustryProfile } from "../../config/industryProfiles";
 
 import {
   PlusCircle, Trash2, Printer, Download, Eye, Save,
   Loader2, CircleX, FileText, Search, Building2, User,
   Truck, Receipt, Package, Calculator, StickyNote, RefreshCw,
-  ChevronDown, CheckCircle2, Info, Copy, X, 
+  ChevronDown, Info, Copy, X,
 } from "lucide-react";
 import _ from "lodash";
-import toast from "react-hot-toast";
 import BillingLayout from "../../Layout/BillingLayout/AdminLayout";
+
+// Per-industry visual theme. Every value here is a complete, literal
+// Tailwind class string (never built via template-literal concatenation of
+// partial utility names) so Tailwind's JIT scanner can find and generate
+// the CSS for all four themes from this file alone.
+//
+// This is the single unified GST-bill screen replacing 5 previously
+// near-identical 1,830-line per-industry copies (grocery/clothing/academy/
+// software/the generic one) — see UNIFICATION_PLAN.md Phase 2. A few spots
+// below correct themeing that individual copies had left inconsistent
+// (e.g. academy's grand-total border was pink, not purple).
+const THEMES = {
+  green: {
+    input: "block w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-xl text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-green-400 placeholder-gray-300 transition-all duration-200 hover:border-green-300",
+    select: "block w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-xl text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-green-400 focus:border-green-400 transition-all duration-200 hover:border-green-300 appearance-none cursor-pointer",
+    cardBorder: "border-green-100",
+    headerHoverBg: "hover:bg-green-50/30",
+    iconWrapBg: "bg-gradient-to-br from-green-100 to-emerald-100",
+    iconColor: "text-green-700",
+    badge: "bg-green-100 text-green-700",
+    pageBg: "bg-white",
+    logoBox: "bg-gradient-to-br from-green-500 to-emerald-600 shadow-lg shadow-green-200",
+    btnOutline: "text-green-700 bg-green-50 hover:bg-green-100 border border-green-200",
+    headerPrimaryBtn: "bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700",
+    linkBtn: "text-green-600 hover:text-green-800 bg-green-50 hover:bg-green-100",
+    itemRowBg: "bg-gradient-to-r from-green-50/50 to-emerald-50/30 border-green-100 hover:border-green-200",
+    itemBadgeNum: "bg-green-600",
+    amountBox: "bg-green-50 border-green-200 text-green-800",
+    addItemBtn: "border-green-300 text-green-600 hover:text-green-800 hover:border-green-500 hover:bg-green-50",
+    taxInfoBox: "bg-gradient-to-br from-green-50 to-emerald-50 border-green-100",
+    taxInfoIcon: "text-green-600",
+    taxInfoLabel: "text-green-700",
+    grandTotalBorder: "border-green-200",
+    grandTotalText: "bg-gradient-to-r from-green-600 to-emerald-700 bg-clip-text text-transparent",
+    wordsBox: "bg-green-50 border-green-100",
+    wordsText: "text-green-700",
+    pulseDot: "bg-green-400",
+    footerPrimaryBtn: "bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 shadow-lg shadow-green-200 hover:shadow-xl hover:shadow-green-300",
+  },
+  pink: {
+    input: "block w-full px-3.5 py-2.5 bg-white border border-[#f74faf]/20 rounded-xl text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#f74faf] focus:border-[#f74faf] placeholder-gray-300 transition-all duration-200 hover:border-[#f74faf]/40",
+    select: "block w-full px-3.5 py-2.5 bg-white border border-[#f74faf]/20 rounded-xl text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#f74faf] focus:border-[#f74faf] transition-all duration-200 hover:border-[#f74faf]/40 appearance-none cursor-pointer",
+    cardBorder: "border-[#f74faf]/10",
+    headerHoverBg: "hover:bg-[#f74faf]/5",
+    iconWrapBg: "bg-[#f74faf]/10",
+    iconColor: "text-[#f74faf]",
+    badge: "bg-[#f74faf]/10 text-[#f74faf]",
+    pageBg: "bg-gradient-to-br from-[#f74faf]/10 via-white to-[#f74faf]/5",
+    logoBox: "bg-[#f74faf] shadow-lg shadow-[#f74faf]/20",
+    btnOutline: "text-[#f74faf] bg-[#f74faf]/5 hover:bg-[#f74faf]/10 border border-[#f74faf]/20",
+    headerPrimaryBtn: "bg-[#f74faf] hover:opacity-90",
+    linkBtn: "text-[#f74faf] hover:opacity-80 bg-[#f74faf]/5 hover:bg-[#f74faf]/10",
+    itemRowBg: "bg-gradient-to-r from-[#f74faf]/5 to-[#f74faf]/10 border-[#f74faf]/20 hover:border-[#f74faf]/40",
+    itemBadgeNum: "bg-[#f74faf]",
+    amountBox: "bg-[#f74faf]/5 border-[#f74faf]/20 text-[#f74faf]",
+    addItemBtn: "border-[#f74faf]/40 text-[#f74faf] hover:opacity-80 hover:border-[#f74faf] hover:bg-[#f74faf]/5",
+    taxInfoBox: "bg-gradient-to-br from-[#f74faf]/10 to-[#f74faf]/5 border-[#f74faf]/20",
+    taxInfoIcon: "text-[#f74faf]",
+    taxInfoLabel: "text-[#f74faf]",
+    grandTotalBorder: "border-[#f74faf]/20",
+    grandTotalText: "text-[#f74faf]",
+    wordsBox: "bg-[#f74faf]/10 border-[#f74faf]/20",
+    wordsText: "text-[#f74faf]",
+    pulseDot: "bg-[#f74faf]/60",
+    footerPrimaryBtn: "bg-[#f74faf] hover:opacity-90 shadow-lg shadow-[#f74faf]/20 hover:shadow-xl",
+  },
+  purple: {
+    input: "block w-full px-3.5 py-2.5 bg-white border border-purple-200 rounded-xl text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 placeholder-gray-300 transition-all duration-200 hover:border-purple-300",
+    select: "block w-full px-3.5 py-2.5 bg-white border border-purple-200 rounded-xl text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-all duration-200 hover:border-purple-300 appearance-none cursor-pointer",
+    cardBorder: "border-purple-100",
+    headerHoverBg: "hover:bg-purple-50",
+    iconWrapBg: "bg-purple-100",
+    iconColor: "text-purple-600",
+    badge: "bg-purple-100 text-purple-700",
+    pageBg: "bg-gradient-to-br from-purple-50/50 via-white to-purple-50/30",
+    logoBox: "bg-purple-600 shadow-lg shadow-purple-200",
+    btnOutline: "text-purple-600 bg-purple-50 hover:bg-purple-100 border border-purple-200",
+    headerPrimaryBtn: "bg-purple-600 hover:bg-purple-700",
+    linkBtn: "text-purple-600 hover:opacity-80 bg-purple-50 hover:bg-purple-100",
+    itemRowBg: "bg-gradient-to-r from-purple-50 to-white border-purple-100 hover:border-purple-300",
+    itemBadgeNum: "bg-purple-600",
+    amountBox: "bg-purple-50 border-purple-200 text-purple-800",
+    addItemBtn: "border-purple-200 text-purple-600 hover:opacity-80 hover:border-purple-400 hover:bg-purple-50",
+    taxInfoBox: "bg-gradient-to-br from-purple-50 to-white border-purple-100",
+    taxInfoIcon: "text-purple-600",
+    taxInfoLabel: "text-purple-600",
+    grandTotalBorder: "border-purple-200",
+    grandTotalText: "bg-gradient-to-r from-purple-600 to-indigo-600 bg-clip-text text-transparent",
+    wordsBox: "bg-purple-100 border-purple-200",
+    wordsText: "text-purple-700",
+    pulseDot: "bg-purple-400",
+    footerPrimaryBtn: "bg-purple-600 hover:bg-purple-700 shadow-lg shadow-purple-200 hover:shadow-xl",
+  },
+  blue: {
+    input: "block w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-xl text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-400 placeholder-gray-300 transition-all duration-200 hover:border-blue-300",
+    select: "block w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-xl text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-400 transition-all duration-200 hover:border-blue-300 appearance-none cursor-pointer",
+    cardBorder: "border-blue-100",
+    headerHoverBg: "hover:bg-blue-50/30",
+    iconWrapBg: "bg-gradient-to-br from-blue-100 to-indigo-100",
+    iconColor: "text-blue-700",
+    badge: "bg-blue-100 text-blue-700",
+    pageBg: "bg-white",
+    logoBox: "bg-gradient-to-br from-blue-500 to-indigo-600 shadow-lg shadow-blue-200",
+    btnOutline: "text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200",
+    headerPrimaryBtn: "bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700",
+    linkBtn: "text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100",
+    itemRowBg: "bg-gradient-to-r from-blue-50/50 to-indigo-50/30 border-blue-100 hover:border-blue-200",
+    itemBadgeNum: "bg-blue-600",
+    amountBox: "bg-blue-50 border-blue-200 text-blue-800",
+    addItemBtn: "border-blue-300 text-blue-600 hover:text-blue-800 hover:border-blue-500 hover:bg-blue-50",
+    taxInfoBox: "bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-100",
+    taxInfoIcon: "text-blue-600",
+    taxInfoLabel: "text-blue-700",
+    grandTotalBorder: "border-blue-200",
+    grandTotalText: "bg-gradient-to-r from-blue-600 to-indigo-700 bg-clip-text text-transparent",
+    wordsBox: "bg-blue-50 border-blue-100",
+    wordsText: "text-blue-700",
+    pulseDot: "bg-blue-400",
+    footerPrimaryBtn: "bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 shadow-lg shadow-blue-200 hover:shadow-xl hover:shadow-blue-300",
+  },
+};
 
 const indianStates = [
   "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar",
@@ -41,69 +163,62 @@ const initialItem = {
   taxRate: 18,
 };
 
-// ✅ CSS class constants moved OUTSIDE the component
-const inputClass =
-  "block w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-xl text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-400 placeholder-gray-300 transition-all duration-200 hover:border-blue-300";
+// Theme-independent — reused as-is by every industry.
 const labelClass =
   "block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wider";
-const selectClass =
-  "block w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-xl text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-400 transition-all duration-200 hover:border-blue-300 appearance-none cursor-pointer";
 
-// ✅ SectionCard moved OUTSIDE the component
-const SectionCard = ({
-  id,
-  icon: Icon,
-  title,
-  subtitle,
-  children,
-  badge,
-  expandedSections,
-  toggleSection,
-}) => (
-  <div className="bg-white rounded-2xl border border-blue-100 shadow-sm hover:shadow-md transition-all duration-300 overflow-hidden">
-    <button
-      type="button"
-      onClick={() => toggleSection(id)}
-      className="w-full flex items-center justify-between p-5 hover:bg-blue-50/30 transition-colors"
-    >
-      <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-100 to-indigo-100 flex items-center justify-center">
-          <Icon size={20} className="text-blue-700" />
-        </div>
-        <div className="text-left">
-          <h2 className="text-lg font-bold text-gray-800">{title}</h2>
-          {subtitle && (
-            <p className="text-xs text-gray-400 mt-0.5">{subtitle}</p>
-          )}
-        </div>
-      </div>
-      <div className="flex items-center gap-2">
-        {badge && (
-          <span className="px-2.5 py-1 bg-blue-100 text-blue-700 text-xs font-semibold rounded-full">
-            {badge}
-          </span>
-        )}
-        <ChevronDown
-          size={20}
-          className={`text-gray-400 transition-transform duration-300 ${expandedSections[id] ? "rotate-180" : ""
-            }`}
-        />
-      </div>
-    </button>
-    <div
-      className={`transition-all duration-300 ease-in-out ${expandedSections[id]
-        ? "max-h-[2000px] opacity-100"
-        : "max-h-0 opacity-0"
-        } overflow-hidden`}
-    >
-      <div className="px-5 pb-5 pt-1">{children}</div>
-    </div>
-  </div>
-);
-
-function SDGSTBill() {
+function IndustryGstBill() {
   const { currentUser } = useAuth();
   const authUserData = currentUser;
+  const profile = resolveIndustryProfile(currentUser);
+  const theme = THEMES[profile.theme] || THEMES.green;
+  const inputClass = theme.input;
+  const selectClass = theme.select;
+  const customerLabel = profile.roleLabels?.customer || "Customer";
+
+  // Defined inside the component so it closes over `theme` without prop
+  // drilling at each of its 7 call sites below.
+  const SectionCard = ({ id, icon: Icon, title, subtitle, children, badge }) => (
+    <div className={`bg-white rounded-2xl border ${theme.cardBorder} shadow-sm hover:shadow-md transition-all duration-300 overflow-hidden`}>
+      <button
+        type="button"
+        onClick={() => toggleSection(id)}
+        className={`w-full flex items-center justify-between p-5 ${theme.headerHoverBg} transition-colors`}
+      >
+        <div className="flex items-center gap-3">
+          <div className={`w-10 h-10 rounded-xl ${theme.iconWrapBg} flex items-center justify-center`}>
+            <Icon size={20} className={theme.iconColor} />
+          </div>
+          <div className="text-left">
+            <h2 className="text-lg font-bold text-gray-800">{title}</h2>
+            {subtitle && (
+              <p className="text-xs text-gray-400 mt-0.5">{subtitle}</p>
+            )}
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          {badge && (
+            <span className={`px-2.5 py-1 ${theme.badge} text-xs font-semibold rounded-full`}>
+              {badge}
+            </span>
+          )}
+          <ChevronDown
+            size={20}
+            className={`text-gray-400 transition-transform duration-300 ${expandedSections[id] ? "rotate-180" : ""
+              }`}
+          />
+        </div>
+      </button>
+      <div
+        className={`transition-all duration-300 ease-in-out ${expandedSections[id]
+          ? "max-h-[2000px] opacity-100"
+          : "max-h-0 opacity-0"
+          } overflow-hidden`}
+      >
+        <div className="px-5 pb-5 pt-1">{children}</div>
+      </div>
+    </div>
+  );
 
   const [sellerDetails, setSellerDetails] = useState({
     name: "", address: "", gstin: "", state: "", pan: "",
@@ -131,20 +246,7 @@ function SDGSTBill() {
 
   const [productsList, setProductsList] = useState([]);
   const [productsLoading, setProductsLoading] = useState(false);
-  const [isMobileIndustry, setIsMobileIndustry] = useState(false);
-
-  useEffect(() => {
-    if (currentUser) {
-      const userIndustry =
-        currentUser.industry || currentUser.companyDetails?.industry;
-      if (userIndustry) {
-        const isMobile =
-          userIndustry.toLowerCase().includes("mobile") ||
-          userIndustry.toLowerCase() === "mobile_shop";
-        setIsMobileIndustry(isMobile);
-      }
-    }
-  }, [currentUser]);
+  const isMobileIndustry = profile.key === "mobile_shop";
 
   useEffect(() => {
     const fetchProducts = async () => {
@@ -157,7 +259,7 @@ function SDGSTBill() {
         const res = await axios.get(`${API_URL}/products`, {
           headers: { "x-auth-token": token },
         });
-        
+       
         setProductsList(res.data);
       } catch (err) {
         console.error("Error fetching products:", err);
@@ -176,13 +278,10 @@ function SDGSTBill() {
   const [notes, setNotes] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
   const [expandedSections, setExpandedSections] = useState({
     seller: true, buyer: true, shipTo: false,
     invoice: true, items: true, summary: true, notes: false,
   });
-
-  const userProfileLoading = false;
 
   useEffect(() => {
     const effectiveUserData = authUserData;
@@ -830,7 +929,7 @@ function SDGSTBill() {
   const handlePreview = () => generatePDF(getBillData(), "preview");
   const handleDownload = () => {
     generatePDF(getBillData(), "download");
-    setSuccess("PDF Downloaded!");
+    toast.success("PDF Downloaded!");
   };
   const handlePrint = () => generatePDF(getBillData(), "print");
 
@@ -862,7 +961,6 @@ function SDGSTBill() {
 
     setLoading(true);
     setError("");
-    setSuccess("");
 
     try {
       const token = sessionStorage.getItem("token");
@@ -883,14 +981,13 @@ function SDGSTBill() {
         notes,
         status: "Generated",
         createdBy: userId,
-        source: "Software_Development"
+        source: "Owner"
       };
 
       await axios.post(`${API_URL}/gst-bills`, payload, config);
-      
-      toast.success(
-        `Invoice ${invoiceDetails.invoiceNumber} saved successfully!`
-      );
+
+      toast.success(`Invoice ${invoiceDetails.invoiceNumber} saved successfully!`);
+
     } catch (err) {
       console.error("Error saving invoice:", err);
       setError(
@@ -911,41 +1008,20 @@ function SDGSTBill() {
     return taxable + (taxable * taxRate) / 100;
   };
 
-  if (userProfileLoading) {
-    return (
-      <BillingLayout>
-        <div className="min-h-screen bg-gradient-to-br from-white-50 via-white to-white-50 flex justify-center items-center">
-          <div className="text-center">
-            <div className="relative">
-              <div className="w-16 h-16 border-4 border-blue-200 rounded-full animate-spin border-t-blue-600 mx-auto"></div>
-              <FileText className="w-6 h-6 text-blue-600 absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2" />
-            </div>
-            <p className="mt-4 text-lg font-medium text-gray-600">
-              Loading your details...
-            </p>
-            <p className="text-sm text-gray-400 mt-1">
-              Setting up your invoice workspace
-            </p>
-          </div>
-        </div>
-      </BillingLayout>
-    );
-  }
-
   return (
     <BillingLayout>
-      <div className="min-h-screen bg-white">
+      <div className={`min-h-screen ${theme.pageBg}`}>
         {/* Header */}
-        <div className="sticky top-0 z-30 bg-white/80 backdrop-blur-xl border-b border-blue-100">
+        <div className={`sticky top-0 z-30 bg-white/80 backdrop-blur-xl border-b ${theme.cardBorder}`}>
           <div className="max-w-7xl mx-auto px-4 md:px-6 py-4">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
               <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-200">
+                <div className={`w-12 h-12 rounded-2xl ${theme.logoBox} flex items-center justify-center`}>
                   <FileText size={24} className="text-white" />
                 </div>
                 <div>
                   <h1 className="text-2xl font-bold text-gray-900">
-                    Create Invoice 
+                    Create Invoice
                   </h1>
                   <p className="text-sm text-gray-400">
                     Generate a professional GST tax invoice
@@ -957,7 +1033,7 @@ function SDGSTBill() {
                   type="button"
                   onClick={handlePreview}
                   disabled={items.length === 0}
-                  className="inline-flex items-center px-4 py-2.5 text-sm font-medium rounded-xl text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 disabled:opacity-40 transition-all duration-200 hover:shadow-sm"
+                  className={`inline-flex items-center px-4 py-2.5 text-sm font-medium rounded-xl ${theme.btnOutline} disabled:opacity-40 transition-all duration-200 hover:shadow-sm`}
                 >
                   <Eye size={16} className="mr-1.5" /> Preview
                 </button>
@@ -965,7 +1041,7 @@ function SDGSTBill() {
                   type="button"
                   onClick={handleDownload}
                   disabled={items.length === 0}
-                  className="inline-flex items-center px-4 py-2.5 text-sm font-medium rounded-xl text-white bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 disabled:opacity-40 transition-all duration-200 shadow-sm hover:shadow-md"
+                  className={`inline-flex items-center px-4 py-2.5 text-sm font-medium rounded-xl text-white ${theme.headerPrimaryBtn} disabled:opacity-40 transition-all duration-200 shadow-sm hover:shadow-md`}
                 >
                   <Download size={16} className="mr-1.5" /> Download
                 </button>
@@ -973,7 +1049,7 @@ function SDGSTBill() {
                   type="button"
                   onClick={handlePrint}
                   disabled={items.length === 0}
-                  className="inline-flex items-center px-4 py-2.5 text-sm font-medium rounded-xl text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 disabled:opacity-40 transition-all duration-200 hover:shadow-sm"
+                  className={`inline-flex items-center px-4 py-2.5 text-sm font-medium rounded-xl ${theme.btnOutline} disabled:opacity-40 transition-all duration-200 hover:shadow-sm`}
                 >
                   <Printer size={16} className="mr-1.5" /> Print
                 </button>
@@ -1064,7 +1140,7 @@ function SDGSTBill() {
                     <label className={labelClass}>Business Name *</label>
                     <input
                       type="text"
-                      value={sellerDetails.name}
+                      value={sellerDetails.name || ""}
                       onChange={(e) =>
                         handleInputChange(e, "seller", "name")
                       }
@@ -1099,7 +1175,7 @@ function SDGSTBill() {
                     <div>
                       <label className={labelClass}>State *</label>
                       <select
-                        value={sellerDetails.state}
+                        value={sellerDetails.state || ""}
                         onChange={(e) =>
                           handleInputChange(e, "seller", "state")
                         }
@@ -1186,14 +1262,14 @@ function SDGSTBill() {
                 id="buyer"
                 icon={User}
                 title="Buyer Details"
-                subtitle="Customer information"
+                subtitle={`${customerLabel} information`}
                 expandedSections={expandedSections}
                 toggleSection={toggleSection}
               >
                 <div className="space-y-4">
                   <div>
                     <label className={labelClass}>
-                      Customer Name *
+                      {customerLabel} Name *
                     </label>
                     <input
                       type="text"
@@ -1335,7 +1411,7 @@ function SDGSTBill() {
                       state: buyerDetails.state,
                     })
                   }
-                  className="inline-flex items-center text-xs font-semibold text-green-600 hover:text-green-800 bg-green-50 hover:bg-green-100 px-3 py-1.5 rounded-lg transition-colors"
+                  className={`inline-flex items-center text-xs font-semibold ${theme.linkBtn} px-3 py-1.5 rounded-lg transition-colors`}
                 >
                   <Copy size={12} className="mr-1.5" /> Copy from Buyer
                 </button>
@@ -1345,7 +1421,7 @@ function SDGSTBill() {
                   <label className={labelClass}>Name</label>
                   <input
                     type="text"
-                    value={shipToDetails.name}
+                    value={shipToDetails.name || ""}
                     onChange={(e) =>
                       handleInputChange(e, "shipTo", "name")
                     }
@@ -1397,10 +1473,10 @@ function SDGSTBill() {
                 {items.map((item, index) => (
                   <div
                     key={item.id}
-                    className="relative bg-gradient-to-r from-blue-50/50 to-indigo-50/30 rounded-xl border border-blue-100 p-4 hover:border-blue-200 transition-all duration-200"
+                    className={`relative ${theme.itemRowBg} rounded-xl border p-4 transition-all duration-200`}
                   >
                     <div className="absolute -top-2.5 left-4">
-                      <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-600 text-white text-xs font-bold shadow-sm">
+                      <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full ${theme.itemBadgeNum} text-white text-xs font-bold shadow-sm`}>
                         {index + 1}
                       </span>
                     </div>
@@ -1597,7 +1673,7 @@ function SDGSTBill() {
 
                       <div>
                         <label className={labelClass}>Amount</label>
-                        <div className="px-3.5 py-2.5 bg-blue-50 border border-blue-200 rounded-xl text-sm font-bold text-blue-800">
+                        <div className={`px-3.5 py-2.5 ${theme.amountBox} rounded-xl text-sm font-bold border`}>
                           ₹{getItemAmount(item).toFixed(2)}
                         </div>
                       </div>
@@ -1608,7 +1684,7 @@ function SDGSTBill() {
                 <button
                   type="button"
                   onClick={addItem}
-                  className="w-full py-3 border-2 border-dashed border-blue-300 rounded-xl text-blue-600 hover:text-blue-800 hover:border-blue-500 hover:bg-blue-50 transition-all duration-200 flex items-center justify-center gap-2 text-sm font-semibold"
+                  className={`w-full py-3 border-2 border-dashed ${theme.addItemBtn} rounded-xl transition-all duration-200 flex items-center justify-center gap-2 text-sm font-semibold`}
                 >
                   <PlusCircle size={18} /> Add Another Item
                 </button>
@@ -1625,10 +1701,10 @@ function SDGSTBill() {
               toggleSection={toggleSection}
             >
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-4 border border-blue-100">
+                <div className={`${theme.taxInfoBox} rounded-xl p-4 border`}>
                   <div className="flex items-center gap-2 mb-3">
-                    <Info size={16} className="text-blue-600" />
-                    <p className="text-xs font-semibold text-blue-700 uppercase tracking-wider">
+                    <Info size={16} className={theme.taxInfoIcon} />
+                    <p className={`text-xs font-semibold ${theme.taxInfoLabel} uppercase tracking-wider`}>
                       Tax Information
                     </p>
                   </div>
@@ -1636,7 +1712,7 @@ function SDGSTBill() {
                     {sellerDetails.state && buyerDetails.state ? (
                       sellerDetails.state.toLowerCase() ===
                         buyerDetails.state.toLowerCase() ? (
-                        <span className="flex items-center gap-2 text-gray-600">
+                        <span className="flex items-center gap-2">
                           <span className="w-2 h-2 rounded-full bg-green-500"></span>
                           <strong>Intra-State</strong> — CGST + SGST
                           applicable
@@ -1712,17 +1788,17 @@ function SDGSTBill() {
                     </div>
                   )}
 
-                  <div className="flex justify-between items-center pt-3 border-t-2 border-green-200">
+                  <div className={`flex justify-between items-center pt-3 border-t-2 ${theme.grandTotalBorder}`}>
                     <span className="text-lg font-bold text-gray-800">
                       Grand Total
                     </span>
-                    <span className="text-2xl font-extrabold bg-gradient-to-r from-blue-600 to-indigo-700 bg-clip-text text-transparent">
+                    <span className={`text-2xl font-extrabold ${theme.grandTotalText}`}>
                       ₹{calculations.grandTotal.toFixed(2)}
                     </span>
                   </div>
 
-                  <div className="bg-blue-50 rounded-lg px-3 py-2 border border-blue-100">
-                    <p className="text-xs text-blue-700 italic">
+                  <div className={`${theme.wordsBox} rounded-lg px-3 py-2 border`}>
+                    <p className={`text-xs ${theme.wordsText} italic`}>
                       {amountInWords(
                         Math.round(calculations.grandTotal)
                       )}
@@ -1767,10 +1843,10 @@ function SDGSTBill() {
             </SectionCard>
 
             {/* Save Button */}
-            <div className="sticky bottom-0 z-20 bg-white/80 backdrop-blur-xl border-t border-blue-100 -mx-4 md:-mx-6 px-4 md:px-6 py-4 mt-6">
+            <div className={`sticky bottom-0 z-20 bg-white/80 backdrop-blur-xl border-t ${theme.cardBorder} -mx-4 md:-mx-6 px-4 md:px-6 py-4 mt-6`}>
               <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
                 <div className="flex items-center gap-2 text-sm text-gray-400">
-                  <div className="w-2 h-2 rounded-full bg-blue-400 animate-pulse"></div>
+                  <div className={`w-2 h-2 rounded-full ${theme.pulseDot} animate-pulse`}></div>
                   <span>Auto-calculating totals in real-time</span>
                 </div>
                 <div className="flex gap-3">
@@ -1785,7 +1861,7 @@ function SDGSTBill() {
                 <button
                   type="submit"
                   disabled={loading || items.length === 0}
-                  className="w-full sm:w-auto inline-flex items-center justify-center px-8 py-3 text-base font-bold rounded-xl text-white bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 disabled:opacity-40 transition-all duration-300 shadow-lg shadow-blue-200 hover:shadow-xl hover:shadow-blue-300 hover:-translate-y-0.5"
+                  className={`w-full sm:w-auto inline-flex items-center justify-center px-8 py-3 text-base font-bold rounded-xl text-white ${theme.footerPrimaryBtn} disabled:opacity-40 transition-all duration-300 hover:-translate-y-0.5`}
                 >
                   {loading ? (
                     <>
@@ -1812,4 +1888,4 @@ function SDGSTBill() {
   );
 }
 
-export default SDGSTBill;
+export default IndustryGstBill;

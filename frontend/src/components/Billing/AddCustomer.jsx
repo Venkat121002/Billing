@@ -125,13 +125,16 @@ export default function AddCustomer() {
       if (product.color) description += ` - ${product.color}`;
       if (product.storage) description += ` (${product.storage})`;
     }
+    const unitPrice = Number(product.sellingPrice) || Number(product.salesPrice) || Number(product.salePrice) || Number(product.price) || 0;
+    const qtyPerUnit = Number(product.unit) || 1;
 
     const updated = [...products];
     updated[index] = {
       ...updated[index],
       productId: id,
       description: description,
-      price: Number(product.sellingPrice) || Number(product.salesPrice) || Number(product.salePrice) || Number(product.price) || 0,
+      price: unitPrice,
+      qtyPerUnit: qtyPerUnit,
       gst: Number(product.salesGst) || Number(product.salesgst) || Number(product.gst) || Number(product.taxRate) || Number(product.gstRate) || 0,
       quantity: 1,
     };
@@ -258,9 +261,6 @@ export default function AddCustomer() {
   // ================= SUBMIT =================
   const handleSubmit = async (e) => {
     e.preventDefault();
-    console.log("Submit button clicked");
-
-    console.log("Current User:", currentUser); // Debug log
 
     if (!currentUser) {
       console.error("No user logged in (currentUser is null)");
@@ -306,8 +306,6 @@ export default function AddCustomer() {
           "x-auth-token": token,
         },
       };
-
-      console.log("Sending data to:", `${API_URL}/credit`, formData);
 
       await axios.post(
         `${API_URL}/credit`,
@@ -483,20 +481,20 @@ export default function AddCustomer() {
                         p.salePrice ||
                         p.price ||
                         0
-                        })`
+                        }) (Stock: ${Number(p.quantity) || 0} Units)`
                         : `${p.name} - ₹${p.sellingPrice ||
                         p.salesPrice ||
                         p.salePrice ||
                         p.price ||
                         0
-                        }`}
+                        } (Stock: ${Number(p.quantity) || 0} Units)`}
                     </option>
                   ))}
                 </select>
 
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <div>
-                    <label>Quantity <span className="text-red-500">*</span></label>
+                    <label>Units <span className="text-red-500">*</span></label>
                     <input
                       type="number"
                       className="border p-2 rounded w-full"
@@ -509,7 +507,7 @@ export default function AddCustomer() {
                   </div>
 
                   <div>
-                    <label>Price <span className="text-red-500">*</span></label>
+                    <label>Unit Price (₹) <span className="text-red-500">*</span></label>
                     <input
                       type="number"
                       className="border p-2 rounded w-full"
@@ -518,6 +516,16 @@ export default function AddCustomer() {
                         handleProductChange(index, "price", e.target.value)
                       }
                       placeholder="Enter Price"
+                    />
+                  </div>
+
+                  <div>
+                    <label>Qty per Unit</label>
+                    <input
+                      type="number"
+                      className="border p-2 rounded w-full bg-gray-50"
+                      value={product.qtyPerUnit || 1}
+                      readOnly
                     />
                   </div>
 

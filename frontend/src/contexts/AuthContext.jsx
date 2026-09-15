@@ -196,6 +196,21 @@ export function AuthProvider({ children }) {
     }
   }
 
+  // SELECT INDUSTRY (one-time company-profile setting; backend rejects if already set)
+  async function selectIndustry(industry) {
+    try {
+      const res = await api.post("auth/select-industry", { industry });
+
+      // Refresh user data so resolveIndustryProfile() picks it up everywhere
+      const userRes = await api.get("auth/me");
+      setCurrentUser(userRes.data);
+
+      return res.data;
+    } catch (err) {
+      throw err.response ? err.response.data : err;
+    }
+  }
+
   // CREATE SUB-USER (For Settings Page)
   async function createSubUser(data) {
     try {
@@ -287,6 +302,7 @@ export function AuthProvider({ children }) {
     updateSubUser,
     deleteSubUser,
     updateProfile,
+    selectIndustry,
     recordPayment,
     deleteAccount,
     logout,

@@ -20,7 +20,6 @@ export const MODULES = {
   credit: { label: "Credit", path: "/credit", icon: CreditCard },
   record: { label: "Record", path: "/record", icon: CirclePercent },
   reports: { label: "Reports", path: "/reports", icon: BarChart3 },
-  barcode_billing: { label: "Barcode Billing", path: "/barcode-billing", icon: PrinterCheck },
   barcodes: { label: "Barcodes", path: "/barcodes", icon: Barcode },
   staff_management: { label: "Subusers", path: "/settings?section=sub_users", icon: Users },
   staff_records: { label: "Subuser Records", path: "/staff-records", icon: ClipboardList },
@@ -38,6 +37,8 @@ export const INDUSTRY_MODULES = {
   clothing: ["dashboard", "inventory", "barcodes", "billing", "record", "gst", "cashbook", "staff_records"],
 
   pharmacy: ["dashboard", "inventory", "billing", "record", "gst", "cashbook", "credit", "staff_records"],
+
+  petshop: ["dashboard", "inventory", "barcodes", "billing", "record", "reports", "gst", "cashbook", "staff_records"],
 
   others: ["dashboard", "billing", "inventory", "gst", "record", "reports", "cashbook", "credit", "staff_records"],
 };

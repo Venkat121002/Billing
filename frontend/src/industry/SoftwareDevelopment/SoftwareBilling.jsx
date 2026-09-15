@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation } from "react-router-dom";
 import axios from "axios";
 import API_URL from "../../config/api";
 import {
@@ -14,7 +14,6 @@ import {
   CreditCard,
   Smartphone,
   Tag,
-  Package,
   Loader2,
   Download,
   X,
@@ -22,22 +21,15 @@ import {
   MapPin,
   Phone,
   FileText,
-  ChevronDown,
   Receipt,
   IndianRupee,
   ScanBarcode,
   ArrowRight,
-  Clock,
   Banknote,
   Wallet,
-  TrendingUp,
   Hash,
   RotateCcw,
-  Zap,
-  AlertCircle,
   ChevronRight,
-  BadgeIndianRupee,
-  Bell,
   Calendar,
 } from "lucide-react";
 import BillingLayout from "../../Layout/BillingLayout/AdminLayout";
@@ -78,11 +70,11 @@ const paymentColors = {
   },
   card: {
     gradient: 'from-emerald-600 to-teal-700',
-    base: 'bg-blue-600',
-    ring: 'focus:ring-blue-300/40',
-    border: 'border-blue-600 focus:border-blue-300',
-    text: 'text-blue-100',
-    subtext: 'text-blue-200'
+    base: 'bg-emerald-600',
+    ring: 'focus:ring-emerald-300/40',
+    border: 'border-emerald-600 focus:border-emerald-300',
+    text: 'text-emerald-100',
+    subtext: 'text-emerald-200'
   },
   upi: {
     gradient: 'from-purple-500 to-violet-600',
@@ -134,17 +126,12 @@ const SDBilling = () => {
   };
 
   const location = useLocation();
-  const navigate = useNavigate();
   const { currentUser, updateProfile } = useAuth();
   const userData = currentUser;
-   
 
   const [products, setProducts] = useState([]);
   const [productsLoading, setProductsLoading] = useState(true);
   const [productsError, setProductsError] = useState(null);
-  //  const getGST = (amount, percent) => (amount * percent) / 100;
-  const getGST = (amount, percent) => (amount * percent) / 100;
-
 
   useEffect(() => {
     const fetchProducts = async () => {
@@ -198,9 +185,7 @@ const SDBilling = () => {
   const [paymentMethod, setPaymentMethod] = useState("cash");
   const [categories, setCategories] = useState([]);
   const [isDueBill, setIsDueBill] = useState(false);
-  // const [printerFormat, setPrinterFormat] = useState("thermal");
-  const [printerFormat, setPrinterFormat] = useState("A4"); // Set A4 as default
-  const [currentTime, setCurrentTime] = useState(new Date()); // This variable is not used
+  const [printerFormat, setPrinterFormat] = useState("A4");
   const [termDuration, setTermDuration] = useState("Half-Yearly");
   const [creditPaymentData, setCreditPaymentData] = useState(null);
 
@@ -213,23 +198,14 @@ const SDBilling = () => {
       const config = userData.Tenant.printer_configs.find(
         (c) => c.category?.toLowerCase() === firstItemCategory
       );
-      if (config && config.format) { // Ensure config.format exists
       if (config && config.format) {
         setPrinterFormat(config.format);
       }
     }
-  }}, [cart, userData]);
+  }, [cart, userData]);
 
-  const moneys = [100, 200, 500, 1000, 2000, 5000];
   const receiptContentRef = useRef(null);
   const printAreaRef = useRef(null);
-  const searchInputRef = useRef(null);
-
-  // Live clock
-  useEffect(() => {
-    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
-    return () => clearInterval(timer);
-  }, []);
 
   useEffect(() => { localStorage.setItem("pos-cart", JSON.stringify(cart)); }, [cart]);
   useEffect(() => { localStorage.setItem("pos-cash", cash.toString()); }, [cash]);
@@ -778,11 +754,9 @@ const SDBilling = () => {
     const isA5 = formatStr.includes("a5");
 
     if (isThermal) {
-     // This class is not defined in the provided CSS
       let thermalClass = "receipt-thermal-80";
       if (formatStr.includes("58mm")) thermalClass = "receipt-thermal-58";
       else if (formatStr === "a5") thermalClass = "receipt-a5";
-      else if (formatStr === "a4") thermalClass = "receipt-a4";
       else if (formatStr === "a4" || formatStr === "a4 gst invoice") thermalClass = "receipt-a4";
 
       return (
@@ -945,16 +919,12 @@ const SDBilling = () => {
       );
     }
     const isDotMatrix = formatStr.includes("dotmatrix");
-    const containerClass = isDotMatrix ? "receipt-dotmatrix font-mono" : (isA5 ? "receipt-a5 font-arial" : "receipt-a4 font-arial"); // This class is not defined in the provided CSS
-    // const containerClass = isDotMatrix ? "receipt-dotmatrix font-mono" : (isA5 ? "receipt-a5 font-arial" : "receipt-a4 font-arial");
+    const containerClass = isDotMatrix ? "receipt-dotmatrix font-mono" : (isA5 ? "receipt-a5 font-arial" : "receipt-a4 font-arial");
     return (
       <div className={`${containerClass} w-full bg-white text-black text-sm`}>
-       
-        <div className="flex justify-between border-b-2 border-black pb-4 mb-4"> {/* Corrected alignment */}
+        <div className="flex justify-between border-b-2 border-black pb-4 mb-4">
           <div className="w-[60%]">
             <h1 className="text-2xl font-bold uppercase mb-1">{businessName}</h1>
-            <p>{businessAddress.street || "Street Address"}</p> {/* Corrected alignment */}
-            <p>{[businessAddress.city, businessAddress.state].filter(Boolean).join(", ")} {businessAddress.pincode ? `- ${businessAddress.pincode}` : ""}</p> {/* Corrected alignment */}
             <p>{businessAddress.street || "Street Address"}</p>
             <p>{[businessAddress.city, businessAddress.state].filter(Boolean).join(", ")} {businessAddress.pincode ? `- ${businessAddress.pincode}` : ""}</p>
             {businessPhone && <p>Phone: {businessPhone}</p>}
@@ -964,9 +934,9 @@ const SDBilling = () => {
           </div>
           <div className="w-[40%] text-right"><h2 className="text-xl font-bold uppercase mb-2">{formatStr.includes("gst") ? "TAX INVOICE" : "RECEIPT"}</h2><div className="space-y-1"><div className="flex justify-end gap-4"><span className="font-semibold">{formatStr.includes("gst") ? "Invoice No" : "Receipt No"}:</span><span>{receiptNo}</span></div><div className="flex justify-end gap-4"><span className="font-semibold">{formatStr.includes("gst") ? "Invoice Date" : "Receipt Date"}:</span><span>{receiptDate}</span></div></div></div>
         </div>
-        <div className="border border-black mb-4 flex"> {/* Corrected alignment */}
-          <div className="w-1/2 p-2 border-r border-black"><p className="font-bold border-b border-black w-full mb-2 pb-1">Issued To:</p><p className="font-semibold">{customerForm.name || "Cash Sale"}</p>{customerForm.gstin && <p>GSTIN: {customerForm.gstin}</p>}<p>POS: {customerForm.location || businessAddress.state || "State"}</p></div> {/* Corrected alignment */}
-          <div className="w-1/2 p-2"><p className="font-bold border-b border-black w-full mb-2 pb-1">Billing & Shipping Address:</p><p>{customerForm.location || "N/A"}</p><p>Mobile: {customerForm.phone}</p></div> {/* Corrected alignment */}
+        <div className="border border-black mb-4 flex">
+          <div className="w-1/2 p-2 border-r border-black"><p className="font-bold border-b border-black w-full mb-2 pb-1">Issued To:</p><p className="font-semibold">{customerForm.name || "Cash Sale"}</p>{customerForm.gstin && <p>GSTIN: {customerForm.gstin}</p>}<p>POS: {customerForm.location || businessAddress.state || "State"}</p></div>
+          <div className="w-1/2 p-2"><p className="font-bold border-b border-black w-full mb-2 pb-1">Billing & Shipping Address:</p><p>{customerForm.location || "N/A"}</p><p>Mobile: {customerForm.phone}</p></div>
         </div>
         <table className="w-full border-collapse border border-black mb-4 text-[11px] table-fixed"> {/* Added table-fixed for better column control */}
           <thead className="bg-gray-100"><tr><th className="border border-black px-1 py-2 text-center w-[5%]">S.No</th><th className="border border-black px-1 py-2 text-left w-[40%]">Item Description</th><th className="border border-black px-1 py-2 text-center w-[5%]">Qty</th><th className="border border-black px-1 py-2 text-right w-[15%]">Rate</th><th className="border border-black px-1 py-2 text-right w-[10%]">Tax</th><th className="border border-black px-1 py-2 text-right w-[25%]">Amount</th></tr></thead>
@@ -1011,10 +981,10 @@ const SDBilling = () => {
   if (productsLoading && !products) {
     return (
       <BillingLayout hideHeader>
-        <div className="flex flex-col items-center justify-center h-screen bg-gradient-to-br from-emerald-50 to-teal-50">
+        <div className="flex flex-col items-center justify-center h-screen bg-gradient-to-br from-blue-50 to-indigo-50">
           <div className="relative mb-6">
-            <div className="w-20 h-20 rounded-2xl bg-white shadow-xl shadow-emerald-100 flex items-center justify-center">
-              <Loader2 className="w-10 h-10 text-emerald-500 animate-spin" />
+            <div className="w-20 h-20 rounded-2xl bg-white shadow-xl shadow-blue-100 flex items-center justify-center">
+              <Loader2 className="w-10 h-10 text-blue-500 animate-spin" />
             </div>
           </div>
           <h2 className="text-xl font-bold text-gray-800 mb-1">Setting Up POS</h2>
@@ -1086,7 +1056,6 @@ const SDBilling = () => {
                 size={14}
               />
               <input
-                ref={searchInputRef}
                 type="text"
                 placeholder={"Search Clients..."}
                 value={keyword}
@@ -1098,7 +1067,7 @@ const SDBilling = () => {
             {/* Barcode Input */}
             <div className="relative">
               <ScanBarcode
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-emerald-500"
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-blue-500"
                 size={14}
               />
               <input
@@ -1125,8 +1094,8 @@ const SDBilling = () => {
               Object.entries(_.groupBy(filteredProducts(), p => p.category || "Uncategorized")).map(([category, items]) => (
                 <div key={category} className="mb-2">
                   <div className="bg-gray-50/90 px-4 py-1.5 sticky top-0 z-10 backdrop-blur-sm border-b border-gray-100">
-                    <div className="text-[10px] font-bold text-emerald-700 uppercase tracking-widest flex items-center gap-1.5">
-                      <div className="w-1 h-3 bg-emerald-500 rounded-full"></div>
+                    <div className="text-[10px] font-bold text-blue-700 uppercase tracking-widest flex items-center gap-1.5">
+                      <div className="w-1 h-3 bg-blue-500 rounded-full"></div>
                       {category}
                     </div>
                   </div>
@@ -1142,7 +1111,7 @@ const SDBilling = () => {
                         className={`flex justify-between items-center px-4 py-2.5 border-b border-gray-50 cursor-pointer transition-all
 
                   ${inCart
-                            ? "bg-emerald-50/50 border-l-4 border-emerald-500 shadow-sm"
+                            ? "bg-blue-50/50 border-l-4 border-blue-500 shadow-sm"
                             : "hover:bg-gray-50/80"
                           }`}
                       >
@@ -1151,13 +1120,13 @@ const SDBilling = () => {
                             {product.name}
                           </p>
                           {product.barcode && (
-                            <p className="text-[10px] text-emerald-600 font-medium mt-0.5">
+                            <p className="text-[10px] text-blue-600 font-medium mt-0.5">
                               #{product.barcode}
                             </p>
                           )}
                         </div>
 
-                        <span className="text-sm font-bold text-emerald-700 bg-emerald-50 px-2 py-1 rounded-md flex-shrink-0">
+                        <span className="text-sm font-bold text-blue-700 bg-blue-50 px-2 py-1 rounded-md flex-shrink-0">
                           ₹{product.budget || product.salePrice || product.salesPrice || product.price}
                         </span>
                       </div>
@@ -1199,19 +1168,17 @@ const SDBilling = () => {
           <div className="flex-1 overflow-y-auto min-h-0">
             {cart.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full px-6">
-                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-50 to-teal-50 flex items-center justify-center mb-2.5">
-                  <ShoppingCart size={20} className="text-emerald-200" />
+                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-50 to-indigo-50 flex items-center justify-center mb-2.5">
+                  <ShoppingCart size={20} className="text-blue-200" />
                 </div>
-                <p className="text-xs text-gray-400 font-medium">{currentUser.companyDetails.industry=== "academy" ?
-                 "No Courses Added" :"No Products Added"}d</p>
-                <p className="text-xs text-gray-300 mt-0.5">{currentUser.companyDetails.industry=== "academy" ?
-                 "Tap to Add Courses" :"Tap to Add Products"}</p>
+                <p className="text-xs text-gray-400 font-medium">No Clients Added</p>
+                <p className="text-xs text-gray-300 mt-0.5">Tap to Add Clients</p>
               </div>
             ) : (
               <div className="p-2 space-y-1">
                 {cart.map((item, index) => (
-                  <div key={item.productSku} className="flex items-center gap-2 p-2 rounded-lg bg-gray-50/60 hover:bg-emerald-50/40 border border-transparent hover:border-emerald-100 transition-all">
-                    <span className="w-5 h-5 rounded-md bg-emerald-100/80 text-emerald-600 text-[10px] font-bold flex items-center justify-center flex-shrink-0">
+                  <div key={item.productSku} className="flex items-center gap-2 p-2 rounded-lg bg-gray-50/60 hover:bg-blue-50/40 border border-transparent hover:border-blue-100 transition-all">
+                    <span className="w-5 h-5 rounded-md bg-blue-100/80 text-blue-600 text-[10px] font-bold flex items-center justify-center flex-shrink-0">
                       {index + 1}
                     </span>
                     <div className="flex-1 min-w-0">
@@ -1222,9 +1189,9 @@ const SDBilling = () => {
                           type="number"
                           value={item.price}
                           onChange={(e) => updatePrice(item.productSku, e.target.value)}
-                          className="w-20 bg-transparent border-b border-dashed border-gray-200 text-xs font-semibold text-gray-700 focus:outline-none focus:border-emerald-400 transition-colors"
+                          className="w-20 bg-transparent border-b border-dashed border-gray-200 text-xs font-semibold text-gray-700 focus:outline-none focus:border-blue-400 transition-colors"
                         />
-                        {item.gstRate > 0 && <span className="text-emerald-500 text-[10px]">+{item.gstRate}%</span>}
+                        {item.gstRate > 0 && <span className="text-blue-500 text-[10px]">+{item.gstRate}%</span>}
                       </div>
                     </div>
                     <div className="flex items-center bg-white border border-gray-200 rounded-md overflow-hidden flex-shrink-0">                      
@@ -1261,7 +1228,7 @@ const SDBilling = () => {
                 )}
                 <div className="flex justify-between items-center pt-1.5 border-t border-dashed border-gray-200">
                   <span className="text-base font-bold text-gray-700">Total</span>
-                  <span className="text-lg font-bold text-emerald-600">{priceFormat(currentGrandTotal)}</span>
+                  <span className="text-lg font-bold text-blue-600">{priceFormat(currentGrandTotal)}</span>
                 </div>
               </div>
             </div>
@@ -1324,13 +1291,13 @@ const SDBilling = () => {
                 <Tag size={10} /> Add Discount 
               </label>
               <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-emerald-400 text-sm font-bold">₹</span>
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-blue-400 text-sm font-bold">₹</span>
                 <input
                   type="number"
                   value={discount > 0 ? discount : ""}
                   onChange={(e) => setDiscount(parseFloat(e.target.value) || 0)}
                   placeholder="Discount Amount"
-                  className="w-full h-10 pl-8 pr-3 text-[11px] bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-400 transition-all font-semibold"
+                  className="w-full h-10 pl-8 pr-3 text-[11px] bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all font-semibold"
                 />
               </div>
             </div>
@@ -1521,13 +1488,13 @@ const SDBilling = () => {
                     {f.label} {f.required && <span className="text-red-400">*</span>}
                   </label>
                   <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-emerald-400">{f.icon}</span>
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-blue-400">{f.icon}</span>
                     <input
                       type="text"
                       name={f.name}
                       value={customerForm[f.name]}
                       onChange={handleCustomerChange}
-                      className={`w-full h-9 pl-8 pr-3 text-[11px] border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-300 focus:border-emerald-300 transition-all ${f.extra || ""}`}
+                      className={`w-full h-9 pl-8 pr-3 text-[11px] border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-blue-300 transition-all ${f.extra || ""}`}
                       placeholder={f.placeholder}
                     />
                   </div>
@@ -1551,10 +1518,10 @@ const SDBilling = () => {
       {isShowModalReceipt && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl max-w-3xl w-[95vw] h-[95vh] flex flex-col overflow-hidden animate-modal-in">
-            <div className="flex items-center justify-between px-4 py-2.5 border-b border-emerald-100 flex-shrink-0 bg-white">
+            <div className="flex items-center justify-between px-4 py-2.5 border-b border-blue-100 flex-shrink-0 bg-white">
               <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg bg-emerald-100 flex items-center justify-center">
-                  <Receipt size={13} className="text-emerald-600" />
+                <div className="w-7 h-7 rounded-lg bg-blue-100 flex items-center justify-center">
+                  <Receipt size={13} className="text-blue-600" />
                 </div>
                 <h2 className="text-[11px] font-bold text-gray-800">Receipt Preview</h2>
               </div>
@@ -1563,7 +1530,7 @@ const SDBilling = () => {
               </button>
             </div>
 
-            <div className="flex items-center justify-between px-4 py-2 bg-emerald-50/50 border-b border-emerald-100 flex-shrink-0">
+            <div className="flex items-center justify-between px-4 py-2 bg-blue-50/50 border-b border-blue-100 flex-shrink-0">
               <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-1">
                 <Printer size={10} /> Format
               </span>
@@ -1596,14 +1563,14 @@ const SDBilling = () => {
               </div>
             </div>
 
-            <div className="border-t border-emerald-100 p-3 flex flex-wrap gap-1.5 flex-shrink-0 bg-white print:hidden">
+            <div className="border-t border-blue-100 p-3 flex flex-wrap gap-1.5 flex-shrink-0 bg-white print:hidden">
               <button onClick={handleDownloadPdf} className="flex-1 min-w-[100px] h-9 rounded-lg flex items-center justify-center gap-1 text-[11px] font-semibold bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 transition-all">
                 <Download size={12} /> PDF
               </button>
-              <button onClick={handlePrint} className="flex-1 min-w-[100px] h-9 rounded-lg flex items-center justify-center gap-1 text-[11px] font-semibold bg-white border border-emerald-200 text-emerald-600 hover:bg-emerald-50 transition-all">
+              <button onClick={handlePrint} className="flex-1 min-w-[100px] h-9 rounded-lg flex items-center justify-center gap-1 text-[11px] font-semibold bg-white border border-blue-200 text-blue-600 hover:bg-blue-50 transition-all">
                 <Printer size={12} /> Print
               </button>
-              <button onClick={printAndProceed} className="flex-1 min-w-[120px] h-9 rounded-lg flex items-center justify-center gap-1 text-[11px] font-bold bg-gradient-to-r from-emerald-500 to-teal-500 text-white hover:from-emerald-600 hover:to-teal-600 shadow-md shadow-emerald-200/50 transition-all">
+              <button onClick={printAndProceed} className="flex-1 min-w-[120px] h-9 rounded-lg flex items-center justify-center gap-1 text-[11px] font-bold bg-gradient-to-r from-blue-600 to-indigo-700 text-white hover:from-blue-700 hover:to-indigo-800 shadow-md shadow-blue-200/50 transition-all">
                 <CheckCircle size={12} /> Finalize
               </button>
             </div>

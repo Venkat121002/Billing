@@ -11,6 +11,15 @@ const { Owner: OwnerModel, SubUser: SubUserModel } = require('../models/mongodb'
 // Determine which database to use
 const DB_TYPE = process.env.DB_TYPE || 'mongodb';
 
+// Keep in sync with the selectable keys in
+// frontend/src/config/industryProfiles.js (getSelectableProfiles()) — this
+// backend list only exists to reject garbage input on select-industry; the
+// frontend profile config is the actual source of truth for behaviour.
+const VALID_INDUSTRIES = [
+    'grocery', 'pharmacy', 'mobile_shop', 'clothing', 'petshop',
+    'academy', 'software_development'
+];
+
 // Helper: Generate Secure ID
 const generateId = () => {
     const crypto = require('crypto');
@@ -447,7 +456,10 @@ exports.updateProfile = async (req, res) => {
 
         const {
             firstName, lastName, mobile,
-            businessName, industry, businessType, gstin, pan,
+            // Note: `industry` is intentionally NOT accepted here. It's a
+            // one-time selection made via POST /v2/auth/select-industry,
+            // which only writes it while unset — see that handler.
+            businessName, businessType, gstin, pan,
             street, city, state, pincode,
             invoice_prefix, next_invoice_number,
             purchase_gst, purchase_tax_type, sales_gst, sales_tax_type,
@@ -476,11 +488,10 @@ exports.updateProfile = async (req, res) => {
             if (printer_configs !== undefined) subuserSettings.printer_configs = printer_configs;
             if (printer_auto_print !== undefined) subuserSettings.printer_auto_print = printer_auto_print;
 
-            if (businessName || industry || businessType || gstin || pan) {
+            if (businessName || businessType || gstin || pan) {
                 businessUpdates.companyDetails = {
                     ...(owner.companyDetails || {}),
                     ...(businessName && { name: businessName }),
-                    ...(industry && { industry }),
                     ...(businessType && { type: businessType }),
                     ...(gstin && { gstin }),
                     ...(pan && { pan })
@@ -558,11 +569,10 @@ exports.updateProfile = async (req, res) => {
         if (printer_configs !== undefined) subuserSettings.printer_configs = printer_configs;
         if (printer_auto_print !== undefined) subuserSettings.printer_auto_print = printer_auto_print;
 
-        if (businessName || industry || businessType || gstin || pan) {
+        if (businessName || businessType || gstin || pan) {
             businessUpdates.companyDetails = {
                 ...(ownerDoc.data().companyDetails || {}),
                 ...(businessName && { name: businessName }),
-                ...(industry && { industry }),
                 ...(businessType && { type: businessType }),
                 ...(gstin && { gstin }),
                 ...(pan && { pan })
@@ -860,6 +870,45 @@ exports.resetPassword = async (req, res) => {
         res.json({ msg: "Password updated successfully" });
     } catch (err) {
         console.error("ResetPassword Error:", err.message);
+        res.status(500).json({ msg: "Server Error" });
+    }
+};
+
+// @desc    One-time industry selection for the tenant (company profile).
+//          Writes only while unset; already-set industries are locked —
+//          changing one after the fact is a support action, not self-serve.
+// @route   POST /api/v2/auth/select-industry
+exports.selectIndustry = async (req, res) => {
+    try {
+        const { userId, ownerId, role } = req.user;
+        const tenantId = process.env.TENANT_ID;
+        const { industry } = req.body || {};
+
+        if (role !== 'owner') {
+            return res.status(403).json({ msg: "Only the account owner can set the company's industry." });
+        }
+
+        if (!VALID_INDUSTRIES.includes(industry)) {
+            return res.status(400).json({ msg: "Unknown industry." });
+        }
+
+        const owner = await OwnerModel.findOne({ userId: ownerId || userId, tenantId });
+        if (!owner) {
+            return res.status(404).json({ msg: "Owner record not found" });
+        }
+
+        if (owner.companyDetails?.industry) {
+            return res.status(409).json({ msg: "Industry is already set. Contact support to change it." });
+        }
+
+        await OwnerModel.updateOne(
+            { userId: ownerId || userId, tenantId },
+            { $set: { 'companyDetails.industry': industry } }
+        );
+
+        res.json({ msg: "Industry saved", industry });
+    } catch (err) {
+        console.error("SelectIndustry Error:", err.message);
         res.status(500).json({ msg: "Server Error" });
     }
 };

@@ -13,19 +13,12 @@ const Signup = () => {
   const strongPasswordRegex =
     /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&]).{8,}$/;
 
-  const industries = {
-    retail: ["Grocery Store", "Supermarket", "Mobile Shop","Clothing","Pharmacy"],
-    food: ["Restaurant", "Cafe", "Bakery"],
-    education: ["Acadamy"],
-    technology: ["Software Development"],
-
-  };
-
+  // Industry is no longer chosen at signup — it's a one-time selection made
+  // later in Settings > Company Profile (see config/industryProfiles.js and
+  // UNIFICATION_PLAN.md). Registration only collects business basics.
   const [formData, setFormData] = useState({
     businessName: "",
     businessType: "",
-    industry: "",
-    subIndustry: "",
     employees: "",
     firstName: "",
     lastName: "",
@@ -43,13 +36,8 @@ const Signup = () => {
   });
 
   const handleChange = (e) => {
-    const { name, value = e.target.value } = e.target;
-
-    if (name === "industry") {
-      setFormData({ ...formData, industry: value, subIndustry: "" });
-    } else {
-      setFormData({ ...formData, [name]: value });
-    }
+    const { name, value } = e.target;
+    setFormData({ ...formData, [name]: value });
   };
 
   const nextStep = () => {
@@ -73,23 +61,7 @@ const Signup = () => {
   const handleSubmit = async () => {
     setIsLoading(true);
     try {
-      const labelToKey = (industry, subLabel) => {
-        if (industry === "electronics" && subLabel === "Mobile Shop") return "mobile_shop";
-        if (industry === "education") return "academy";
-        if (industry === "grocery") return "grocery";
-        if (industry === "restaurant") return "restaurant";
-        return (subLabel || industry || "others").toLowerCase().replace(/\s+/g, "_");
-      };
-
-      const selectedKey = labelToKey(formData.industry, formData.subIndustry);
-      localStorage.setItem("selectedIndustry", selectedKey);
-
-      // Submit data
-      await employerSignup({
-        ...formData,
-        industry: selectedKey,
-        subIndustry: selectedKey
-      });
+      await employerSignup(formData);
 
       // Move to success step (Step 4 internally, but shows as completion)
       setCurrentStep(4);
@@ -164,33 +136,6 @@ const Signup = () => {
                 <option>NGO</option>
                 <option>Trust</option>
               </select>
-
-              <select
-                name="industry"
-                value={formData.industry}
-                onChange={handleChange}
-                className="input">
-                <option value="">Select Industry</option>
-                {Object.keys(industries).map((key) => (
-                  <option key={key} value={key}>{key.charAt(0).toUpperCase() + key.slice(1)}</option>
-                ))}
-              </select>
-
-              {formData.industry && (
-                <select
-                  name="subIndustry"
-                  value={formData.subIndustry}
-                  onChange={handleChange}
-                  className="input">
-                  <option value="">Sub Industry</option>
-                  {(formData.industry === "electronics"
-                    ? ["Mobile Shop"]
-                    : industries[formData.industry]
-                  ).map((sub, i) => (
-                    <option key={i}>{sub}</option>
-                  ))}
-                </select>
-              )}
 
               <input
                 name="employees"
