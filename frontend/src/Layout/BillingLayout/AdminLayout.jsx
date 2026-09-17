@@ -150,6 +150,7 @@ const BillingLayout = ({ children, hideHeader = false, hideSidebar = false }) =>
                 <Link
                   key={index}
                   to={item.path}
+                  state={item.state}
                   className={`flex items-center ${sidebarExpanded ? "px-4" : "px-2 justify-center"} py-3 rounded-xl transition-all duration-200
                 ${isActive(item.path)
                       ? `${isSoftwareDev ? "bg-blue-100 text-blue-700 border-blue-600" : isClothing ? "bg-[#f74faf]/10 text-[#f74faf] border-[#f74faf]" : isAcademy ? "bg-purple-100 text-purple-700 border-purple-600" : "bg-green-100 text-green-700 border-green-600"} font-semibold border-l-4`

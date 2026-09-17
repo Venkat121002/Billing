@@ -9,6 +9,9 @@ const Credit = require('./Credit');
 const Supplier = require('./Supplier');
 const Trainer = require('./Trainer');
 const Client = require('./Client');
+const RepairTicket = require('./RepairTicket');
+const Pet = require('./Pet');
+const Milestone = require('./Milestone');
 const Salesman = require('./Salesman');
 const InventoryReturn = require('./InventoryReturn');
 const SubscriptionDetail = require('./SubscriptionDetail');
@@ -39,6 +42,9 @@ const modelMap = {
     'subusersupplier': Supplier,
     'trainers': Trainer,
     'clients': Client,
+    'repairtickets': RepairTicket,
+    'pets': Pet,
+    'milestones': Milestone,
     'salesmen': Salesman,
     'inventory_returns': InventoryReturn,
     'subscriptiondetails': SubscriptionDetail
@@ -60,6 +66,9 @@ module.exports = {
     Supplier,
     Trainer,
     Client,
+    RepairTicket,
+    Pet,
+    Milestone,
     Salesman,
     InventoryReturn,
     SubscriptionDetail,

@@ -242,6 +242,39 @@ app.use(
     require('./routes/firestoreClientRoutes')
 );
 
+// Repair Tickets
+app.use(
+    '/api/v2/repair-tickets',
+    require('./routes/firestoreRepairTicketRoutes')
+);
+
+app.use(
+    '/v2/repair-tickets',
+    require('./routes/firestoreRepairTicketRoutes')
+);
+
+// Pets
+app.use(
+    '/api/v2/pets',
+    require('./routes/firestorePetRoutes')
+);
+
+app.use(
+    '/v2/pets',
+    require('./routes/firestorePetRoutes')
+);
+
+// Milestones
+app.use(
+    '/api/v2/milestones',
+    require('./routes/firestoreMilestoneRoutes')
+);
+
+app.use(
+    '/v2/milestones',
+    require('./routes/firestoreMilestoneRoutes')
+);
+
 // Salesman
 app.use(
     '/api/v2/salesman',

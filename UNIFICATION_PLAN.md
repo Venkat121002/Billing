@@ -263,14 +263,57 @@ lines vs. this cluster's ~1,400, academy's 235, software's 443).
   `groceryRecord.jsx` cleanup in Phase 0.
 - **Verified:** `npm run build` passes; bundle down to 3,415 kB.
 
-**Record — not started.** Same retail-cluster approach applies (grocery,
-clothing, pharmacy, petshop; mobile/academy/software stay bespoke — audit
-showed mobile's Record is only ~17% different from grocery's, worth
-re-checking whether it joins the retail cluster once this is picked up).
-Files are ~2,500–2,900 lines each (bigger than GST-bill was), and pharmacy's
-copy has real extra modals (wallet-adjust, customer-edit) — expect this to
-be a similarly-sized effort to Phases 2 + 3 combined. Do the same
-diff-everything-first approach before writing the unified component.
+**Record — ✅ DONE (2026-09-15).** New `components/Billing/IndustryRecord.jsx`
+(2,193 lines) replaces `groceryRecord.jsx` (2,501), `ClothingRecord.jsx`
+(2,505), and `PharmacyRecord.jsx` (2,868) — net **-5,681 lines**. Built from
+Pharmacy's fork (confirmed richest via full diff: wallet top-up modal,
+customer view/edit/delete modals with phone-based dedup that sums loyalty/
+wallet across duplicate customer records, batch/expiry/brand/pharma-company
+inventory fields, unit-multiplier stock display). `config/industryScreens.js`
+`record` entry now points grocery/clothing/pharmacy/petshop/restaurant/others
+at it; mobile/academy/software_development stay bespoke.
+
+- **Re-checked mobile per the standing note** — confirmed it should stay
+  bespoke. The audit's "~17% different" estimate didn't hold up under a real
+  diff: `mobilerecord.jsx` carries genuine mobile-specific columns and search
+  logic (brand/model/IMEI/color) plus a large *dead* academy-specific branch
+  (`isAcademyIndustry`, never true there since the router already sends
+  academy elsewhere) — real, non-cosmetic branching, not a re-theme.
+- **Real bugs found and fixed while diffing**:
+  - Pharmacy's fork **silently dropped the "Pay Now" button** from the
+    credit tab when it added a status badge — `handlePayCredit` was still
+    defined but never called, a real functional regression (no way to route
+    a customer to billing to pay off a balance). Restored it alongside the
+    status badge, combining both.
+  - Grocery's category filter dropdown was **hardcoded to mobile-shop
+    categories** (Mobile/Bluetooth/Charger/Headset/Cable/Adapter) — nonsense
+    for a grocery store. Clothing's fork had already fixed this by deriving
+    the list from actual product data (`productCategories` via `useMemo`);
+    adopted that fix for everyone.
+  - Grocery's credit table **header and row cells were out of sync**: the
+    header listed 15 columns (Email, Address, Qty, Price, GST, Due,
+    Sessions, Action) but the row only rendered 9 `<td>`s (the rest were
+    commented out) — every column after the mismatch point showed the wrong
+    data. Pharmacy's fork had already fixed the alignment (uncommenting the
+    row cells and updating the header to match); adopted its column set.
+  - `total`/`credit`/`dueSession` were each assigned **twice in the same
+    object literal** (`total: Number(data.total) || 0, total: total,` —
+    the esbuild duplicate-key warnings visible since Phase 5) — both
+    branches computed the identical value so it was harmless, but confusing
+    and the literal cause of a recurring build warning; collapsed to one
+    assignment each.
+  - Dropped the dead `isAcademyIndustry`/`isMobileIndustry` state — grocery's
+    fork declared both but never set either to `true`, so every conditional
+    branch keyed on them was unreachable dead code (trainer-vs-supplier
+    labels, an academy profit-calc branch, etc.).
+- Gated the batch/expiry/brand/pharma-company inventory and buy-tab columns
+  behind `profile.itemFieldGroups.batchExpiry` (on for pharmacy/petshop, off
+  for grocery/clothing/others) instead of always showing them — matches the
+  column-composition pattern from Phase 4's Inventory consolidation.
+- **Verified:** `npm run build` passes; bundle down another ~112 kB. The
+  IndustryRecord.jsx duplicate-key warnings are gone; the ones still printed
+  are from the untouched bespoke `mobilerecord.jsx`/`academyRecord.jsx`/
+  `SDRecord.jsx` files (out of scope — those stay bespoke by design).
 
 ### Phase 5 — PosBilling engine (retail) — ✅ DONE (2026-09-15)
 New `components/Billing/IndustryBilling.jsx` (1,644 lines) replaces
@@ -494,7 +537,7 @@ plan (§4) ships and the current feature set is on solid, de-duplicated ground.
 | 1 Company Profile + industry field | +350 / −150 | low |
 | 2 GST bill collapse | −7,300 | low |
 | 3 Item Master (add-product) | −2,500 | medium |
-| 4 Record + Inventory (retail) | −7,000 | medium |
+| 4 Record + Inventory (retail) | −8,872 (actual: -3,191 Inventory + -5,681 Record) | medium |
 | 5 PosBilling | −2,993 (actual) | medium-high |
 | 6 Instalment billing | ~−90 (actual; bug-fix phase, not consolidation) | low |
 | 7 Cleanup | ~−320 (actual; barcode consolidation + dead ClothingBarcode.jsx + 8-router collapse) | low |

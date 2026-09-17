@@ -20,12 +20,10 @@ import MobileInventory from "../industry/mobile/mobileinventory";
 import AcademyInventory from "../industry/academy/academyinventry";
 import SoftwareDevelopmentInventory from "../industry/SoftwareDevelopment/SoftwareDevelopmentInventory";
 
-import GroceryRecord from "../industry/grocery/groceryRecord";
+import IndustryRecord from "../components/Billing/IndustryRecord";
 import MobileRecord from "../industry/mobile/mobilerecord";
 import AcademyRecords from "../industry/academy/academyRecord";
 import SDRecord from "../industry/SoftwareDevelopment/SDRecord";
-import ClothingRecord from "../industry/Clothing/ClothingRecord";
-import PharmacyRecord from "../industry/Pharmacy/PharmacyRecord";
 
 import ItemForm from "../components/Billing/ItemForm";
 import AddCourse from "../industry/academy/academyproduct";
@@ -55,13 +53,11 @@ export const INDUSTRY_SCREENS = {
     },
   },
   record: {
-    default: GroceryRecord,
+    default: IndustryRecord,
     byKey: {
       mobile_shop: MobileRecord,
       academy: AcademyRecords,
       software_development: SDRecord,
-      clothing: ClothingRecord,
-      pharmacy: PharmacyRecord,
     },
   },
   addProduct: {

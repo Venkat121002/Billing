@@ -8,7 +8,12 @@ import {
   CirclePercent,
   BarChart3,
   Barcode,
-  ClipboardList
+  ClipboardList,
+  Wrench,
+  ScanSearch,
+  PawPrint,
+  AlertTriangle,
+  Milestone
 } from "lucide-react";
 
 export const MODULES = {
@@ -25,20 +30,27 @@ export const MODULES = {
   staff_records: { label: "Subuser Records", path: "/staff-records", icon: ClipboardList },
   // add_product intentionally excluded from default sidebar; access via Inventory CTA
   trainers: { label: "Trainers", path: "/trainers", icon: Users },
+  students: { label: "Students", path: "/students", icon: Users },
+  clients: { label: "Clients", path: "/clients", icon: Users },
+  repair_tickets: { label: "Repairs", path: "/repair-tickets", icon: Wrench },
+  imei_lookup: { label: "IMEI Lookup", path: "/imei-lookup", icon: ScanSearch },
+  pets: { label: "Pets", path: "/pets", icon: PawPrint },
+  expiry_alerts: { label: "Expiry Alerts", path: "/expiry-alerts", icon: AlertTriangle },
+  milestones: { label: "Milestones", path: "/milestones", icon: Milestone },
 };
 
 export const INDUSTRY_MODULES = {
   grocery: ["dashboard", "inventory", "billing", "barcodes", "record", "reports", "gst", "cashbook", "staff_records"],
   grocery_store: ["dashboard", "inventory", "barcodes", "billing", "record", "reports", "gst", "cashbook", "staff_records"],
   restaurant: ["dashboard", "billing", "reports", "staff_records"],
-  mobile_shop: ["dashboard", "inventory", "barcodes", "billing", "record", "reports", "gst", "cashbook", "credit", "staff_records"],
-  academy: ["dashboard", "inventory", "billing", "record", "cashbook", "gst", "trainers", "staff_records",],
-  software_development: ["dashboard", "inventory", "billing", "record", "gst", "cashbook", "staff_records"],
+  mobile_shop: ["dashboard", "inventory", "barcodes", "billing", "record", "reports", "gst", "cashbook", "credit", "repair_tickets", "imei_lookup", "staff_records"],
+  academy: ["dashboard", "inventory", "billing", "record", "credit", "cashbook", "gst", "students", "trainers", "staff_records",],
+  software_development: ["dashboard", "inventory", "billing", "record", "clients", "milestones", "gst", "cashbook", "staff_records"],
   clothing: ["dashboard", "inventory", "barcodes", "billing", "record", "gst", "cashbook", "staff_records"],
 
-  pharmacy: ["dashboard", "inventory", "billing", "record", "gst", "cashbook", "credit", "staff_records"],
+  pharmacy: ["dashboard", "inventory", "billing", "record", "gst", "cashbook", "credit", "expiry_alerts", "staff_records"],
 
-  petshop: ["dashboard", "inventory", "barcodes", "billing", "record", "reports", "gst", "cashbook", "staff_records"],
+  petshop: ["dashboard", "inventory", "barcodes", "billing", "record", "reports", "gst", "cashbook", "pets", "staff_records"],
 
   others: ["dashboard", "billing", "inventory", "gst", "record", "reports", "cashbook", "credit", "staff_records"],
 };
@@ -58,6 +70,9 @@ export function getSidebarItems(industryKey) {
     }
     else if (normalizedKey === "software_development" && k === "inventory") {
       return { ...module, label: "Service" };
+    }
+    else if (normalizedKey === "academy" && k === "credit") {
+      return { ...module, label: "Fee Dues", path: "/record", state: { activeTab: "credit" } };
     }
     return module;
   });
