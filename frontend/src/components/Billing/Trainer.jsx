@@ -191,7 +191,7 @@ const Trainer = () => {
                 });
                 setIsModalOpen(true);
               }}
-              className="inline-flex items-center gap-2 px-6 py-3 bg-purple-600 text-white rounded-xl shadow-lg shadow-purple-100 hover:shadow-xl hover:bg-purple-700 transition-all font-semibold text-sm"
+              className="inline-flex items-center gap-2 px-6 py-3 bg-green-600 text-white rounded-xl shadow-lg shadow-green-100 hover:shadow-xl hover:bg-green-700 transition-all font-semibold text-sm"
             >
               <PlusCircle className="w-4 h-4" />
               Add Trainer
@@ -252,7 +252,7 @@ const Trainer = () => {
                             <button title="View" onClick={() => setViewTrainer(trainer)} className={`${iconBtnClass} text-gray-500 hover:bg-gray-100`}>
                               <Search size={16} />
                             </button>
-                            <button title="Edit" onClick={() => handleEditTrainer(trainer)} className={`${iconBtnClass} text-blue-600 hover:bg-blue-50`}>
+                            <button title="Edit" onClick={() => handleEditTrainer(trainer)} className={`${iconBtnClass} text-green-600 hover:bg-green-50`}>
                               <FileText size={16} />
                             </button>
                             <button title="Delete" onClick={() => handleDeleteTrainer(trainer.id)} className={`${iconBtnClass} text-red-600 hover:bg-red-50`}>

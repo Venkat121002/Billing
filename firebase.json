@@ -19,7 +19,6 @@
     },
     "hosting": [
         {
-            "target": "swordnex-softwares",
             "public": "frontend/dist",
             "ignore": [
                 "firebase.json",
@@ -42,7 +41,6 @@
                 }
             ],
             "rewrites": [
-               
                 {
                     "source": "/api/**",
                     "function": "billingApi"

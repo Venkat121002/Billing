@@ -11,14 +11,7 @@ const { Owner: OwnerModel, SubUser: SubUserModel } = require('../models/mongodb'
 // Determine which database to use
 const DB_TYPE = process.env.DB_TYPE || 'mongodb';
 
-// Keep in sync with the selectable keys in
-// frontend/src/config/industryProfiles.js (getSelectableProfiles()) — this
-// backend list only exists to reject garbage input on select-industry; the
-// frontend profile config is the actual source of truth for behaviour.
-const VALID_INDUSTRIES = [
-    'grocery', 'pharmacy', 'mobile_shop', 'clothing', 'petshop',
-    'academy', 'software_development'
-];
+const { VALID_INDUSTRIES } = require('../utils/industries');
 
 // Helper: Generate Secure ID
 const generateId = () => {
@@ -98,7 +91,7 @@ exports.register = async (req, res) => {
 
         } else {
             // === FIRESTORE MODE ===
-            const tenantAuth = admin.auth().tenantManager().authForTenant(tenantId);
+            const tenantAuth = admin.auth();
 
             let userRecord;
             try {
@@ -301,7 +294,6 @@ exports.login = async (req, res) => {
             const authResponse = await axios.post(authUrl, {
                 email,
                 password,
-                tenantId,
                 returnSecureToken: true
             });
 

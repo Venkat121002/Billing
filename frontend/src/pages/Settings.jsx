@@ -26,7 +26,89 @@ import { handleEnterToNext } from '../utils/formUtils';
 import BillingLayout from '../Layout/BillingLayout/AdminLayout';
 import { resolveIndustryProfile, hasChosenIndustry, getSelectableProfiles } from '../config/industryProfiles';
 
+const ACCENTS = {
+  emerald: {
+    cardIcon: "bg-gradient-to-br from-emerald-500 to-emerald-600 text-white shadow-lg shadow-emerald-200",
+    rowIconBg: "bg-emerald-50 text-emerald-600",
+    activeBg: "bg-emerald-50",
+    activeBorder: "border-emerald-200",
+    activeText: "text-emerald-700",
+    chevron: "text-emerald-500",
+  },
+  red: {
+    cardIcon: "bg-gradient-to-br from-red-500 to-rose-600 text-white shadow-lg shadow-red-200",
+    rowIconBg: "bg-red-50 text-red-600",
+    activeBg: "bg-red-50",
+    activeBorder: "border-red-200",
+    activeText: "text-red-700",
+    chevron: "text-red-500",
+  },
+  orange: {
+    cardIcon: "bg-gradient-to-br from-orange-500 to-amber-600 text-white shadow-lg shadow-orange-200",
+    rowIconBg: "bg-orange-50 text-orange-600",
+    activeBg: "bg-orange-50",
+    activeBorder: "border-orange-200",
+    activeText: "text-orange-700",
+    chevron: "text-orange-500",
+  },
+};
 
+const SettingsCard = ({ accent, icon: Icon, title, description, rows, activeSection, toggleSection }) => {
+  const a = ACCENTS[accent];
+  return (
+    <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm hover:shadow-lg transition-shadow duration-300 relative overflow-hidden group">
+      <div className="absolute -top-8 -right-8 w-28 h-28 bg-gray-50 rounded-full blur-2xl opacity-0 group-hover:opacity-100 transition-opacity" />
+      <div className="relative flex items-center gap-3">
+        <div className={`w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 ${a.cardIcon}`}>
+          <Icon className="w-5 h-5" />
+        </div>
+        <div>
+          <h3 className="font-bold text-gray-900">{title}</h3>
+          <p className="text-[11px] text-gray-400">{description}</p>
+        </div>
+      </div>
+      <ul className="relative mt-5 space-y-1.5">
+        {rows.map((row) => {
+          const RowIcon = row.icon;
+          const isActive = activeSection === row.id;
+          return (
+            <li key={row.id}>
+              <button
+                onClick={() => toggleSection(row.id)}
+                className={`w-full flex items-center gap-3 p-2.5 rounded-xl border transition-all text-left ${isActive ? `${a.activeBg} ${a.activeBorder}` : "border-transparent hover:bg-gray-50"
+                  }`}
+              >
+                <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${a.rowIconBg}`}>
+                  <RowIcon className="w-4 h-4" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className={`text-sm font-semibold truncate ${isActive ? a.activeText : "text-gray-700"}`}>
+                    {row.label}
+                  </p>
+                  {row.subtitle && (
+                    <p className="text-[11px] text-gray-400 truncate">{row.subtitle}</p>
+                  )}
+                </div>
+                <ChevronRight
+                  className={`w-4 h-4 flex-shrink-0 transition-transform ${isActive ? `rotate-90 ${a.chevron}` : "text-gray-300"
+                    }`}
+                />
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+};
+
+const SettingsModal = ({ maxWidth = "max-w-2xl", children }) => (
+  <div className="fixed inset-0 bg-black/50 flex justify-center items-center p-4 z-50 animate-fadeIn">
+    <div className={`bg-white rounded-2xl shadow-2xl w-full ${maxWidth} max-h-[85vh] overflow-y-auto`}>
+      {children}
+    </div>
+  </div>
+);
 
 const Settings = () => {
   const [activeSection, setActiveSection] = useState(null);
@@ -35,7 +117,7 @@ const Settings = () => {
   const [savingProfile, setSavingProfile] = useState(false);
   const [supportQuery, setSupportQuery] = useState('');
   const [submittingSupport, setSubmittingSupport] = useState(false);
-  const { currentUser, updateProfile, selectIndustry, getSubUsers, createSubUser, deleteSubUser, updateSubUser, createSubscriptionOrder, verifySubscriptionPayment } = useAuth();
+  const { currentUser, updateProfile, selectIndustry, createSupportRequest, getMySupportRequests, getSubUsers, createSubUser, deleteSubUser, updateSubUser, createSubscriptionOrder, verifySubscriptionPayment } = useAuth();
   const userData = currentUser;
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -62,18 +144,63 @@ const Settings = () => {
     }
   };
 
+  // Industry-change requests → super admin inbox. Only the owner can send one;
+  // one pending request at a time (enforced server-side too).
+  const [myRequests, setMyRequests] = useState([]);
+  const [showIndustryRequest, setShowIndustryRequest] = useState(false);
+  const [industryRequestForm, setIndustryRequestForm] = useState({ requestedIndustry: '', message: '' });
+  const [submittingIndustryRequest, setSubmittingIndustryRequest] = useState(false);
+
+  const refreshMyRequests = async () => {
+    try {
+      setMyRequests(await getMySupportRequests());
+    } catch (err) {
+      console.error('Fetch support requests error:', err);
+    }
+  };
+
+  const pendingIndustryRequest = myRequests.find(
+    (r) => r.type === 'industry_change' && r.status === 'Pending'
+  );
+  const industryLabelFor = (key) =>
+    getSelectableProfiles().find((p) => p.key === key)?.label || key;
+
+  const handleIndustryRequestSubmit = async (e) => {
+    e.preventDefault();
+    if (!industryRequestForm.requestedIndustry) {
+      import('react-hot-toast').then(({ default: toast }) => toast.error('Please choose the industry you want to switch to.'));
+      return;
+    }
+    try {
+      setSubmittingIndustryRequest(true);
+      await createSupportRequest({
+        type: 'industry_change',
+        requestedIndustry: industryRequestForm.requestedIndustry,
+        message: industryRequestForm.message,
+      });
+      import('react-hot-toast').then(({ default: toast }) => toast.success('Request sent to support!'));
+      setShowIndustryRequest(false);
+      setIndustryRequestForm({ requestedIndustry: '', message: '' });
+      refreshMyRequests();
+    } catch (err) {
+      console.error('Industry request error:', err);
+      import('react-hot-toast').then(({ default: toast }) => toast.error(err?.msg || 'Failed to send request.'));
+    } finally {
+      setSubmittingIndustryRequest(false);
+    }
+  };
+
   const handleSupportSubmit = async (e) => {
     e.preventDefault();
     if (!supportQuery.trim()) return;
     try {
       setSubmittingSupport(true);
-      // Simulate API call for submitting support query
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await createSupportRequest({ type: 'general', message: supportQuery });
       import('react-hot-toast').then(({ default: toast }) => toast.success('Your query has been submitted successfully!'));
       setSupportQuery('');
     } catch (err) {
       console.error("Support submit error:", err);
-      import('react-hot-toast').then(({ default: toast }) => toast.error('Failed to submit query.'));
+      import('react-hot-toast').then(({ default: toast }) => toast.error(err?.msg || 'Failed to submit query.'));
     } finally {
       setSubmittingSupport(false);
     }
@@ -408,6 +535,9 @@ const Settings = () => {
     if (activeSection === 'sub_users') {
       fetchSubUsers();
     }
+    if (activeSection === 'profile') {
+      refreshMyRequests();
+    }
   }, [activeSection]);
 
   useEffect(() => {
@@ -421,6 +551,33 @@ const Settings = () => {
   }, [searchParams]);
 
   const pf = (key) => profileForm[key] ?? '';
+
+  const businessName = userData?.companyDetails?.name || userData?.businessName || userData?.Tenant?.name;
+  const planLabel = userData?.Tenant?.subscription_plan || 'Free';
+  const isTrial = userData?.Tenant?.subscription_status === 'Trial';
+  const isVerified = Boolean(userData?.gstin && userData?.pan);
+  const invoicePrefix = userData?.Tenant?.invoice_prefix || 'INV';
+  const salesGst = userData?.Tenant?.sales_gst || 0;
+  const isOwnerOrAdmin = userData.role === 'owner' || userData.role === 'TenantAdmin';
+
+  const organisationRows = [
+    { id: 'profile', label: 'Profile', subtitle: businessName || 'Business & account details', icon: User },
+    ...(isOwnerOrAdmin ? [{ id: 'subscriptions', label: 'Subscriptions', subtitle: `${planLabel} Plan${isTrial ? ' · Trial' : ''}`, icon: CreditCard }] : []),
+    { id: 'support', label: 'Support', subtitle: 'Get help from our team', icon: Mail },
+    { id: 'account_stats', label: 'Account Status', subtitle: isVerified ? 'Verified' : 'Verification pending', icon: FileText },
+    ...(isOwnerOrAdmin ? [{ id: 'invoice', label: 'Invoice', subtitle: `Prefix: ${invoicePrefix}`, icon: FileText }] : []),
+  ];
+
+  const securityRows = [
+    { id: 'security', label: 'Security Settings', subtitle: 'Password & account protection', icon: Shield },
+  ];
+
+  const configurationRows = [
+    ...(userData.role === 'owner' || userData.role === 'subuser' ? [{ id: 'tax_rates', label: 'Tax Rates', subtitle: `GST ${salesGst}% on sales`, icon: FileText }] : []),
+    { id: 'printer', label: 'Printer', subtitle: 'Receipt format & auto-print', icon: Printer },
+    ...(isOwnerOrAdmin ? [{ id: 'sub_users', label: 'Sub-Users', subtitle: 'Team access & permissions', icon: Users }] : []),
+  ];
+
   return (
     <BillingLayout hideSidebar={true}>
       <div className="min-h-screen bg-gray-50 p-8 font-sans -m-4">
@@ -433,273 +590,80 @@ const Settings = () => {
           </div>
           <span className="text-sm font-medium">Back</span>
         </button>
+
+        {/* Header Banner */}
+        <div className="mb-8 rounded-2xl bg-gradient-to-br from-emerald-600 to-green-700 p-6 sm:p-8 text-white shadow-lg shadow-emerald-100 relative overflow-hidden">
+          <div className="absolute -top-16 -right-16 w-56 h-56 bg-white/10 rounded-full blur-3xl" />
+          <div className="absolute -bottom-10 left-1/3 w-40 h-40 bg-white/5 rounded-full blur-2xl" />
+          <div className="relative flex flex-col sm:flex-row sm:items-center justify-between gap-6">
+            <div className="flex items-center gap-4">
+              <div className="w-16 h-16 rounded-2xl bg-white/15 backdrop-blur-sm border border-white/20 flex items-center justify-center text-2xl font-black flex-shrink-0">
+                {(businessName || 'S').charAt(0).toUpperCase()}
+              </div>
+              <div>
+                <h1 className="text-2xl font-extrabold tracking-tight">{businessName || 'Your Business'}</h1>
+                <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                  <span className="text-xs font-semibold bg-white/15 px-2.5 py-1 rounded-full backdrop-blur-sm">
+                    {industryProfile.label}
+                  </span>
+                  <span className="text-xs font-semibold bg-white/15 px-2.5 py-1 rounded-full backdrop-blur-sm capitalize">
+                    {planLabel} Plan
+                  </span>
+                  {isTrial && (
+                    <span className="text-xs font-semibold bg-amber-400/90 text-amber-900 px-2.5 py-1 rounded-full">
+                      Trial
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+            <div className="text-left sm:text-right">
+              <p className="text-[11px] font-semibold text-white/70 uppercase tracking-widest">Signed in as</p>
+              <p className="text-sm font-bold">{userData?.firstName} {userData?.lastName}</p>
+              <p className="text-xs text-white/70 capitalize">{userData?.role}</p>
+            </div>
+          </div>
+        </div>
+
         {/* Organisation Settings Section */}
         <section className="mb-10">
           <h2 className="text-2xl font-semibold text-gray-900 mb-6">Organisation Settings</h2>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {/* Organisation Card */}
-            <div className="bg-white rounded-xl border border-gray-100 p-6 shadow-sm">
-              <div className="flex items-center gap-3 mb-5">
-                <div className="w-10 h-10 rounded-lg bg-emerald-100 flex items-center justify-center flex-shrink-0">
-                  <Building2 className="w-5 h-5 text-emerald-600" />
-                </div>
-                <h3 className="font-semibold text-gray-900">Organisation</h3>
-              </div>
-              <ul className="space-y-3">
-
-                <li>
-                  <button
-                    onClick={() => toggleSection('profile')}
-                    className={`flex items-center justify-between w-full text-sm transition-colors ${activeSection === 'profile'
-                      ? 'text-emerald-600 font-semibold'
-                      : 'text-gray-600 hover:text-gray-900'
-                      }`}
-                  >
-                    Profile
-                    <ChevronRight
-                      className={`w-4 h-4 transition-transform ${activeSection === 'profile' ? 'rotate-90 text-emerald-500' : ''
-                        }`}
-                    />
-                  </button>
-                </li>
-                {(userData.role === 'owner' || userData.role === 'TenantAdmin') && (
-                  <li>
-                    <button
-                      onClick={() => toggleSection('subscriptions')}
-                      className={`flex items-center justify-between w-full text-sm transition-colors ${activeSection === 'subscriptions'
-                        ? 'text-emerald-600 font-semibold'
-                        : 'text-gray-600 hover:text-gray-900'
-                        }`}
-                    >
-                      Subscriptions
-                      <ChevronRight
-                        className={`w-4 h-4 transition-transform ${activeSection === 'subscriptions' ? 'rotate-90 text-emerald-500' : ''
-                          }`}
-                      />
-                    </button>
-                  </li>
-                )}
-                <li>
-                  <button
-                    onClick={() => toggleSection('support')}
-                    className={`flex items-center justify-between w-full text-sm transition-colors ${activeSection === 'support'
-                      ? 'text-emerald-600 font-semibold'
-                      : 'text-gray-600 hover:text-gray-900'
-                      }`}
-                  >
-                    Support
-                    <ChevronRight
-                      className={`w-4 h-4 transition-transform ${activeSection === 'support' ? 'rotate-90 text-emerald-500' : ''
-                        }`}
-                    />
-                  </button>
-                </li>
-                <li>
-                  <button
-                    onClick={() => toggleSection('account_stats')}
-                    className={`flex items-center justify-between w-full text-sm transition-colors ${activeSection === 'account_stats'
-                      ? 'text-emerald-600 font-semibold'
-                      : 'text-gray-600 hover:text-gray-900'
-                      }`}
-                  >
-                    Account Status
-                    <ChevronRight
-                      className={`w-4 h-4 transition-transform ${activeSection === 'account_stats' ? 'rotate-90 text-emerald-500' : ''
-                        }`}
-                    />
-                  </button>
-                </li>
-                {(userData.role === 'owner' || userData.role === 'TenantAdmin') && (
-                  <li>
-                    <button
-                      onClick={() => toggleSection('invoice')}
-                      className={`flex items-center justify-between w-full text-sm transition-colors ${activeSection === 'invoice'
-                        ? 'text-emerald-600 font-semibold'
-                        : 'text-gray-600 hover:text-gray-900'
-                        }`}
-                    >
-                      Invoice
-                      <ChevronRight
-                        className={`w-4 h-4 transition-transform ${activeSection === 'invoice' ? 'rotate-90 text-emerald-500' : ''
-                          }`}
-                      />
-                    </button>
-                  </li>
-                )}
-              </ul>
-            </div>
-
-            {/* Users and Roles Card */}
-            {/* <div className="bg-white rounded-xl border border-gray-100 p-6 shadow-sm">
-            <div className="flex items-center gap-3 mb-5">
-              <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center flex-shrink-0">
-                <Users className="w-5 h-5 text-blue-600" />
-              </div>
-              <h3 className="font-semibold text-gray-900">Users and Roles</h3>
-            </div>
-            <ul className="space-y-3">
-              <li>
-                <a href="#" className="text-sm text-gray-600 hover:text-gray-900 transition-colors">
-                  Users
-                </a>
-              </li>
-              <li>
-                <a href="#" className="text-sm text-gray-600 hover:text-gray-900 transition-colors">
-                  Roles
-                </a>
-              </li>
-       
-              <li className="mt-3">
-                <div className="bg-rose-50 rounded-lg p-3 -mx-1">
-                  <div className="flex items-center gap-2 mb-2">
-                    <FileText className="w-4 h-4 text-rose-500" />
-                    <span className="text-sm font-medium text-rose-600">Taxes</span>
-                  </div>
-                  <a href="#" className="text-sm text-gray-600 hover:text-gray-900 transition-colors pl-6 block">
-                    Tax Details
-                  </a>
-                </div>
-              </li>
-            </ul>
-          </div> */}
-
-            {/* Security Card */}
-            <div className="bg-white rounded-xl border border-gray-100 p-6 shadow-sm">
-              <div className="flex items-center gap-3 mb-5">
-                <div className="w-10 h-10 rounded-lg bg-red-100 flex items-center justify-center flex-shrink-0">
-                  <Shield className="w-5 h-5 text-red-600" />
-                </div>
-                <h3 className="font-semibold text-gray-900">Security</h3>
-              </div>
-              <ul className="space-y-3">
-                <li>
-                  <button
-                    onClick={() => toggleSection('security')}
-                    className={`flex items-center justify-between w-full text-sm transition-colors ${activeSection === 'security'
-                      ? 'text-red-600 font-semibold'
-                      : 'text-gray-600 hover:text-gray-900'
-                      }`}
-                  >
-                    Security Settings
-                    <ChevronRight
-                      className={`w-4 h-4 transition-transform ${activeSection === 'security' ? 'rotate-90 text-red-500' : ''
-                        }`}
-                    />
-                  </button>
-                </li>
-              </ul>
-            </div>
-
-            {/* Configuration Card */}
-            <div className="bg-white rounded-xl border border-gray-100 p-6 shadow-sm">
-              <div className="flex items-center gap-3 mb-5">
-                <div className="w-10 h-10 rounded-lg bg-orange-100 flex items-center justify-center flex-shrink-0">
-                  <Settings2 className="w-5 h-5 text-orange-600" />
-                </div>
-                <h3 className="font-semibold text-gray-900">Configuration</h3>
-              </div>
-              <ul className="space-y-3">
-                {(userData.role === 'owner' || userData.role === 'subuser') && (
-                  <li>
-                    <button
-                      onClick={() => toggleSection('tax_rates')}
-                      className={`flex items-center justify-between w-full text-sm transition-colors ${activeSection === 'tax_rates'
-                        ? 'text-orange-600 font-semibold'
-                        : 'text-gray-600 hover:text-gray-900'
-                        }`}
-                    >
-                      Tax Rates
-                      <ChevronRight
-                        className={`w-4 h-4 transition-transform ${activeSection === 'tax_rates' ? 'rotate-90 text-orange-500' : ''
-                          }`}
-                      />
-                    </button>
-                  </li>
-                )}
-                
-                  <>
-                    <li>
-                      <button
-                        onClick={() => toggleSection('printer')}
-                        className={`flex items-center justify-between w-full text-sm transition-colors ${activeSection === 'printer'
-                          ? 'text-orange-600 font-semibold'
-                          : 'text-gray-600 hover:text-gray-900'
-                          }`}
-                      >
-                        Printer
-                        <ChevronRight
-                          className={`w-4 h-4 transition-transform ${activeSection === 'printer' ? 'rotate-90 text-orange-500' : ''
-                            }`}
-                        />
-                      </button>
-                    </li>
-                    {(userData.role === 'owner' || userData.role === 'TenantAdmin') && (
-                    <li>
-                      <button
-                        onClick={() => toggleSection('sub_users')}
-                        className={`flex items-center justify-between w-full text-sm transition-colors ${activeSection === 'sub_users'
-                          ? 'text-orange-600 font-semibold'
-                          : 'text-gray-600 hover:text-gray-900'
-                          }`}
-                      >
-                        Sub-Users
-                        <ChevronRight
-                          className={`w-4 h-4 transition-transform ${activeSection === 'sub_users' ? 'rotate-90 text-orange-500' : ''
-                            }`}
-                        />
-                      </button>
-                    </li>
-                     )}
-                  </>
-               
-              </ul>
-            </div>
-
-            {/* Setup & Configurations Card */}
-            {/* <div className="bg-white rounded-xl border border-gray-100 p-6 shadow-sm">
-            <div className="flex items-center gap-3 mb-5">
-              <div className="w-10 h-10 rounded-lg bg-orange-100 flex items-center justify-center flex-shrink-0">
-                <Settings2 className="w-5 h-5 text-orange-600" />
-              </div>
-              <h3 className="font-semibold text-gray-900">Setup & Configurations</h3>
-            </div>
-            <ul className="space-y-3">
-              {['Pay Schedule', 'Statutory Components', 'Salary Components', 'Employee Portal', 'Claims and Declarations'].map((item) => (
-                <li key={item}>
-                  <a href="#" className="text-sm text-gray-600 hover:text-gray-900 transition-colors">
-                    {item}
-                  </a>
-                </li>
-              ))}
-            </ul>
-          </div> */}
-
-            {/* Customisations Card */}
-            {/* <div className="bg-white rounded-xl border border-gray-100 p-6 shadow-sm">
-            <div className="flex items-center gap-3 mb-5">
-              <div className="w-10 h-10 rounded-lg bg-teal-100 flex items-center justify-center flex-shrink-0">
-                <Palette className="w-5 h-5 text-teal-600" />
-              </div>
-              <h3 className="font-semibold text-gray-900">Customisations</h3>
-            </div>
-            <ul className="space-y-3">
-              {['Email Templates', 'Sender Email Preferences', 'Salary Templates', 'PDF Templates', 'Reporting Tags'].map((item) => (
-                <li key={item}>
-                  <a href="#" className="text-sm text-gray-600 hover:text-gray-900 transition-colors">
-                    {item}
-                  </a>
-                </li>
-              ))}
-            </ul>
-          </div> */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <SettingsCard
+              accent="emerald"
+              icon={Building2}
+              title="Organisation"
+              description="Profile, plan & billing details"
+              rows={organisationRows}
+              activeSection={activeSection}
+              toggleSection={toggleSection}
+            />
+            <SettingsCard
+              accent="red"
+              icon={Shield}
+              title="Security"
+              description="Keep your account protected"
+              rows={securityRows}
+              activeSection={activeSection}
+              toggleSection={toggleSection}
+            />
+            <SettingsCard
+              accent="orange"
+              icon={Settings2}
+              title="Configuration"
+              description="Tax, printing & team access"
+              rows={configurationRows}
+              activeSection={activeSection}
+              toggleSection={toggleSection}
+            />
           </div>
         </section>
 
         {/* ── Inline Section Panel ── */}
         {activeSection === 'profile' && (
-          <section className="mb-10 animate-fadeIn">
-            <div className="bg-white rounded-xl border border-emerald-100 shadow-sm p-6">
+          <SettingsModal maxWidth="max-w-3xl">
+            <div className="p-6">
               {/* Header */}
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-3">
@@ -781,7 +745,25 @@ const Settings = () => {
                       {industryChosen ? (
                         <div>
                           <span className="text-sm text-gray-800 font-medium">{industryProfile.label}</span>
-                          <p className="text-[11px] text-gray-400 mt-0.5">Contact support to change your industry.</p>
+                          {userData.role !== 'owner' ? (
+                            <p className="text-[11px] text-gray-400 mt-0.5">Only the account owner can request an industry change.</p>
+                          ) : pendingIndustryRequest ? (
+                            <p className="mt-1 inline-flex items-center gap-1.5 text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
+                              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                              Change to {industryLabelFor(pendingIndustryRequest.requestedIndustry)} requested · Pending
+                            </p>
+                          ) : (
+                            <p className="text-[11px] text-gray-400 mt-0.5">
+                              Need a different industry?{' '}
+                              <button
+                                type="button"
+                                onClick={() => setShowIndustryRequest(true)}
+                                className="font-semibold text-emerald-600 hover:text-emerald-700 underline underline-offset-2"
+                              >
+                                Contact support
+                              </button>
+                            </p>
+                          )}
                         </div>
                       ) : (
                         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -874,13 +856,13 @@ const Settings = () => {
                 </div>
               </div>
             </div>
-          </section>
+          </SettingsModal>
         )}
 
         {/* ── Subscriptions Inline Section ── */}
         {activeSection === 'subscriptions' && (
-          <section className="mb-10 animate-fadeIn">
-            <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 md:p-6 hover:shadow-sm transition-shadow">
+          <SettingsModal maxWidth="max-w-md">
+            <div className="p-5 md:p-6">
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-2.5">
                   <div className="w-10 h-10 rounded-lg bg-emerald-50 flex items-center justify-center">
@@ -929,13 +911,13 @@ const Settings = () => {
                 Upgrade Plan
               </button>
             </div>
-          </section>
+          </SettingsModal>
         )}
 
         {/* ── Security Inline Section ── */}
         {activeSection === 'security' && (
-          <section className="mb-10 animate-fadeIn">
-            <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 md:p-6 hover:shadow-sm transition-shadow">
+          <SettingsModal maxWidth="max-w-md">
+            <div className="p-5 md:p-6">
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-2.5">
                   <div className="w-10 h-10 rounded-lg bg-red-50 flex items-center justify-center">
@@ -966,13 +948,13 @@ const Settings = () => {
                 </button>
               </div>
             </div>
-          </section>
+          </SettingsModal>
         )}
 
         {/* ── Support Inline Section ── */}
         {activeSection === 'support' && (
-          <section className="mb-10 animate-fadeIn">
-            <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 md:p-6 hover:shadow-sm transition-shadow">
+          <SettingsModal maxWidth="max-w-2xl">
+            <div className="p-5 md:p-6">
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-2.5">
                   <div className="w-10 h-10 rounded-lg bg-green-50 flex items-center justify-center">
@@ -1049,13 +1031,13 @@ const Settings = () => {
                 </div>
               </form>
             </div>
-          </section>
+          </SettingsModal>
         )}
 
         {/* ── Account Status Inline Section ── */}
         {activeSection === 'account_stats' && (
-          <section className="mb-10 animate-fadeIn">
-            <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 md:p-6 hover:shadow-sm transition-shadow">
+          <SettingsModal maxWidth="max-w-md">
+            <div className="p-5 md:p-6">
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-2.5">
                   <div className="w-10 h-10 rounded-lg bg-emerald-50 flex items-center justify-center">
@@ -1108,13 +1090,13 @@ const Settings = () => {
                 ))}
               </div>
             </div>
-          </section>
+          </SettingsModal>
         )}
 
         {/* ── Sub-Users Inline Section ── */}
         {activeSection === 'sub_users' && (
-          <section className="mb-10 animate-fadeIn">
-            <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6 overflow-hidden">
+          <SettingsModal maxWidth="max-w-5xl">
+            <div className="p-6">
               <div className="flex items-center justify-between mb-8">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-lg bg-orange-50 flex items-center justify-center">
@@ -1325,13 +1307,13 @@ const Settings = () => {
                 </div>
               </div>
             </div>
-          </section>
+          </SettingsModal>
         )}
 
         {/* ── Invoice Settings Inline Section ── */}
         {activeSection === 'invoice' && (
-          <section className="mb-10 animate-fadeIn">
-            <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 md:p-6 hover:shadow-sm transition-shadow">
+          <SettingsModal maxWidth="max-w-lg">
+            <div className="p-5 md:p-6">
               <div className="flex justify-between items-center mb-5">
                 <div className="flex items-center gap-2.5">
                   <div className="w-8 h-8 rounded-lg bg-cyan-50 flex items-center justify-center">
@@ -1426,13 +1408,13 @@ const Settings = () => {
                 </div>
               </div>
             </div>
-          </section>
+          </SettingsModal>
         )}
 
         {/* ── Tax Rates Inline Section ── */}
         {activeSection === 'tax_rates' && (
-          <section className="mb-10 animate-fadeIn">
-            <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 md:p-6 hover:shadow-sm transition-shadow">
+          <SettingsModal maxWidth="max-w-3xl">
+            <div className="p-5 md:p-6">
               <div className="flex justify-between items-center mb-5">
                 <div className="flex items-center gap-2.5">
                   <div className="w-8 h-8 rounded-lg bg-orange-50 flex items-center justify-center">
@@ -1634,13 +1616,13 @@ const Settings = () => {
                 </div>
               </div>
             </div>
-          </section >
+          </SettingsModal>
         )}
 
         {/* ── Printer Settings Inline Section ── */}
         {activeSection === 'printer' && (
-          <section className="mb-10 animate-fadeIn">
-            <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 md:p-6 hover:shadow-sm transition-shadow">
+          <SettingsModal maxWidth="max-w-2xl">
+            <div className="p-5 md:p-6">
               <div className="flex justify-between items-center mb-5">
                 <div className="flex items-center gap-2.5">
                   <div className="w-8 h-8 rounded-lg bg-orange-50 flex items-center justify-center">
@@ -1903,7 +1885,100 @@ const Settings = () => {
                 )}
               </div>
             </div>
-          </section>
+          </SettingsModal>
+        )}
+
+        {/* ── Industry Change Request (opens above the Profile popup) ── */}
+        {showIndustryRequest && (
+          <div className="fixed inset-0 bg-black/60 flex justify-center items-center p-4 z-[60] animate-fadeIn">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+              <form onSubmit={handleIndustryRequestSubmit} className="p-6">
+                <div className="flex items-start justify-between mb-5">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-emerald-50 flex items-center justify-center">
+                      <Mail className="w-5 h-5 text-emerald-600" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-gray-900">Request an Industry Change</h3>
+                      <p className="text-xs text-gray-400">Sent to the SwordNex team for approval</p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowIndustryRequest(false)}
+                    className="text-gray-400 hover:text-gray-600 transition-colors"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="flex flex-col">
+                    <label className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-1">Current Industry</label>
+                    <div className="h-9 flex items-center px-3 text-sm rounded-lg bg-gray-50 border border-gray-100 text-gray-700 font-medium">
+                      {industryProfile.label}
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col">
+                    <label className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-1">
+                      Switch To <span className="text-red-400">*</span>
+                    </label>
+                    <select
+                      required
+                      className="w-full h-9 px-3 text-sm text-gray-900 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-300 focus:border-emerald-400 transition-all"
+                      value={industryRequestForm.requestedIndustry}
+                      onChange={(e) => setIndustryRequestForm((f) => ({ ...f, requestedIndustry: e.target.value }))}
+                    >
+                      <option value="">Select the industry you want…</option>
+                      {getSelectableProfiles()
+                        .filter((p) => p.key !== industryProfile.key)
+                        .map((p) => (
+                          <option key={p.key} value={p.key}>{p.label}</option>
+                        ))}
+                    </select>
+                  </div>
+
+                  <div className="flex flex-col">
+                    <label className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-1">
+                      Message <span className="text-red-400">*</span>
+                    </label>
+                    <textarea
+                      required
+                      rows={4}
+                      maxLength={2000}
+                      className="w-full p-3 text-sm text-gray-900 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-300 focus:border-emerald-400 transition-all resize-none"
+                      placeholder="Tell us why you'd like to change your industry…"
+                      value={industryRequestForm.message}
+                      onChange={(e) => setIndustryRequestForm((f) => ({ ...f, message: e.target.value }))}
+                    />
+                  </div>
+
+                  <p className="text-[11px] text-gray-400 leading-relaxed bg-amber-50/60 border border-amber-100 rounded-lg p-3">
+                    Once approved, your sidebar and screens switch to the new industry. Existing records stay in your account.
+                    You may need to sign in again to see the change.
+                  </p>
+                </div>
+
+                <div className="flex justify-end gap-2 mt-6">
+                  <button
+                    type="button"
+                    onClick={() => setShowIndustryRequest(false)}
+                    className="h-10 px-5 text-xs font-medium text-gray-500 hover:text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={submittingIndustryRequest}
+                    className="h-10 px-6 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg shadow-sm transition-all active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    {submittingIndustryRequest ? 'Sending...' : 'Send Request'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
         )}
       </div>
     </BillingLayout>

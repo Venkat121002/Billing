@@ -12,6 +12,7 @@ const Client = require('./Client');
 const RepairTicket = require('./RepairTicket');
 const Pet = require('./Pet');
 const Milestone = require('./Milestone');
+const SupportRequest = require('./SupportRequest');
 const Salesman = require('./Salesman');
 const InventoryReturn = require('./InventoryReturn');
 const SubscriptionDetail = require('./SubscriptionDetail');
@@ -45,6 +46,7 @@ const modelMap = {
     'repairtickets': RepairTicket,
     'pets': Pet,
     'milestones': Milestone,
+    'supportrequests': SupportRequest,
     'salesmen': Salesman,
     'inventory_returns': InventoryReturn,
     'subscriptiondetails': SubscriptionDetail
@@ -69,6 +71,7 @@ module.exports = {
     RepairTicket,
     Pet,
     Milestone,
+    SupportRequest,
     Salesman,
     InventoryReturn,
     SubscriptionDetail,

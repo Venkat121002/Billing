@@ -137,7 +137,7 @@ exports.createSubUser = async (req, res) => {
         }
 
         // 3. Create User in Firebase Auth (Tenant context)
-        const tenantAuth = admin.auth().tenantManager().authForTenant(tenantId);
+        const tenantAuth = admin.auth();
 
         let userRecord;
         try {
@@ -319,7 +319,7 @@ exports.updateSubUser = async (req, res) => {
         // 1. Update Firebase Auth if email or password changed
         if (email || password) {
             try {
-                const tenantAuth = admin.auth().tenantManager().authForTenant(tenantId);
+                const tenantAuth = admin.auth();
                 const authUpdates = {};
                 if (email) authUpdates.email = email;
                 if (password) authUpdates.password = password;
@@ -388,7 +388,7 @@ exports.deleteSubUser = async (req, res) => {
 
         // 1. Delete from Firebase Auth
         try {
-            const tenantAuth = admin.auth().tenantManager().authForTenant(tenantId);
+            const tenantAuth = admin.auth();
             await tenantAuth.deleteUser(subUserId);
         } catch (authError) {
             console.error("Firebase Auth Delete Error (proceeding with Firestore delete):", authError.message);

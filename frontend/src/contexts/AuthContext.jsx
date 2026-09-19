@@ -211,6 +211,25 @@ export function AuthProvider({ children }) {
     }
   }
 
+  // SUPPORT REQUESTS (general messages + industry-change requests → super admin inbox)
+  async function createSupportRequest(data) {
+    try {
+      const res = await api.post("support-requests", data);
+      return res.data;
+    } catch (err) {
+      throw err.response ? err.response.data : err;
+    }
+  }
+
+  async function getMySupportRequests() {
+    try {
+      const res = await api.get("support-requests/mine");
+      return res.data;
+    } catch (err) {
+      throw err.response ? err.response.data : err;
+    }
+  }
+
   // CREATE SUB-USER (For Settings Page)
   async function createSubUser(data) {
     try {
@@ -303,6 +322,8 @@ export function AuthProvider({ children }) {
     deleteSubUser,
     updateProfile,
     selectIndustry,
+    createSupportRequest,
+    getMySupportRequests,
     recordPayment,
     deleteAccount,
     logout,

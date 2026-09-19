@@ -54,7 +54,7 @@ console.log(`🗄️  Database Mode: ${DB_TYPE.toUpperCase()}`);
 app.use(
     cors({
         origin: true,
-        methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
+        methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']
     })
 );
 
@@ -284,6 +284,28 @@ app.use(
 app.use(
     '/v2/salesman',
     require('./routes/firestoreSalesmanRoutes')
+);
+
+// Support Requests (tenant -> super admin messages / industry change requests)
+app.use(
+    '/api/v2/support-requests',
+    require('./routes/supportRequestRoutes')
+);
+
+app.use(
+    '/v2/support-requests',
+    require('./routes/supportRequestRoutes')
+);
+
+// Super Admin (platform-level, cross-tenant)
+app.use(
+    '/api/v2/superadmin',
+    require('./routes/superAdminRoutes')
+);
+
+app.use(
+    '/v2/superadmin',
+    require('./routes/superAdminRoutes')
 );
 
 // ---------------------------------------------------------

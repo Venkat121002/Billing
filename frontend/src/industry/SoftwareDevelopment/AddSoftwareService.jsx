@@ -22,8 +22,8 @@ import API_URL from "../../config/api";
 
 const InputField = ({ label, icon: Icon, value, onChange, type = "text", placeholder, name, required = false, className = "" }) => (
   <div className="flex flex-col gap-1.5">
-    <label className="flex items-center gap-2 text-sm font-semibold text-blue-800">
-      {Icon && <Icon size={15} className="text-blue-500" />}
+    <label className="flex items-center gap-2 text-sm font-semibold text-green-800">
+      {Icon && <Icon size={15} className="text-green-500" />}
       {label}
       {required && <span className="text-red-400 text-xs">*</span>}
     </label>
@@ -34,9 +34,9 @@ const InputField = ({ label, icon: Icon, value, onChange, type = "text", placeho
       onChange={onChange}
       placeholder={placeholder || label}
       required={required}
-      className={`px-4 py-3 rounded-xl border border-blue-100 bg-white text-gray-700 placeholder-gray-400 
-        focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-blue-400 
-        transition-all duration-200 hover:border-blue-300 ${className}`}
+      className={`px-4 py-3 rounded-xl border border-green-100 bg-white text-gray-700 placeholder-gray-400 
+        focus:outline-none focus:ring-2 focus:ring-green-300 focus:border-green-400 
+        transition-all duration-200 hover:border-green-300 ${className}`}
     />
   </div>
 );
@@ -164,23 +164,23 @@ const AddSoftwareService = () => {
 
   return (
     <BillingLayout>
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-blue-50">
+      <div className="min-h-screen bg-gradient-to-br from-green-50 via-white to-green-50">
         {/* HEADER */}
-        <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-8 py-6 shadow-lg">
+        <div className="bg-gradient-to-r from-green-600 to-emerald-600 px-8 py-6 shadow-lg">
           <div className="flex items-center justify-between max-w-5xl mx-auto">
             <div>
               <h1 className="text-2xl font-bold text-white flex items-center gap-3">
-                <Code size={26} className="text-blue-100" />
+                <Code size={26} className="text-green-100" />
                 {editingProductId ? "Edit Software Service" : "Add New Service"}
               </h1>
-              <p className="text-blue-100 text-sm mt-1 ml-10">
+              <p className="text-green-100 text-sm mt-1 ml-10">
                 Manage service details, pricing, and resources
               </p>
             </div>
 
             <button
               onClick={() => navigate("/softwaredevelopmentinventory")}
-              className="flex items-center gap-2 bg-white/90 backdrop-blur px-5 py-2.5 rounded-xl text-blue-700 font-medium hover:bg-white hover:shadow-md transition-all duration-200"
+              className="flex items-center gap-2 bg-white/90 backdrop-blur px-5 py-2.5 rounded-xl text-green-700 font-medium hover:bg-white hover:shadow-md transition-all duration-200"
             >
               <ArrowLeft size={16} />
               Back
@@ -192,23 +192,23 @@ const AddSoftwareService = () => {
         <div className="px-8 py-10 max-w-5xl mx-auto">
           <form
             onSubmit={handleSubmit}
-            className="bg-white p-10 rounded-3xl shadow-xl border border-blue-100 space-y-8"
+            className="bg-white p-10 rounded-3xl shadow-xl border border-green-100 space-y-8"
           >
             {/* Service Basic Info */}
             <div>
-              <h3 className="flex items-center gap-2 text-blue-700 font-bold text-lg mb-5 pb-2 border-b border-blue-100">
-                <Layers size={20} className="text-blue-500" />
+              <h3 className="flex items-center gap-2 text-green-700 font-bold text-lg mb-5 pb-2 border-b border-green-100">
+                <Layers size={20} className="text-green-500" />
                 Service Details
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 <InputField label="Service Name" icon={Code} name="name" value={formData.name} onChange={handleChange} placeholder="e.g. Web Development" required />
                 <InputField label="Service Code (SKU)" icon={Hash} name="sku" value={formData.sku} onChange={handleChange} placeholder="e.g. SRV-001" />
                 <div className="flex flex-col gap-1.5">
-                    <label className="flex items-center gap-2 text-sm font-semibold text-blue-800">
-                        <Tag size={15} className="text-blue-500" />
+                    <label className="flex items-center gap-2 text-sm font-semibold text-green-800">
+                        <Tag size={15} className="text-green-500" />
                         Category
                     </label>
-                    <select name="category" value={formData.category} onChange={handleChange} className="px-4 py-3 rounded-xl border border-blue-100 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-blue-400 transition-all duration-200 hover:border-blue-300">
+                    <select name="category" value={formData.category} onChange={handleChange} className="px-4 py-3 rounded-xl border border-green-100 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-green-300 focus:border-green-400 transition-all duration-200 hover:border-green-300">
                         <option value="">Select Category</option>
                         <option value="Web Development">Web Development</option>
                         <option value="Mobile App">Mobile App</option>
@@ -225,8 +225,8 @@ const AddSoftwareService = () => {
 
             {/* Resource & Pricing */}
             <div>
-              <h3 className="flex items-center gap-2 text-blue-700 font-bold text-lg mb-5 pb-2 border-b border-blue-100">
-                <DollarSign size={20} className="text-blue-500" />
+              <h3 className="flex items-center gap-2 text-green-700 font-bold text-lg mb-5 pb-2 border-b border-green-100">
+                <DollarSign size={20} className="text-green-500" />
                 Resource & Pricing
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -241,20 +241,20 @@ const AddSoftwareService = () => {
 
             {/* Description */}
             <div>
-                <label className="flex items-center gap-2 text-sm font-semibold text-blue-800 mb-2">
-                    <FileText size={15} className="text-blue-500" />
+                <label className="flex items-center gap-2 text-sm font-semibold text-green-800 mb-2">
+                    <FileText size={15} className="text-green-500" />
                     Description
                 </label>
-                <textarea name="description" value={formData.description} onChange={handleChange} className="w-full px-4 py-3 rounded-xl border border-blue-100 bg-white text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-blue-400 transition-all duration-200 hover:border-blue-300 min-h-[100px]" placeholder="Enter detailed service description..." />
+                <textarea name="description" value={formData.description} onChange={handleChange} className="w-full px-4 py-3 rounded-xl border border-green-100 bg-white text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-300 focus:border-green-400 transition-all duration-200 hover:border-green-300 min-h-[100px]" placeholder="Enter detailed service description..." />
             </div>
 
             {/* Actions */}
-            <div className="flex justify-end gap-4 pt-4 border-t border-blue-100">
+            <div className="flex justify-end gap-4 pt-4 border-t border-green-100">
               <button type="button" onClick={() => navigate("/softwaredevelopmentinventory")} className="flex items-center gap-2 px-6 py-3 bg-gray-100 text-gray-600 rounded-xl hover:bg-gray-200 transition-all duration-200 font-medium">
                 <X size={16} /> Cancel
               </button>
 
-              <button type="submit" disabled={isSubmitting} className="flex items-center gap-2 px-8 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl hover:from-blue-700 hover:to-indigo-700 transition-all duration-200 font-medium shadow-md hover:shadow-lg disabled:opacity-60 disabled:cursor-not-allowed">
+              <button type="submit" disabled={isSubmitting} className="flex items-center gap-2 px-8 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-xl hover:from-green-700 hover:to-emerald-700 transition-all duration-200 font-medium shadow-md hover:shadow-lg disabled:opacity-60 disabled:cursor-not-allowed">
                 <Save size={16} /> {isSubmitting ? "Saving..." : editingProductId ? "Update Service" : "Save Service"}
               </button>
             </div>

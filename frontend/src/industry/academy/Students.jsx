@@ -145,7 +145,7 @@ const Students = () => {
 
   return (
     <BillingLayout>
-      <div className="min-h-screen bg-gradient-to-br from-purple-50/30 via-white to-indigo-50/20 -m-4 p-4 sm:p-6 lg:p-8">
+      <div className="min-h-screen bg-gradient-to-br from-green-50/30 via-white to-emerald-50/20 -m-4 p-4 sm:p-6 lg:p-8">
         {/* Header */}
         <div className="mb-8">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -163,7 +163,7 @@ const Students = () => {
                 setStudentFormData({ name: "", phone: "", location: "", gstin: "" });
                 setIsModalOpen(true);
               }}
-              className="inline-flex items-center gap-2 px-6 py-3 bg-purple-600 text-white rounded-xl shadow-lg shadow-purple-100 hover:shadow-xl hover:bg-purple-700 transition-all font-semibold text-sm"
+              className="inline-flex items-center gap-2 px-6 py-3 bg-green-600 text-white rounded-xl shadow-lg shadow-green-100 hover:shadow-xl hover:bg-green-700 transition-all font-semibold text-sm"
             >
               <PlusCircle className="w-4 h-4" />
               Add Student
@@ -172,7 +172,7 @@ const Students = () => {
         </div>
 
         {/* Search */}
-        <div className="bg-white rounded-2xl border border-purple-100 shadow-sm p-5 mb-6">
+        <div className="bg-white rounded-2xl border border-green-100 shadow-sm p-5 mb-6">
           <div className="relative flex-1">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
             <input
@@ -180,19 +180,19 @@ const Students = () => {
               placeholder="Search by name, phone, location..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-12 pr-4 py-3 bg-gray-50 border border-purple-200 rounded-xl focus:ring-2 focus:ring-purple-400 focus:border-purple-400 focus:outline-none text-sm font-medium text-gray-900 placeholder:text-gray-400 transition-all"
+              className="w-full pl-12 pr-4 py-3 bg-gray-50 border border-green-200 rounded-xl focus:ring-2 focus:ring-green-400 focus:border-green-400 focus:outline-none text-sm font-medium text-gray-900 placeholder:text-gray-400 transition-all"
             />
           </div>
         </div>
 
         {/* Table */}
-        <div className="bg-white rounded-2xl border border-purple-100 shadow-sm overflow-hidden">
+        <div className="bg-white rounded-2xl border border-green-100 shadow-sm overflow-hidden">
           {loading ? (
             <div className="text-center py-20 text-gray-500">Loading students...</div>
           ) : (
             <div className="overflow-x-auto">
               <table className="min-w-full">
-                <thead className="bg-gradient-to-r from-purple-50 to-indigo-50 border-b border-purple-100">
+                <thead className="bg-gradient-to-r from-green-50 to-emerald-50 border-b border-green-100">
                   <tr>
                     <th className="py-4 px-5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">#</th>
                     <th className="py-4 px-5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Student Name</th>
@@ -205,15 +205,15 @@ const Students = () => {
                 <tbody>
                   {filteredStudents.length > 0 ? (
                     filteredStudents.map((student, i) => (
-                      <tr key={student.id} className="hover:bg-purple-50/50 transition-colors border-b border-gray-50">
+                      <tr key={student.id} className="hover:bg-green-50/50 transition-colors border-b border-gray-50">
                         <td className={tdClass}>
-                          <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-purple-50 text-purple-700 text-xs font-bold">
+                          <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-green-50 text-green-700 text-xs font-bold">
                             {i + 1}
                           </span>
                         </td>
                         <td className={`${tdClass} font-semibold text-gray-900`}>
                           <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-400 to-indigo-500 flex items-center justify-center text-white text-xs font-bold">
+                            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-green-400 to-emerald-500 flex items-center justify-center text-white text-xs font-bold">
                               {(student.name || "?")[0].toUpperCase()}
                             </div>
                             {student.name}
@@ -227,7 +227,7 @@ const Students = () => {
                             <button title="View" onClick={() => setViewStudent(student)} className={`${iconBtnClass} text-gray-500 hover:bg-gray-100`}>
                               <Search size={16} />
                             </button>
-                            <button title="Edit" onClick={() => handleEditStudent(student)} className={`${iconBtnClass} text-blue-600 hover:bg-blue-50`}>
+                            <button title="Edit" onClick={() => handleEditStudent(student)} className={`${iconBtnClass} text-green-600 hover:bg-green-50`}>
                               <FileText size={16} />
                             </button>
                             <button title="Delete" onClick={() => handleDeleteStudent(student.id)} className={`${iconBtnClass} text-red-600 hover:bg-red-50`}>
@@ -261,18 +261,18 @@ const Students = () => {
                 <X size={24} />
               </button>
 
-              <div className="bg-gradient-to-br from-purple-50 to-indigo-50 p-8 border-b border-purple-100">
+              <div className="bg-gradient-to-br from-green-50 to-emerald-50 p-8 border-b border-green-100">
                 <div className="flex items-center gap-4 mb-4">
-                  <div className="w-16 h-16 rounded-2xl bg-white shadow-sm flex items-center justify-center text-purple-600 border border-purple-100 font-bold text-2xl uppercase">
+                  <div className="w-16 h-16 rounded-2xl bg-white shadow-sm flex items-center justify-center text-green-600 border border-green-100 font-bold text-2xl uppercase">
                     {(viewStudent.name || "?")[0]}
                   </div>
                   <div>
                     <h2 className="text-2xl font-bold text-gray-900">{viewStudent.name}</h2>
-                    <p className="text-purple-700 font-medium">{viewStudent.phone || "—"}</p>
+                    <p className="text-green-700 font-medium">{viewStudent.phone || "—"}</p>
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <span className="px-3 py-1 rounded-full bg-white/80 text-purple-800 text-[10px] font-bold uppercase tracking-wider border border-purple-100">
+                  <span className="px-3 py-1 rounded-full bg-white/80 text-green-800 text-[10px] font-bold uppercase tracking-wider border border-green-100">
                     ID: {viewStudent.id?.slice(-6).toUpperCase()}
                   </span>
                 </div>
@@ -283,7 +283,7 @@ const Students = () => {
                   <div className="space-y-1">
                     <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Location</p>
                     <p className="text-gray-700 font-medium flex items-center gap-2">
-                      <MapPin size={14} className="text-purple-500" />
+                      <MapPin size={14} className="text-green-500" />
                       {viewStudent.location || "—"}
                     </p>
                   </div>
@@ -318,7 +318,7 @@ const Students = () => {
               </button>
 
               <div className="flex items-center gap-4 mb-8">
-                <div className="w-14 h-14 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center border border-purple-100 shadow-sm">
+                <div className="w-14 h-14 rounded-2xl bg-green-50 text-green-600 flex items-center justify-center border border-green-100 shadow-sm">
                   {editingStudentId ? <FileText size={28} /> : <PlusCircle size={28} />}
                 </div>
                 <div>
@@ -333,43 +333,43 @@ const Students = () => {
 
               <form onSubmit={handleSaveStudent} className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="flex flex-col gap-1.5">
-                  <label className="flex items-center gap-2 text-[10px] font-bold text-purple-800 uppercase tracking-widest">
-                    <Users size={14} className="text-purple-500" />
+                  <label className="flex items-center gap-2 text-[10px] font-bold text-green-800 uppercase tracking-widest">
+                    <Users size={14} className="text-green-500" />
                     Student Name
                     <span className="text-red-400 text-xs">*</span>
                   </label>
-                  <input type="text" required value={studentFormData.name} onChange={(e) => setStudentFormData({ ...studentFormData, name: e.target.value })} className="px-4 py-3.5 rounded-2xl border border-purple-50 bg-gray-50/50 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 transition-all font-medium text-gray-900" placeholder="Enter student name" />
+                  <input type="text" required value={studentFormData.name} onChange={(e) => setStudentFormData({ ...studentFormData, name: e.target.value })} className="px-4 py-3.5 rounded-2xl border border-green-50 bg-gray-50/50 focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500 transition-all font-medium text-gray-900" placeholder="Enter student name" />
                 </div>
 
                 <div className="flex flex-col gap-1.5">
-                  <label className="flex items-center gap-2 text-[10px] font-bold text-purple-800 uppercase tracking-widest">
-                    <Phone size={14} className="text-purple-500" />
+                  <label className="flex items-center gap-2 text-[10px] font-bold text-green-800 uppercase tracking-widest">
+                    <Phone size={14} className="text-green-500" />
                     Phone Number
                   </label>
-                  <input type="number" value={studentFormData.phone} onChange={(e) => setStudentFormData({ ...studentFormData, phone: e.target.value.slice(0, 10) })} className="px-4 py-3.5 rounded-2xl border border-purple-50 bg-gray-50/50 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 transition-all font-medium text-gray-900" placeholder="10 digit phone" />
+                  <input type="number" value={studentFormData.phone} onChange={(e) => setStudentFormData({ ...studentFormData, phone: e.target.value.slice(0, 10) })} className="px-4 py-3.5 rounded-2xl border border-green-50 bg-gray-50/50 focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500 transition-all font-medium text-gray-900" placeholder="10 digit phone" />
                 </div>
 
                 <div className="flex flex-col gap-1.5">
-                  <label className="flex items-center gap-2 text-[10px] font-bold text-purple-800 uppercase tracking-widest">
-                    <Hash size={14} className="text-purple-500" />
+                  <label className="flex items-center gap-2 text-[10px] font-bold text-green-800 uppercase tracking-widest">
+                    <Hash size={14} className="text-green-500" />
                     GST Number
                   </label>
-                  <input type="text" value={studentFormData.gstin} onChange={(e) => setStudentFormData({ ...studentFormData, gstin: e.target.value.toUpperCase() })} className="px-4 py-3.5 rounded-2xl border border-purple-50 bg-gray-50/50 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 transition-all font-mono font-medium text-gray-900 uppercase" placeholder="22AAAAA0000A1Z5" />
+                  <input type="text" value={studentFormData.gstin} onChange={(e) => setStudentFormData({ ...studentFormData, gstin: e.target.value.toUpperCase() })} className="px-4 py-3.5 rounded-2xl border border-green-50 bg-gray-50/50 focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500 transition-all font-mono font-medium text-gray-900 uppercase" placeholder="22AAAAA0000A1Z5" />
                 </div>
 
                 <div className="flex flex-col gap-1.5 md:col-span-2">
-                  <label className="flex items-center gap-2 text-[10px] font-bold text-purple-800 uppercase tracking-widest">
-                    <MapPin size={14} className="text-purple-500" />
+                  <label className="flex items-center gap-2 text-[10px] font-bold text-green-800 uppercase tracking-widest">
+                    <MapPin size={14} className="text-green-500" />
                     Location
                   </label>
-                  <input type="text" value={studentFormData.location} onChange={(e) => setStudentFormData({ ...studentFormData, location: e.target.value })} className="px-4 py-3.5 rounded-2xl border border-purple-50 bg-gray-50/50 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 transition-all font-medium text-gray-900" placeholder="City / Area" />
+                  <input type="text" value={studentFormData.location} onChange={(e) => setStudentFormData({ ...studentFormData, location: e.target.value })} className="px-4 py-3.5 rounded-2xl border border-green-50 bg-gray-50/50 focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500 transition-all font-medium text-gray-900" placeholder="City / Area" />
                 </div>
 
                 <div className="flex justify-end gap-3 md:col-span-2 pt-6 border-t border-gray-100 mt-2">
                   <button type="button" onClick={() => setIsModalOpen(false)} className="px-8 py-3 rounded-2xl border border-gray-200 text-gray-600 hover:bg-gray-50 transition-all font-bold text-sm uppercase tracking-wider">
                     Cancel
                   </button>
-                  <button type="submit" className="px-8 py-3 rounded-2xl bg-purple-600 text-white hover:bg-purple-700 transition-all shadow-lg shadow-purple-100 font-bold text-sm uppercase tracking-wider">
+                  <button type="submit" className="px-8 py-3 rounded-2xl bg-green-600 text-white hover:bg-green-700 transition-all shadow-lg shadow-green-100 font-bold text-sm uppercase tracking-wider">
                     {editingStudentId ? "Update Student" : "Save Student"}
                   </button>
                 </div>

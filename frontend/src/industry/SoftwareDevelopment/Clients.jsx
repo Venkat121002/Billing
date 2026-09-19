@@ -99,12 +99,12 @@ const Clients = () => {
 
   return (
     <BillingLayout>
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-white p-6">
+      <div className="min-h-screen bg-gradient-to-br from-green-50 to-white p-6">
 
         {/* Header */}
         <div className="flex justify-between items-center mb-6">
           <div className="flex items-center gap-3">
-            <div className="p-3 bg-blue-600 rounded-xl text-white shadow-lg shadow-blue-200">
+            <div className="p-3 bg-green-600 rounded-xl text-white shadow-lg shadow-green-200">
               <Users size={28} />
             </div>
             <div>
@@ -115,7 +115,7 @@ const Clients = () => {
 
           <button
             onClick={() => navigate("/add-client")}
-            className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-all shadow-md hover:shadow-lg font-medium"
+            className="flex items-center gap-2 px-5 py-2.5 bg-green-600 text-white rounded-xl hover:bg-green-700 transition-all shadow-md hover:shadow-lg font-medium"
           >
             <UserPlus size={18} />
             Add Client
@@ -130,7 +130,7 @@ const Clients = () => {
             placeholder="Search clients, emails, phones or projects..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-12 pr-4 py-3.5 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all bg-white shadow-sm"
+            className="w-full pl-12 pr-4 py-3.5 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500 transition-all bg-white shadow-sm"
           />
         </div>
 
@@ -154,7 +154,7 @@ const Clients = () => {
               <tbody className="divide-y divide-gray-50">
                 {filteredClients.length > 0 ? (
                   filteredClients.map((client) => (
-                    <tr key={client.id} className="hover:bg-blue-50/30 transition-colors group">
+                    <tr key={client.id} className="hover:bg-green-50/30 transition-colors group">
                       <td className="px-6 py-4">
                         <div className="flex flex-col">
                           <span className="font-semibold text-gray-800">{client.name}</span>
@@ -171,7 +171,7 @@ const Clients = () => {
                       <td className="px-6 py-4 text-sm text-gray-800">{client.projectName || "—"}</td>
                       <td className="px-6 py-4">
                         {client.projectType ? (
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
                             {client.projectType}
                           </span>
                         ) : "—"}
@@ -189,7 +189,7 @@ const Clients = () => {
                           </button>
                           <button
                             onClick={() => handleEditClient(client)}
-                            className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                            className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
                             title="Edit Client"
                           >
                             <Edit3 size={16} />

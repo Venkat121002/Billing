@@ -173,7 +173,7 @@ const Milestones = () => {
 
   return (
     <BillingLayout>
-      <div className="min-h-screen bg-gradient-to-br from-blue-50/30 via-white to-indigo-50/20 -m-4 p-4 sm:p-6 lg:p-8">
+      <div className="min-h-screen bg-gradient-to-br from-green-50/30 via-white to-emerald-50/20 -m-4 p-4 sm:p-6 lg:p-8">
         {/* Header */}
         <div className="mb-8">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -192,7 +192,7 @@ const Milestones = () => {
                 setClientSearchTerm("");
                 setIsModalOpen(true);
               }}
-              className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-xl shadow-lg shadow-blue-100 hover:shadow-xl hover:bg-blue-700 transition-all font-semibold text-sm"
+              className="inline-flex items-center gap-2 px-6 py-3 bg-green-600 text-white rounded-xl shadow-lg shadow-green-100 hover:shadow-xl hover:bg-green-700 transition-all font-semibold text-sm"
             >
               <PlusCircle className="w-4 h-4" />
               New Milestone
@@ -201,7 +201,7 @@ const Milestones = () => {
         </div>
 
         {/* Search */}
-        <div className="bg-white rounded-2xl border border-blue-100 shadow-sm p-5 mb-6">
+        <div className="bg-white rounded-2xl border border-green-100 shadow-sm p-5 mb-6">
           <div className="relative flex-1">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
             <input
@@ -209,19 +209,19 @@ const Milestones = () => {
               placeholder="Search by title, client or status..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-12 pr-4 py-3 bg-gray-50 border border-blue-200 rounded-xl focus:ring-2 focus:ring-blue-400 focus:border-blue-400 focus:outline-none text-sm font-medium text-gray-900 placeholder:text-gray-400 transition-all"
+              className="w-full pl-12 pr-4 py-3 bg-gray-50 border border-green-200 rounded-xl focus:ring-2 focus:ring-green-400 focus:border-green-400 focus:outline-none text-sm font-medium text-gray-900 placeholder:text-gray-400 transition-all"
             />
           </div>
         </div>
 
         {/* Table */}
-        <div className="bg-white rounded-2xl border border-blue-100 shadow-sm overflow-hidden">
+        <div className="bg-white rounded-2xl border border-green-100 shadow-sm overflow-hidden">
           {loading ? (
             <div className="text-center py-20 text-gray-500">Loading milestones...</div>
           ) : (
             <div className="overflow-x-auto">
               <table className="min-w-full">
-                <thead className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-blue-100">
+                <thead className="bg-gradient-to-r from-green-50 to-emerald-50 border-b border-green-100">
                   <tr>
                     <th className="py-4 px-5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">#</th>
                     <th className="py-4 px-5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Milestone</th>
@@ -235,21 +235,21 @@ const Milestones = () => {
                 <tbody>
                   {filteredMilestones.length > 0 ? (
                     filteredMilestones.map((m, i) => (
-                      <tr key={m.id} className="hover:bg-blue-50/50 transition-colors border-b border-gray-50">
+                      <tr key={m.id} className="hover:bg-green-50/50 transition-colors border-b border-gray-50">
                         <td className={tdClass}>
-                          <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-blue-50 text-blue-700 text-xs font-bold">
+                          <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-green-50 text-green-700 text-xs font-bold">
                             {i + 1}
                           </span>
                         </td>
                         <td className={`${tdClass} font-semibold text-gray-900`}>
                           <div className="flex items-center gap-2">
-                            <MilestoneIcon size={16} className="text-blue-500" />
+                            <MilestoneIcon size={16} className="text-green-500" />
                             {m.title}
                           </div>
                         </td>
                         <td className={tdClass}>{m.clientName || "—"}</td>
                         <td className={tdClass}>{m.dueDate || "—"}</td>
-                        <td className={`${tdClass} font-semibold text-blue-700`}>
+                        <td className={`${tdClass} font-semibold text-green-700`}>
                           ₹{Number(m.amount || 0).toLocaleString("en-IN")}
                         </td>
                         <td className={tdClass}>
@@ -262,7 +262,7 @@ const Milestones = () => {
                             <button title="View" onClick={() => setViewMilestone(m)} className={`${iconBtnClass} text-gray-500 hover:bg-gray-100`}>
                               <Search size={16} />
                             </button>
-                            <button title="Edit" onClick={() => handleEditMilestone(m)} className={`${iconBtnClass} text-blue-600 hover:bg-blue-50`}>
+                            <button title="Edit" onClick={() => handleEditMilestone(m)} className={`${iconBtnClass} text-green-600 hover:bg-green-50`}>
                               <FileText size={16} />
                             </button>
                             <button title="Delete" onClick={() => handleDeleteMilestone(m.id)} className={`${iconBtnClass} text-red-600 hover:bg-red-50`}>
@@ -296,14 +296,14 @@ const Milestones = () => {
                 <X size={24} />
               </button>
 
-              <div className="bg-gradient-to-br from-blue-50 to-indigo-50 p-8 border-b border-blue-100">
+              <div className="bg-gradient-to-br from-green-50 to-emerald-50 p-8 border-b border-green-100">
                 <div className="flex items-center gap-4 mb-4">
-                  <div className="w-16 h-16 rounded-2xl bg-white shadow-sm flex items-center justify-center text-blue-600 border border-blue-100">
+                  <div className="w-16 h-16 rounded-2xl bg-white shadow-sm flex items-center justify-center text-green-600 border border-green-100">
                     <MilestoneIcon size={32} />
                   </div>
                   <div>
                     <h2 className="text-2xl font-bold text-gray-900">{viewMilestone.title}</h2>
-                    <p className="text-blue-700 font-medium">{viewMilestone.clientName || "No client linked"}</p>
+                    <p className="text-green-700 font-medium">{viewMilestone.clientName || "No client linked"}</p>
                   </div>
                 </div>
                 <span className={`inline-flex items-center px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${STATUS_STYLES[viewMilestone.status] || "bg-gray-100 text-gray-600"}`}>
@@ -316,7 +316,7 @@ const Milestones = () => {
                   <div className="space-y-1">
                     <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Due Date</p>
                     <p className="text-gray-700 font-medium flex items-center gap-2">
-                      <Calendar size={14} className="text-blue-500" />
+                      <Calendar size={14} className="text-green-500" />
                       {viewMilestone.dueDate || "—"}
                     </p>
                   </div>
@@ -358,7 +358,7 @@ const Milestones = () => {
               </button>
 
               <div className="flex items-center gap-4 mb-8">
-                <div className="w-14 h-14 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center border border-blue-100 shadow-sm">
+                <div className="w-14 h-14 rounded-2xl bg-green-50 text-green-600 flex items-center justify-center border border-green-100 shadow-sm">
                   {editingMilestoneId ? <FileText size={28} /> : <PlusCircle size={28} />}
                 </div>
                 <div>
@@ -373,18 +373,18 @@ const Milestones = () => {
 
               <form onSubmit={handleSaveMilestone} className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="flex flex-col gap-1.5 md:col-span-2">
-                  <label className="flex items-center gap-2 text-[10px] font-bold text-blue-800 uppercase tracking-widest">
-                    <Briefcase size={14} className="text-blue-500" />
+                  <label className="flex items-center gap-2 text-[10px] font-bold text-green-800 uppercase tracking-widest">
+                    <Briefcase size={14} className="text-green-500" />
                     Client
                     <span className="text-red-400 text-xs">*</span>
                   </label>
                   {formData.clientId ? (
-                    <div className="flex items-center justify-between px-4 py-3.5 rounded-2xl border border-blue-100 bg-blue-50/50">
+                    <div className="flex items-center justify-between px-4 py-3.5 rounded-2xl border border-green-100 bg-green-50/50">
                       <p className="font-semibold text-gray-900">{formData.clientName}</p>
                       <button
                         type="button"
                         onClick={() => setFormData({ ...formData, clientId: "", clientName: "" })}
-                        className="text-xs font-bold text-blue-700 hover:text-blue-900 uppercase tracking-wider"
+                        className="text-xs font-bold text-green-700 hover:text-green-900 uppercase tracking-wider"
                       >
                         Change
                       </button>
@@ -396,16 +396,16 @@ const Milestones = () => {
                         value={clientSearchTerm}
                         onChange={(e) => setClientSearchTerm(e.target.value)}
                         placeholder="Search client by name or project..."
-                        className="w-full px-4 py-3.5 rounded-2xl border border-blue-50 bg-gray-50/50 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-medium text-gray-900"
+                        className="w-full px-4 py-3.5 rounded-2xl border border-green-50 bg-gray-50/50 focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500 transition-all font-medium text-gray-900"
                       />
                       {filteredClients.length > 0 && (
-                        <div className="absolute z-10 mt-2 w-full bg-white border border-blue-100 rounded-2xl shadow-lg overflow-hidden max-h-48 overflow-y-auto">
+                        <div className="absolute z-10 mt-2 w-full bg-white border border-green-100 rounded-2xl shadow-lg overflow-hidden max-h-48 overflow-y-auto">
                           {filteredClients.map((c) => (
                             <button
                               type="button"
                               key={c.id}
                               onClick={() => handleSelectClient(c)}
-                              className="w-full text-left px-4 py-3 hover:bg-blue-50 transition-colors border-b border-gray-50 last:border-0"
+                              className="w-full text-left px-4 py-3 hover:bg-green-50 transition-colors border-b border-gray-50 last:border-0"
                             >
                               <p className="font-medium text-gray-900 text-sm">{c.name}</p>
                               <p className="text-xs text-gray-500">{c.projectName || "—"}</p>
@@ -418,19 +418,19 @@ const Milestones = () => {
                 </div>
 
                 <div className="flex flex-col gap-1.5 md:col-span-2">
-                  <label className="flex items-center gap-2 text-[10px] font-bold text-blue-800 uppercase tracking-widest">
-                    <MilestoneIcon size={14} className="text-blue-500" />
+                  <label className="flex items-center gap-2 text-[10px] font-bold text-green-800 uppercase tracking-widest">
+                    <MilestoneIcon size={14} className="text-green-500" />
                     Milestone Title
                     <span className="text-red-400 text-xs">*</span>
                   </label>
-                  <input type="text" required value={formData.title} onChange={(e) => setFormData({ ...formData, title: e.target.value })} className="px-4 py-3.5 rounded-2xl border border-blue-50 bg-gray-50/50 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-medium text-gray-900" placeholder="e.g. UI Design Approval" />
+                  <input type="text" required value={formData.title} onChange={(e) => setFormData({ ...formData, title: e.target.value })} className="px-4 py-3.5 rounded-2xl border border-green-50 bg-gray-50/50 focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500 transition-all font-medium text-gray-900" placeholder="e.g. UI Design Approval" />
                 </div>
 
                 <div className="flex flex-col gap-1.5">
-                  <label className="flex items-center gap-2 text-[10px] font-bold text-blue-800 uppercase tracking-widest">
+                  <label className="flex items-center gap-2 text-[10px] font-bold text-green-800 uppercase tracking-widest">
                     Status
                   </label>
-                  <select value={formData.status} onChange={(e) => setFormData({ ...formData, status: e.target.value })} className="px-4 py-3.5 rounded-2xl border border-blue-50 bg-gray-50/50 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-medium text-gray-900">
+                  <select value={formData.status} onChange={(e) => setFormData({ ...formData, status: e.target.value })} className="px-4 py-3.5 rounded-2xl border border-green-50 bg-gray-50/50 focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500 transition-all font-medium text-gray-900">
                     {STATUS_OPTIONS.map((s) => (
                       <option key={s} value={s}>{s}</option>
                     ))}
@@ -438,32 +438,32 @@ const Milestones = () => {
                 </div>
 
                 <div className="flex flex-col gap-1.5">
-                  <label className="flex items-center gap-2 text-[10px] font-bold text-blue-800 uppercase tracking-widest">
+                  <label className="flex items-center gap-2 text-[10px] font-bold text-green-800 uppercase tracking-widest">
                     Amount (₹)
                   </label>
-                  <input type="number" value={formData.amount} onChange={(e) => setFormData({ ...formData, amount: e.target.value })} className="px-4 py-3.5 rounded-2xl border border-blue-50 bg-gray-50/50 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-medium text-gray-900" placeholder="0" />
+                  <input type="number" value={formData.amount} onChange={(e) => setFormData({ ...formData, amount: e.target.value })} className="px-4 py-3.5 rounded-2xl border border-green-50 bg-gray-50/50 focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500 transition-all font-medium text-gray-900" placeholder="0" />
                 </div>
 
                 <div className="flex flex-col gap-1.5 md:col-span-2">
-                  <label className="flex items-center gap-2 text-[10px] font-bold text-blue-800 uppercase tracking-widest">
-                    <Calendar size={14} className="text-blue-500" />
+                  <label className="flex items-center gap-2 text-[10px] font-bold text-green-800 uppercase tracking-widest">
+                    <Calendar size={14} className="text-green-500" />
                     Due Date
                   </label>
-                  <input type="date" value={formData.dueDate} onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })} className="px-4 py-3.5 rounded-2xl border border-blue-50 bg-gray-50/50 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-medium text-gray-900" />
+                  <input type="date" value={formData.dueDate} onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })} className="px-4 py-3.5 rounded-2xl border border-green-50 bg-gray-50/50 focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500 transition-all font-medium text-gray-900" />
                 </div>
 
                 <div className="flex flex-col gap-1.5 md:col-span-2">
-                  <label className="flex items-center gap-2 text-[10px] font-bold text-blue-800 uppercase tracking-widest">
+                  <label className="flex items-center gap-2 text-[10px] font-bold text-green-800 uppercase tracking-widest">
                     Description
                   </label>
-                  <textarea rows="2" value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} className="px-4 py-3.5 rounded-2xl border border-blue-50 bg-gray-50/50 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all resize-none font-medium text-gray-900" placeholder="What does this milestone cover..."></textarea>
+                  <textarea rows="2" value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} className="px-4 py-3.5 rounded-2xl border border-green-50 bg-gray-50/50 focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500 transition-all resize-none font-medium text-gray-900" placeholder="What does this milestone cover..."></textarea>
                 </div>
 
                 <div className="flex justify-end gap-3 md:col-span-2 pt-6 border-t border-gray-100 mt-2">
                   <button type="button" onClick={() => setIsModalOpen(false)} className="px-8 py-3 rounded-2xl border border-gray-200 text-gray-600 hover:bg-gray-50 transition-all font-bold text-sm uppercase tracking-wider">
                     Cancel
                   </button>
-                  <button type="submit" className="px-8 py-3 rounded-2xl bg-blue-600 text-white hover:bg-blue-700 transition-all shadow-lg shadow-blue-100 font-bold text-sm uppercase tracking-wider">
+                  <button type="submit" className="px-8 py-3 rounded-2xl bg-green-600 text-white hover:bg-green-700 transition-all shadow-lg shadow-green-100 font-bold text-sm uppercase tracking-wider">
                     {editingMilestoneId ? "Update Milestone" : "Save Milestone"}
                   </button>
                 </div>

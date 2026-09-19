@@ -26,8 +26,6 @@ const BarcodePage = () => {
     const printRef = useRef();
      const { currentUser } = useAuth();
 
-    const isClothing = currentUser?.companyDetails?.industry?.toLowerCase() === "clothing";
-
     useEffect(() => {
         const fetchProduct = async () => {
             try {
@@ -60,8 +58,7 @@ const BarcodePage = () => {
         return (
             <BillingLayout>
                 <div className="flex items-center justify-center min-h-screen">
-                    {/* <div className={`animate-spin rounded-full h-12 w-12 border-b-2 ${isClothing ? 'border-[#FA7FC5]' : 'border-green-500'}`}></div> */}
-                    <div className={`animate-spin rounded-full h-12 w-12 border-b-2 ${isClothing ? 'border-[#f74faf]' : 'border-green-500'}`}></div>
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-500"></div>
                 </div>
             </BillingLayout>
         );
@@ -75,8 +72,7 @@ const BarcodePage = () => {
                     <h2 className="text-2xl font-bold text-gray-800">Product Not Found</h2>
                     <button
                         onClick={() => navigate("/inventory")}
-                        // className={`flex items-center gap-2 px-6 py-2 ${isClothing ? 'bg-[#FA7FC5] hover:opacity-90' : 'bg-green-600 hover:bg-green-700'} text-white rounded-xl transition-all`}
-                        className={`flex items-center gap-2 px-6 py-2 ${isClothing ? 'bg-[#f74faf] hover:opacity-90' : 'bg-green-600 hover:bg-green-700'} text-white rounded-xl transition-all`}
+                        className="flex items-center gap-2 px-6 py-2 bg-green-600 hover:bg-green-700 text-white rounded-xl transition-all"
                     >
                         <ArrowLeft size={18} />
                         Back to Inventory
@@ -88,13 +84,13 @@ const BarcodePage = () => {
 
     return (
         <BillingLayout>
-            <div className={`min-h-screen bg-gradient-to-br ${isClothing ? 'from-[#f74faf]/10 via-white to-[#f74faf]/10' : 'from-green-50 via-white to-green-50'} px-8 py-10`}>
+            <div className="min-h-screen bg-gradient-to-br from-green-50 via-white to-green-50 px-8 py-10">
                 <div className="max-w-2xl mx-auto">
                     {/* Header */}
                     <div className="flex items-center justify-between mb-8">
                         <button
                             onClick={() => navigate(-1)}
-                            className={`flex items-center gap-2 ${isClothing ? 'text-[#f74faf] hover:opacity-80' : 'text-green-700 hover:text-green-800'} font-medium transition-all`}
+                            className="flex items-center gap-2 text-green-700 hover:text-green-800 font-medium transition-all"
                         >
                             <ArrowLeft size={20} />
                             Back
@@ -106,8 +102,7 @@ const BarcodePage = () => {
                             )}</h1>
                         <button
                             onClick={() => handlePrint()}
-                            // className={`flex items-center gap-2 ${isClothing ? 'bg-[#FA7FC5] hover:opacity-90' : 'bg-green-600 hover:bg-green-700'} text-white px-6 py-2.5 rounded-xl font-medium shadow-md hover:shadow-lg transition-all`}
-                            className={`flex items-center gap-2 ${isClothing ? 'bg-[#f74faf] hover:opacity-90' : 'bg-green-600 hover:bg-green-700'} text-white px-6 py-2.5 rounded-xl font-medium shadow-md hover:shadow-lg transition-all`}
+                            className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-6 py-2.5 rounded-xl font-medium shadow-md hover:shadow-lg transition-all"
                         >
                             <Printer size={18} />
                             Print Barcode
@@ -115,10 +110,10 @@ const BarcodePage = () => {
                     </div>
 
                     {/* Preview Card */}
-                    <div className={`bg-white rounded-3xl shadow-xl border ${isClothing ? 'border-[#f74faf]/20' : 'border-green-100'} overflow-hidden`}>
-                        <div className={`${isClothing ? 'bg-[#f74faf]' : 'bg-green-600'} px-8 py-6 text-white`}>
+                    <div className="bg-white rounded-3xl shadow-xl border border-green-100 overflow-hidden">
+                        <div className="bg-green-600 px-8 py-6 text-white">
                             <div className="flex items-center gap-3 mb-2">
-                                <CheckCircle2 size={24} className={isClothing ? "text-white/80" : "text-green-200"} />
+                                <CheckCircle2 size={24} className="text-green-200" />
                                 <span className="text-sm font-medium uppercase tracking-wider opacity-90">Product Saved Successfully</span>
                             </div>
                             <h2 className="text-2xl font-bold">{currentUser.companyDetails.industry =="mobile_shop" ? (
@@ -138,8 +133,7 @@ const BarcodePage = () => {
                                 "SKU"
                             )}</p>
                                     <div className="flex items-center gap-2 text-gray-700">
-                                        {/* <Palette size={16} className={isClothing ? "text-[#FA7FC5]" : "text-green-500"} /> */}
-                                        <Palette size={16} className={isClothing ? "text-[#f74faf]" : "text-green-500"} />
+                                        <Palette size={16} className="text-green-500" />
                                         <span className="font-semibold">{currentUser.companyDetails.industry =="mobile_shop" ? (
                                 `${product.color || "N/A"}`
                             ):(
@@ -154,8 +148,7 @@ const BarcodePage = () => {
                                "Category"
                             )}</p>
                                     <div className="flex items-center gap-2 text-gray-700">
-                                        {/* <Hash size={16} className={isClothing ? "text-[#FA7FC5]" : "text-green-500"} /> */}
-                                        <Hash size={16} className={isClothing ? "text-[#f74faf]" : "text-green-500"} />
+                                        <Hash size={16} className="text-green-500" />
                                         <span className="font-semibold">{currentUser.companyDetails.industry =="mobile_shop" ?(
                                 `${product.imei1}`
                             ):(

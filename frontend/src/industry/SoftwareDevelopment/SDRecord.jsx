@@ -1089,7 +1089,7 @@ const SDRecord = () => {
   };
 
   const SummaryCard = ({ icon: Icon, label, value, color, sub }) => (
-    <div className="bg-white rounded-2xl border border-blue-100 p-5 shadow-sm hover:shadow-md transition-all duration-300 group">
+    <div className="bg-white rounded-2xl border border-green-100 p-5 shadow-sm hover:shadow-md transition-all duration-300 group">
       <div className="flex items-center justify-between mb-3">
         <div
           className={`w-10 h-10 rounded-xl flex items-center justify-center ${color} transition-transform group-hover:scale-110`}
@@ -1312,10 +1312,10 @@ const SDRecord = () => {
             return (
               <tr
                 key={p.id}
-                className="hover:bg-blue-50/50 transition-colors border-b border-gray-50"
+                className="hover:bg-green-50/50 transition-colors border-b border-gray-50"
               >
                 <td className={tdClass}>
-                  <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-blue-50 text-blue-700 text-xs font-bold">
+                  <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-green-50 text-green-700 text-xs font-bold">
                     {i + 1}
                   </span>
                 </td>
@@ -1327,7 +1327,7 @@ const SDRecord = () => {
                   {p.imei1}
                 </td>
                 <td className={tdClass}>{p.color}</td>
-                <td className={`${tdClass} font-medium text-blue-700`}>
+                <td className={`${tdClass} font-medium text-green-700`}>
                   ₹{itemSubtotal.toFixed(2)}
                 </td>
                 <td className={`${tdClass} text-orange-600`}>
@@ -1364,10 +1364,10 @@ const SDRecord = () => {
             return (
               <tr
                 key={p.id}
-                className="hover:bg-blue-50/50 transition-colors border-b border-gray-50"
+                className="hover:bg-green-50/50 transition-colors border-b border-gray-50"
               >
                 <td className={tdClass}>
-                  <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-blue-50 text-blue-700 text-xs font-bold">
+                  <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-green-50 text-green-700 text-xs font-bold">
                     {i + 1}
                   </span>
                 </td>
@@ -1378,11 +1378,11 @@ const SDRecord = () => {
                   {p.sku}
                 </td>
                 <td className={tdClass}>
-                  <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-medium">
+                  <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-green-50 text-green-700 text-xs font-medium">
                     {p.type}
                   </span>
                 </td>
-                <td className={`${tdClass} font-medium text-blue-700`}>
+                <td className={`${tdClass} font-medium text-green-700`}>
                   ₹{itemSubtotal.toFixed(2)}
                 </td>
                 <td className={`${tdClass} text-orange-600`}>
@@ -1401,10 +1401,10 @@ const SDRecord = () => {
         return filteredRecords.map((c, i) => (
           <tr
             key={c.customerId + i}
-            className="hover:bg-blue-50/50 transition-colors border-b border-gray-50"
+            className="hover:bg-green-50/50 transition-colors border-b border-gray-50"
           >
             <td className={tdClass}>
-              <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-blue-50 text-blue-700 text-xs font-bold">
+              <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-green-50 text-green-700 text-xs font-bold">
                 {i + 1}
               </span>
             </td>
@@ -1441,11 +1441,11 @@ const SDRecord = () => {
               {c.balance > 0 ? (
                 <button
                   onClick={() => handlePayCredit(c)}
-                  className="px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-xs font-semibold shadow-sm"
+                  className="px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-xs font-semibold shadow-sm"
                 >
                   Pay Now
                 </button>
-              ) :<button onClick={() => handleOpenPrintModal(c)} className="px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-900 transition-colors text-xs font-semibold shadow-sm flex items-center gap-1">
+              ) :<button onClick={() => handleOpenPrintModal(c)} className="px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-900 transition-colors text-xs font-semibold shadow-sm flex items-center gap-1">
                                 <Printer size={12} /> Print
                               </button>}
             </td>
@@ -1456,10 +1456,10 @@ const SDRecord = () => {
         return filteredRecords.map((c, i) => (
           <tr
             key={c.id}
-            className="hover:bg-blue-50/50 transition-colors border-b border-gray-50"
+            className="hover:bg-green-50/50 transition-colors border-b border-gray-50"
           >
             <td className={tdClass}>
-              <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-blue-50 text-blue-700 text-xs font-bold">
+              <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-green-50 text-green-700 text-xs font-bold">
                 {i + 1}
               </span>
             </td>
@@ -1500,10 +1500,10 @@ const SDRecord = () => {
         return filteredRecords.map((g, i) => (
           <tr
             key={g.id}
-            className="hover:bg-blue-50/50 transition-colors border-b border-gray-50"
+            className="hover:bg-green-50/50 transition-colors border-b border-gray-50"
           >
             <td className={tdClass}>
-              <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-blue-50 text-blue-700 text-xs font-bold">
+              <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-green-50 text-green-700 text-xs font-bold">
                 {i + 1}
               </span>
             </td>
@@ -1535,15 +1535,15 @@ const SDRecord = () => {
                 <td className={tdClass}>{g.sellerDetails?.address}</td>
               </>
             )}
-            <td className={`${tdClass} font-semibold text-blue-700`}>
+            <td className={`${tdClass} font-semibold text-green-700`}>
               ₹{Number(g.grandTotal).toFixed(2)}
             </td>
             <td className={tdClass}>
               <span
                 className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${g.status === "paid"
-                  ? "bg-blue-50 text-blue-700"
+                  ? "bg-green-50 text-green-700"
                   : g.status === "pending"
-                    ? "bg-blue-50 text-blue-700"
+                    ? "bg-green-50 text-green-700"
                     : "bg-gray-100 text-gray-600"
                   }`}
               >
@@ -1558,10 +1558,10 @@ const SDRecord = () => {
         return filteredRecords.map((b, i) => (
           <tr
             key={b.id}
-            className="hover:bg-blue-50/50 transition-colors border-b border-gray-50"
+            className="hover:bg-green-50/50 transition-colors border-b border-gray-50"
           >
             <td className={tdClass}>
-              <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-blue-50 text-blue-700 text-xs font-bold">
+              <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-green-50 text-green-700 text-xs font-bold">
                 {i + 1}
               </span>
             </td>
@@ -1575,16 +1575,16 @@ const SDRecord = () => {
                 {b.products.map((p, idx) => (
                   <span
                     key={idx}
-                    className="inline-flex items-center px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 text-xs font-medium"
+                    className="inline-flex items-center px-2 py-0.5 rounded-full bg-green-50 text-green-700 text-xs font-medium"
                   >
                     {p.name}
-                    <span className="ml-1 text-blue-500">×{p.qty}</span>
+                    <span className="ml-1 text-green-500">×{p.qty}</span>
                   </span>
                 ))}
               </div>
             </td>
             <td className={tdClass}>₹{b.subtotal.toFixed(2)}</td>
-            <td className={`${tdClass} font-semibold text-blue-700`}>
+            <td className={`${tdClass} font-semibold text-green-700`}>
               ₹{b.totalAmount.toFixed(2)}
             </td>
             <td className={`${tdClass} text-orange-600`}>
@@ -1596,9 +1596,9 @@ const SDRecord = () => {
       case "customers":
 
           return filteredRecords.map((c, i) => (
-            <tr key={c.id} className="hover:bg-blue-50/50 transition-colors border-b border-gray-50">
+            <tr key={c.id} className="hover:bg-green-50/50 transition-colors border-b border-gray-50">
               <td className={tdClass}>
-                <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-blue-50 text-blue-700 text-xs font-bold">
+                <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-green-50 text-green-700 text-xs font-bold">
                   {i + 1}
                 </span>
               </td>
@@ -1617,7 +1617,7 @@ const SDRecord = () => {
               </td>
               <td className={tdClass}>
                 {c.projectType ? (
-                  <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-blue-100 text-blue-800 text-xs font-medium">
+                  <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-green-100 text-green-800 text-xs font-medium">
                     {c.projectType}
                   </span>
                 ) : '—'}
@@ -1634,10 +1634,10 @@ const SDRecord = () => {
         return filteredRecords.map((s, i) => (
           <tr
             key={s.id}
-            className="hover:bg-blue-50/50 transition-colors border-b border-gray-50"
+            className="hover:bg-green-50/50 transition-colors border-b border-gray-50"
           >
             <td className={tdClass}>
-              <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-blue-50 text-blue-700 text-xs font-bold">
+              <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-green-50 text-green-700 text-xs font-bold">
                 {i + 1}
               </span>
             </td>
@@ -1650,7 +1650,7 @@ const SDRecord = () => {
             </td>
             <td className={tdClass}>{s.mobile || "—"}</td>
             {isAcademyIndustry ? (
-              <td className={`${tdClass} font-semibold text-blue-700`}>
+              <td className={`${tdClass} font-semibold text-green-700`}>
                 ₹{Number(s.paymentMode || 0).toLocaleString('en-IN')}
               </td>
             ) : (
@@ -1672,7 +1672,7 @@ const SDRecord = () => {
                 <button
                   title="Edit"
                   onClick={() => handleEditSupplier(s)}
-                  className={`${iconBtnClass} text-blue-600 hover:bg-blue-50`}
+                  className={`${iconBtnClass} text-green-600 hover:bg-green-50`}
                 >
                   <FileText size={16} />
                 </button>
@@ -1694,10 +1694,10 @@ const SDRecord = () => {
           return (
               <tr
                 key={p.id}
-                className="hover:bg-blue-50/50 transition-colors border-b border-gray-50"
+                className="hover:bg-green-50/50 transition-colors border-b border-gray-50"
               >
                 <td className={tdClass}>
-                  <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-blue-50 text-blue-700 text-xs font-bold">
+                  <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-green-50 text-green-700 text-xs font-bold">
                     {i + 1}
                   </span>
                 </td>
@@ -1711,11 +1711,11 @@ const SDRecord = () => {
                   {p.sku}
                 </td>
                 <td className={tdClass}>
-                  <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 text-[10px] font-bold uppercase">
+                  <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-green-50 text-green-700 text-[10px] font-bold uppercase">
                     {p.type}
                   </span>
                 </td>
-                <td className={`${tdClass} font-medium text-blue-700`}>
+                <td className={`${tdClass} font-medium text-green-700`}>
                   ₹{p.purchasePrice.toFixed(2)}
                 </td>
                 <td className={`${tdClass} text-orange-600`}>
@@ -1738,7 +1738,7 @@ const SDRecord = () => {
 
   return (
     <BillingLayout>
-      <div className="min-h-screen bg-gradient-to-br from-blue-50/30 via-white to-blue-50/20 -m-4 p-4 sm:p-6 lg:p-8">
+      <div className="min-h-screen bg-gradient-to-br from-green-50/30 via-white to-green-50/20 -m-4 p-4 sm:p-6 lg:p-8">
         {/* Header */}
         <div className="mb-8">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -1752,7 +1752,7 @@ const SDRecord = () => {
             </div>
             <button
               onClick={handleExport}
-              className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl shadow-lg shadow-blue-200 hover:shadow-xl hover:shadow-blue-300 hover:from-blue-700 hover:to-blue-800 transition-all duration-300 font-semibold text-sm"
+              className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-green-600 to-green-700 text-white rounded-xl shadow-lg shadow-green-200 hover:shadow-xl hover:shadow-green-300 hover:from-green-700 hover:to-green-800 transition-all duration-300 font-semibold text-sm"
             >
               <Download className="w-4 h-4" />
               Export Excel
@@ -1762,7 +1762,7 @@ const SDRecord = () => {
 
         {/* Tabs */}
         <div className="mb-6">
-          <div className="flex flex-wrap justify-around gap-2 p-1.5 bg-white rounded-2xl border border-blue-100 shadow-sm">
+          <div className="flex flex-wrap justify-around gap-2 p-1.5 bg-white rounded-2xl border border-green-100 shadow-sm">
             {tabs.map((tab) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
@@ -1771,8 +1771,8 @@ const SDRecord = () => {
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
                   className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all duration-300 ${isActive
-                    ? "bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-md shadow-blue-200"
-                    : "text-gray-600 hover:text-blue-700 hover:bg-blue-50"
+                    ? "bg-gradient-to-r from-green-500 to-green-600 text-white shadow-md shadow-green-200"
+                    : "text-gray-600 hover:text-green-700 hover:bg-green-50"
                     }`}
                 >
                   <Icon className="w-4 h-4 " />
@@ -1793,7 +1793,7 @@ const SDRecord = () => {
                 icon={DollarSign}
                 label={activeTab === "buy" ? "Purchase Subtotal" : "Subtotal"}
                 value={totals.subtotal}
-                color="bg-blue-50 text-blue-600"
+                color="bg-green-50 text-green-600"
               />
               <SummaryCard
                 icon={Receipt}
@@ -1805,17 +1805,17 @@ const SDRecord = () => {
                 icon={BarChart3}
                 label={activeTab === "buy" ? "Total Procurement" : "Grand Total"}
                 value={totals.grandTotal}
-                color="bg-blue-50 text-blue-600"
+                color="bg-green-50 text-green-600"
               />
               {activeTab !== "buy" ? (
                 <SummaryCard
                   icon={TrendingUp}
                   label="Profit"
                   value={totals.profit}
-                  color="bg-blue-50 text-blue-600"
+                  color="bg-green-50 text-green-600"
                 />
               ) : (
-                <div className="bg-white rounded-2xl border border-blue-100 p-5 shadow-sm">
+                <div className="bg-white rounded-2xl border border-green-100 p-5 shadow-sm">
                   <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">
                     Procurement Items
                   </p>
@@ -1831,15 +1831,15 @@ const SDRecord = () => {
               icon={BarChart3}
               label="Total"
               value={totals.grandTotal}
-              color="bg-blue-50 text-blue-600"
+              color="bg-green-50 text-green-600"
             />
             <SummaryCard
               icon={Database}
               label="Records"
               value={filteredRecords.length}
-              color="bg-blue-50 text-blue-600"
+              color="bg-green-50 text-green-600"
             />
-            <div className="bg-white rounded-2xl border border-blue-100 p-5 shadow-sm">
+            <div className="bg-white rounded-2xl border border-green-100 p-5 shadow-sm">
               <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">
                 Active Tab
               </p>
@@ -1854,7 +1854,7 @@ const SDRecord = () => {
         )}
 
         {/* Search & Filters */}
-        <div className="bg-white rounded-2xl border border-blue-100 shadow-sm p-5 mb-6">
+        <div className="bg-white rounded-2xl border border-green-100 shadow-sm p-5 mb-6">
           <div className="flex flex-col lg:flex-row gap-4">
             {/* Search */}
             <div className="relative flex-1">
@@ -1864,7 +1864,7 @@ const SDRecord = () => {
                 placeholder={getSearchPlaceholder()}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-12 pr-4 py-3 bg-gray-50 border border-blue-200 rounded-xl focus:ring-2 focus:ring-blue-400 focus:border-blue-400 focus:outline-none text-sm font-medium text-gray-900 placeholder:text-gray-400 transition-all"
+                className="w-full pl-12 pr-4 py-3 bg-gray-50 border border-green-200 rounded-xl focus:ring-2 focus:ring-green-400 focus:border-green-400 focus:outline-none text-sm font-medium text-gray-900 placeholder:text-gray-400 transition-all"
               />
             </div>
 
@@ -1872,8 +1872,8 @@ const SDRecord = () => {
             <button
               onClick={() => setShowFilters(!showFilters)}
               className={`inline-flex items-center gap-2 px-4 py-3 rounded-xl border text-sm font-semibold transition-all ${showFilters
-                ? "bg-blue-50 border-blue-300 text-blue-700"
-                : "bg-gray-50 border-blue-200 text-gray-600 hover:bg-blue-50"
+                ? "bg-green-50 border-green-300 text-green-700"
+                : "bg-gray-50 border-green-200 text-gray-600 hover:bg-green-50"
                 }`}
             >
               <Filter className="w-4 h-4" />
@@ -1901,7 +1901,7 @@ const SDRecord = () => {
                   });
                   setIsSupplierModalOpen(true);
                 }}
-                className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-xl shadow-lg shadow-blue-100 hover:shadow-xl hover:bg-blue-700 transition-all font-semibold text-sm"
+                className="inline-flex items-center gap-2 px-6 py-3 bg-green-600 text-white rounded-xl shadow-lg shadow-green-100 hover:shadow-xl hover:bg-green-700 transition-all font-semibold text-sm"
               >
                 <PlusCircle className="w-4 h-4" />
                 {isAcademyIndustry ? "Add Trainer" : "Add Supplier"}
@@ -1915,14 +1915,14 @@ const SDRecord = () => {
           className={`overflow-hidden transition-all duration-300 ${showFilters ? "max-h-40 mt-4 opacity-100" : "max-h-0 opacity-0"
             }`}
         >
-          <div className="flex flex-wrap gap-3 pt-4 border-t border-blue-100">
+          <div className="flex flex-wrap gap-3 pt-4 border-t border-green-100">
             <div className="flex items-center gap-2 mr-2">
               <Calendar className="w-4 h-4 text-gray-400" />
               <input
                 type="date"
                 value={fromDate}
                 onChange={(e) => setFromDate(e.target.value)}
-                className="px-3 py-2 bg-gray-50 border border-blue-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-400 focus:outline-none"
+                className="px-3 py-2 bg-gray-50 border border-green-200 rounded-xl text-sm focus:ring-2 focus:ring-green-400 focus:outline-none"
                 placeholder="From"
               />
               <span className="text-gray-400 text-sm">to</span>
@@ -1930,7 +1930,7 @@ const SDRecord = () => {
                 type="date"
                 value={toDate}
                 onChange={(e) => setToDate(e.target.value)}
-                className="px-3 py-2 bg-gray-50 border border-blue-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-400 focus:outline-none"
+                className="px-3 py-2 bg-gray-50 border border-green-200 rounded-xl text-sm focus:ring-2 focus:ring-green-400 focus:outline-none"
                 placeholder="To"
               />
             </div>
@@ -1939,7 +1939,7 @@ const SDRecord = () => {
               <select
                 value={inventoryFilter}
                 onChange={(e) => setInventoryFilter(e.target.value)}
-                className="px-4 py-2 bg-gray-50 border border-blue-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-blue-400 focus:outline-none appearance-none cursor-pointer"
+                className="px-4 py-2 bg-gray-50 border border-green-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-green-400 focus:outline-none appearance-none cursor-pointer"
               >
                 <option value="all">All Items</option>
                 <option value="purchase">Purchase Only</option>
@@ -1951,7 +1951,7 @@ const SDRecord = () => {
               <select
                 value={selectedCategory}
                 onChange={(e) => setSelectedCategory(e.target.value)}
-                className="px-4 py-2 bg-gray-50 border border-blue-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-blue-400 focus:outline-none appearance-none cursor-pointer"
+                className="px-4 py-2 bg-gray-50 border border-green-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-green-400 focus:outline-none appearance-none cursor-pointer"
               >
                 <option value="all">All Categories</option>
                 <option value="Mobile">Mobile</option>
@@ -1967,7 +1967,7 @@ const SDRecord = () => {
               <select
                 value={gstFilter}
                 onChange={(e) => setGstFilter(e.target.value)}
-                className="px-4 py-2 bg-gray-50 border border-blue-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-blue-400 focus:outline-none appearance-none cursor-pointer"
+                className="px-4 py-2 bg-gray-50 border border-green-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-green-400 focus:outline-none appearance-none cursor-pointer"
               >
                 <option value="all">All</option>
                 <option value="buyer">Buyer</option>
@@ -1979,7 +1979,7 @@ const SDRecord = () => {
               <select
                 value={feeFilter}
                 onChange={(e) => setFeeFilter(e.target.value)}
-                className="px-4 py-2 bg-gray-50 border border-blue-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-blue-400 focus:outline-none appearance-none cursor-pointer ml-2"
+                className="px-4 py-2 bg-gray-50 border border-green-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-green-400 focus:outline-none appearance-none cursor-pointer ml-2"
               >
                 <option value="all">{isAcademyIndustry ? "All Students" : "All Customers"}</option>
                 <option value="pending">{isAcademyIndustry ? "Pending Fees" : "Pending Dues"}</option>
@@ -2005,7 +2005,7 @@ const SDRecord = () => {
         {/* Record Count Badge */}
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
-            <span className="inline-flex items-center px-3 py-1.5 rounded-full bg-blue-50 text-blue-700 text-sm font-semibold border border-blue-200">
+            <span className="inline-flex items-center px-3 py-1.5 rounded-full bg-green-50 text-green-700 text-sm font-semibold border border-green-200">
               {filteredRecords.length} records
             </span>
             {searchTerm && (
@@ -2023,10 +2023,10 @@ const SDRecord = () => {
         </div>
 
         {/* Table */}
-        <div className="bg-white rounded-2xl border border-blue-100 shadow-sm overflow-hidden">
+        <div className="bg-white rounded-2xl border border-green-100 shadow-sm overflow-hidden">
           {loading ? (
             <div className="flex flex-col items-center justify-center py-20 text-gray-400">
-              <Loader2 className="w-10 h-10 animate-spin text-blue-500 mb-4" />
+              <Loader2 className="w-10 h-10 animate-spin text-green-500 mb-4" />
               <p className="text-lg font-medium text-gray-500">
                 Loading records...
               </p>
@@ -2037,7 +2037,7 @@ const SDRecord = () => {
           ) : (
             <div className="overflow-x-auto">
               <table className="min-w-full">
-                <thead className="bg-gradient-to-r from-blue-50 to-blue-100 border-b border-blue-100">
+                <thead className="bg-gradient-to-r from-green-50 to-green-100 border-b border-green-100">
                   {renderTableHeaders()}
                 </thead>
                 <tbody>{renderTableRows()}</tbody>
@@ -2048,7 +2048,7 @@ const SDRecord = () => {
 
         {/* Bottom Summary Bar */}
         {!loading && filteredRecords.length > 0 && (
-          <div className="mt-6 bg-white rounded-2xl border border-blue-100 shadow-sm p-5">
+          <div className="mt-6 bg-white rounded-2xl border border-green-100 shadow-sm p-5">
             <div className="flex flex-wrap items-center justify-between gap-4">
               <p className="text-sm text-gray-500 font-medium">
                 Showing {filteredRecords.length} of{" "}
@@ -2070,11 +2070,11 @@ const SDRecord = () => {
                   activeTab === "credit" ||
                   activeTab === "sales") && (
                     <>
-                      <div className="flex items-center gap-2 px-4 py-2 bg-blue-50 rounded-xl">
-                        <span className="text-xs font-semibold text-blue-600 uppercase">
+                      <div className="flex items-center gap-2 px-4 py-2 bg-green-50 rounded-xl">
+                        <span className="text-xs font-semibold text-green-600 uppercase">
                           Subtotal
                         </span>
-                        <span className="text-sm font-bold text-blue-700">
+                        <span className="text-sm font-bold text-green-700">
                           ₹{totals.subtotal.toFixed(2)}
                         </span>
                       </div>
@@ -2086,20 +2086,20 @@ const SDRecord = () => {
                           ₹{totals.gstTotal.toFixed(2)}
                         </span>
                       </div>
-                      <div className="flex items-center gap-2 px-4 py-2 bg-blue-50 rounded-xl">
-                        <span className="text-xs font-semibold text-blue-600 uppercase">
+                      <div className="flex items-center gap-2 px-4 py-2 bg-green-50 rounded-xl">
+                        <span className="text-xs font-semibold text-green-600 uppercase">
                           Grand Total
                         </span>
-                        <span className="text-sm font-bold text-blue-700">
+                        <span className="text-sm font-bold text-green-700">
                           ₹{totals.grandTotal.toFixed(2)}
                         </span>
                       </div>
-                      <div className="flex items-center gap-2 px-4 py-2 bg-blue-100 rounded-xl">
-                        <TrendingUp className="w-4 h-4 text-blue-600" />
-                        <span className="text-xs font-semibold text-blue-600 uppercase">
+                      <div className="flex items-center gap-2 px-4 py-2 bg-green-100 rounded-xl">
+                        <TrendingUp className="w-4 h-4 text-green-600" />
+                        <span className="text-xs font-semibold text-green-600 uppercase">
                           Profit
                         </span>
-                        <span className="text-sm font-bold text-blue-700">
+                        <span className="text-sm font-bold text-green-700">
                           ₹{totals.profit.toFixed(2)}
                         </span>
                       </div>
@@ -2108,13 +2108,13 @@ const SDRecord = () => {
                 {(activeTab === "cashbook" ||
                   activeTab === "gst" ||
                   (activeTab === "suppliers" && isAcademyIndustry)) && (
-                    <div className="flex items-center gap-2 px-4 py-2 bg-blue-50 rounded-xl">
-                      <span className="text-xs font-semibold text-blue-600 uppercase">
+                    <div className="flex items-center gap-2 px-4 py-2 bg-green-50 rounded-xl">
+                      <span className="text-xs font-semibold text-green-600 uppercase">
                         {activeTab === "suppliers" && isAcademyIndustry
                           ? "Total Salaries"
                           : "Total"}
                       </span>
-                      <span className="text-sm font-bold text-blue-700">
+                      <span className="text-sm font-bold text-green-700">
                         ₹{totals.grandTotal.toFixed(2)}
                       </span>
                     </div>
@@ -2135,21 +2135,21 @@ const SDRecord = () => {
                 <X size={24} />
               </button>
 
-              <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-8 border-b border-blue-100">
+              <div className="bg-gradient-to-br from-green-50 to-green-100 p-8 border-b border-green-100">
                 <div className="flex items-center gap-4 mb-4">
-                  <div className="w-16 h-16 rounded-2xl bg-white shadow-sm flex items-center justify-center text-blue-600 border border-blue-100">
+                  <div className="w-16 h-16 rounded-2xl bg-white shadow-sm flex items-center justify-center text-green-600 border border-green-100">
                     <Users size={32} />
                   </div>
                   <div>
                     <h2 className="text-2xl font-bold text-gray-900">{viewSupplier.name}</h2>
-                    <p className="text-blue-700 font-medium">{viewSupplier.company || "No Company Specified"}</p>
+                    <p className="text-green-700 font-medium">{viewSupplier.company || "No Company Specified"}</p>
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <span className="px-3 py-1 rounded-full bg-white/80 text-blue-800 text-[10px] font-bold uppercase tracking-wider border border-blue-100">
+                  <span className="px-3 py-1 rounded-full bg-white/80 text-green-800 text-[10px] font-bold uppercase tracking-wider border border-green-100">
                     Code: {viewSupplier.code || "N/A"}
                   </span>
-                  <span className="px-3 py-1 rounded-full bg-white/80 text-blue-800 text-[10px] font-bold uppercase tracking-wider border border-blue-100">
+                  <span className="px-3 py-1 rounded-full bg-white/80 text-green-800 text-[10px] font-bold uppercase tracking-wider border border-green-100">
                     {viewSupplier.paymentMode}
                   </span>
                 </div>
@@ -2160,14 +2160,14 @@ const SDRecord = () => {
                   <div className="space-y-1">
                     <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Mobile Number</p>
                     <p className="text-gray-700 font-medium flex items-center gap-2">
-                      <Phone size={14} className="text-blue-500" />
+                      <Phone size={14} className="text-green-500" />
                       {viewSupplier.mobile || "—"}
                     </p>
                   </div>
                   <div className="space-y-1">
                     <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Email Address</p>
                     <p className="text-gray-700 font-medium flex items-center gap-2">
-                      <Mail size={14} className="text-blue-500" />
+                      <Mail size={14} className="text-green-500" />
                       {viewSupplier.email || "—"}
                     </p>
                   </div>
@@ -2183,7 +2183,7 @@ const SDRecord = () => {
 
                 <div className="space-y-1 border-t border-gray-50 pt-6">
                   <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest flex items-center gap-2">
-                    <MapPin size={14} className="text-blue-500" />
+                    <MapPin size={14} className="text-green-500" />
                     Billing Address
                   </p>
                   <p className="text-gray-700 leading-relaxed bg-gray-50 p-4 rounded-2xl border border-gray-100 italic">
@@ -2216,7 +2216,7 @@ const SDRecord = () => {
               </button>
 
               <div className="flex items-center gap-4 mb-8">
-                <div className="w-14 h-14 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center border border-blue-100 shadow-sm">
+                <div className="w-14 h-14 rounded-2xl bg-green-50 text-green-600 flex items-center justify-center border border-green-100 shadow-sm">
                   {editingSupplierId ? <FileText size={28} /> : <PlusCircle size={28} />}
                 </div>
                 <div>
@@ -2233,8 +2233,8 @@ const SDRecord = () => {
 
               <form onSubmit={handleSaveSupplier} className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="flex flex-col gap-1.5">
-                  <label className="flex items-center gap-2 text-[10px] font-bold text-blue-800 uppercase tracking-widest">
-                    <Briefcase size={14} className="text-blue-500" />
+                  <label className="flex items-center gap-2 text-[10px] font-bold text-green-800 uppercase tracking-widest">
+                    <Briefcase size={14} className="text-green-500" />
                     {isAcademyIndustry ? "Trainer Name" : "Supplier Name"}
                     <span className="text-red-400 text-xs">*</span>
                   </label>
@@ -2243,72 +2243,72 @@ const SDRecord = () => {
                     required
                     value={supplierFormData.name}
                     onChange={(e) => setSupplierFormData({ ...supplierFormData, name: e.target.value })}
-                    className="px-4 py-3.5 rounded-2xl border border-blue-50 bg-gray-50/50 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-medium text-gray-900"
+                    className="px-4 py-3.5 rounded-2xl border border-green-50 bg-gray-50/50 focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500 transition-all font-medium text-gray-900"
                     placeholder={isAcademyIndustry ? "Enter trainer name" : "Enter supplier name"}
                   />
                 </div>
 
                 <div className="flex flex-col gap-1.5">
-                  <label className="flex items-center gap-2 text-[10px] font-bold text-blue-800 uppercase tracking-widest">
-                    <Building2 size={14} className="text-blue-500" />
+                  <label className="flex items-center gap-2 text-[10px] font-bold text-green-800 uppercase tracking-widest">
+                    <Building2 size={14} className="text-green-500" />
                     {isAcademyIndustry ? "Specialization" : "Company Name"}
                   </label>
                   <input
                     type="text"
                     value={supplierFormData.company}
                     onChange={(e) => setSupplierFormData({ ...supplierFormData, company: e.target.value })}
-                    className="px-4 py-3.5 rounded-2xl border border-blue-50 bg-gray-50/50 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-medium text-gray-900"
+                    className="px-4 py-3.5 rounded-2xl border border-green-50 bg-gray-50/50 focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500 transition-all font-medium text-gray-900"
                     placeholder={isAcademyIndustry ? "e.g. fullstack, java" : "Enter company name"}
                   />
                 </div>
 
                 <div className="flex flex-col gap-1.5">
-                  <label className="flex items-center gap-2 text-[10px] font-bold text-blue-800 uppercase tracking-widest">
-                    <Hash size={14} className="text-blue-500" />
+                  <label className="flex items-center gap-2 text-[10px] font-bold text-green-800 uppercase tracking-widest">
+                    <Hash size={14} className="text-green-500" />
                     {isAcademyIndustry ? "Trainer Code" : "Supplier Code"}
                   </label>
                   <input
                     type="text"
                     value={supplierFormData.code}
                     onChange={(e) => setSupplierFormData({ ...supplierFormData, code: e.target.value })}
-                    className="px-4 py-3.5 rounded-2xl border border-blue-50 bg-gray-50/50 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-medium text-gray-900"
+                    className="px-4 py-3.5 rounded-2xl border border-green-50 bg-gray-50/50 focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500 transition-all font-medium text-gray-900"
                     placeholder={isAcademyIndustry ? "e.g. TRN001" : "e.g. SUP001"}
                   />
                 </div>
 
                 {!isAcademyIndustry && (
                   <div className="flex flex-col gap-1.5">
-                    <label className="flex items-center gap-2 text-[10px] font-bold text-blue-800 uppercase tracking-widest">
-                      <DollarSign size={14} className="text-blue-500" />
+                    <label className="flex items-center gap-2 text-[10px] font-bold text-green-800 uppercase tracking-widest">
+                      <DollarSign size={14} className="text-green-500" />
                       GST Number
                     </label>
                     <input
                       type="text"
                       value={supplierFormData.gst}
                       onChange={(e) => setSupplierFormData({ ...supplierFormData, gst: e.target.value.toUpperCase() })}
-                      className="px-4 py-3.5 rounded-2xl border border-blue-50 bg-gray-50/50 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-mono font-medium text-gray-900 uppercase"
+                      className="px-4 py-3.5 rounded-2xl border border-green-50 bg-gray-50/50 focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500 transition-all font-mono font-medium text-gray-900 uppercase"
                       placeholder="22AAAAA0000A1Z5"
                     />
                   </div>
                 )}
 
                 <div className="flex flex-col gap-1.5">
-                  <label className="flex items-center gap-2 text-[10px] font-bold text-blue-800 uppercase tracking-widest">
-                    <DollarSign size={14} className="text-blue-500" />
+                  <label className="flex items-center gap-2 text-[10px] font-bold text-green-800 uppercase tracking-widest">
+                    <DollarSign size={14} className="text-green-500" />
                     PAN Number
                   </label>
                   <input
                     type="text"
                     value={supplierFormData.pan}
                     onChange={(e) => setSupplierFormData({ ...supplierFormData, pan: e.target.value.toUpperCase() })}
-                    className="px-4 py-3.5 rounded-2xl border border-blue-50 bg-gray-50/50 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-mono font-medium text-gray-900 uppercase"
+                    className="px-4 py-3.5 rounded-2xl border border-green-50 bg-gray-50/50 focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500 transition-all font-mono font-medium text-gray-900 uppercase"
                     placeholder="ABCDE1234F"
                   />
                 </div>
 
                 <div className="flex flex-col gap-1.5">
-                  <label className="flex items-center gap-2 text-[10px] font-bold text-blue-800 uppercase tracking-widest">
-                    <Phone size={14} className="text-blue-500" />
+                  <label className="flex items-center gap-2 text-[10px] font-bold text-green-800 uppercase tracking-widest">
+                    <Phone size={14} className="text-green-500" />
                     Mobile Number
                   </label>
                   <input
@@ -2318,61 +2318,61 @@ const SDRecord = () => {
                       const val = e.target.value.slice(0, 10);
                       setSupplierFormData({ ...supplierFormData, mobile: val });
                     }}
-                    className="px-4 py-3.5 rounded-2xl border border-blue-50 bg-gray-50/50 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-medium text-gray-900"
+                    className="px-4 py-3.5 rounded-2xl border border-green-50 bg-gray-50/50 focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500 transition-all font-medium text-gray-900"
                     placeholder="10 digit mobile"
                   />
                 </div>
 
                 <div className="flex flex-col gap-1.5">
-                  <label className="flex items-center gap-2 text-[10px] font-bold text-blue-800 uppercase tracking-widest">
-                    <Mail size={14} className="text-blue-500" />
+                  <label className="flex items-center gap-2 text-[10px] font-bold text-green-800 uppercase tracking-widest">
+                    <Mail size={14} className="text-green-500" />
                     Email Address
                   </label>
                   <input
                     type="email"
                     value={supplierFormData.email}
                     onChange={(e) => setSupplierFormData({ ...supplierFormData, email: e.target.value })}
-                    className="px-4 py-3.5 rounded-2xl border border-blue-50 bg-gray-50/50 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-medium text-gray-900"
+                    className="px-4 py-3.5 rounded-2xl border border-green-50 bg-gray-50/50 focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500 transition-all font-medium text-gray-900"
                     placeholder="supplier@email.com"
                   />
                 </div>
 
                 {isAcademyIndustry ? (
                   <div className="flex flex-col gap-1.5">
-                    <label className="flex items-center gap-2 text-[10px] font-bold text-blue-800 uppercase tracking-widest">
-                      <DollarSign size={14} className="text-blue-500" />
+                    <label className="flex items-center gap-2 text-[10px] font-bold text-green-800 uppercase tracking-widest">
+                      <DollarSign size={14} className="text-green-500" />
                       Trainer Salary (₹)
                     </label>
                     <input
                       type="number"
                       value={supplierFormData.paymentMode}
                       onChange={(e) => setSupplierFormData({ ...supplierFormData, paymentMode: e.target.value })}
-                      className="px-4 py-3.5 rounded-2xl border border-blue-50 bg-gray-50/50 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-medium text-gray-900"
+                      className="px-4 py-3.5 rounded-2xl border border-green-50 bg-gray-50/50 focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500 transition-all font-medium text-gray-900"
                       placeholder="Enter monthly salary"
                     />
                   </div>
                 ) : (
                   <div className="flex flex-col gap-1.5">
-                    <label className="flex items-center gap-2 text-[10px] font-bold text-blue-800 uppercase tracking-widest">
-                      <CreditCard size={14} className="text-blue-500" />
+                    <label className="flex items-center gap-2 text-[10px] font-bold text-green-800 uppercase tracking-widest">
+                      <CreditCard size={14} className="text-green-500" />
                       Payment Mode
                     </label>
-                    <select value={supplierFormData.paymentMode} onChange={(e) => setSupplierFormData({ ...supplierFormData, paymentMode: e.target.value })} className="px-4 py-[15px] rounded-2xl border border-blue-50 bg-gray-50/50 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-medium text-gray-900 cursor-pointer" >
+                    <select value={supplierFormData.paymentMode} onChange={(e) => setSupplierFormData({ ...supplierFormData, paymentMode: e.target.value })} className="px-4 py-[15px] rounded-2xl border border-green-50 bg-gray-50/50 focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500 transition-all font-medium text-gray-900 cursor-pointer" >
                       <option value="Cash">Cash</option> <option value="UPI">UPI</option> <option value="Card">Card</option> <option value="Net Banking">Net Banking</option> <option value="Credit">Credit</option>
                     </select>
                   </div>
                 )}
 
                 <div className="flex flex-col gap-1.5 md:col-span-2">
-                  <label className="flex items-center gap-2 text-[10px] font-bold text-blue-800 uppercase tracking-widest">
-                    <MapPin size={14} className="text-blue-500" />
+                  <label className="flex items-center gap-2 text-[10px] font-bold text-green-800 uppercase tracking-widest">
+                    <MapPin size={14} className="text-green-500" />
                     Billing Address
                   </label>
                   <textarea
                     rows="2"
                     value={supplierFormData.address}
                     onChange={(e) => setSupplierFormData({ ...supplierFormData, address: e.target.value })}
-                    className="px-4 py-3.5 rounded-2xl border border-blue-50 bg-gray-50/50 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all resize-none font-medium text-gray-900"
+                    className="px-4 py-3.5 rounded-2xl border border-green-50 bg-gray-50/50 focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500 transition-all resize-none font-medium text-gray-900"
                     placeholder="Enter full address..."
                   ></textarea>
                 </div>
@@ -2387,7 +2387,7 @@ const SDRecord = () => {
                   </button>
                   <button
                     type="submit"
-                    className="px-8 py-3 rounded-2xl bg-blue-600 text-white hover:bg-blue-700 transition-all shadow-lg shadow-blue-100 font-bold text-sm uppercase tracking-wider"
+                    className="px-8 py-3 rounded-2xl bg-green-600 text-white hover:bg-green-700 transition-all shadow-lg shadow-green-100 font-bold text-sm uppercase tracking-wider"
                   >
                     {editingSupplierId
                       ? isAcademyIndustry ? "Update Trainer" : "Update Supplier"
@@ -2488,7 +2488,7 @@ const SDRecord = () => {
                       </div>
                   </div>
                   <div className="mt-4 flex justify-end gap-2 pt-4 border-t">
-                      <button type="button" onClick={handlePrint } className="bg-blue-500 text-white px-4 py-2 rounded-md">
+                      <button type="button" onClick={handlePrint } className="bg-green-500 text-white px-4 py-2 rounded-md">
                           Print
                       </button>
                       <button

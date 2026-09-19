@@ -15,6 +15,16 @@ import SubscriptionRoute from "./components/Auth/SubscriptionRoute";
 import ModuleRoute from "./contexts/ModuleRoute";
 import Pricing from "./components/Auth/Pricing";
 
+import { SuperAdminAuthProvider } from "./contexts/SuperAdminAuthContext";
+import SuperAdminPrivateRoute from "./contexts/SuperAdminPrivateRoute";
+import SuperAdminLayout from "./pages/SuperAdmin/SuperAdminLayout";
+import SuperAdminLogin from "./pages/SuperAdmin/SuperAdminLogin";
+import SuperAdminDashboard from "./pages/SuperAdmin/SuperAdminDashboard";
+import SuperAdminTenants from "./pages/SuperAdmin/SuperAdminTenants";
+import SuperAdminTenantDetail from "./pages/SuperAdmin/SuperAdminTenantDetail";
+import SuperAdminSubUsers from "./pages/SuperAdmin/SuperAdminSubUsers";
+import SuperAdminSupportRequests from "./pages/SuperAdmin/SuperAdminSupportRequests";
+
 import EmployerDashboard from "./components/Auth/EmployerDashboard";
 import Login from "./components/Auth/Login";
 import Signup from "./components/Auth/SignUp";
@@ -116,6 +126,59 @@ function App() {
               <Route path="/support" element={<Support />} />
               <Route path="/forgot" element={<ForgotPassword />} />
               <Route path="/forgot-password" element={<ForgotPassword />} />
+
+              {/* Super Admin — separate, isolated auth domain (single hardcoded account) */}
+              <Route
+                path="/superadmin/*"
+                element={
+                  <SuperAdminAuthProvider>
+                    <Routes>
+                      <Route path="login" element={<SuperAdminLogin />} />
+                      <Route
+                        path="dashboard"
+                        element={
+                          <SuperAdminPrivateRoute>
+                            <SuperAdminLayout><SuperAdminDashboard /></SuperAdminLayout>
+                          </SuperAdminPrivateRoute>
+                        }
+                      />
+                      <Route
+                        path="tenants"
+                        element={
+                          <SuperAdminPrivateRoute>
+                            <SuperAdminLayout><SuperAdminTenants /></SuperAdminLayout>
+                          </SuperAdminPrivateRoute>
+                        }
+                      />
+                      <Route
+                        path="tenants/:id"
+                        element={
+                          <SuperAdminPrivateRoute>
+                            <SuperAdminLayout><SuperAdminTenantDetail /></SuperAdminLayout>
+                          </SuperAdminPrivateRoute>
+                        }
+                      />
+                      <Route
+                        path="subusers"
+                        element={
+                          <SuperAdminPrivateRoute>
+                            <SuperAdminLayout><SuperAdminSubUsers /></SuperAdminLayout>
+                          </SuperAdminPrivateRoute>
+                        }
+                      />
+                      <Route
+                        path="support"
+                        element={
+                          <SuperAdminPrivateRoute>
+                            <SuperAdminLayout><SuperAdminSupportRequests /></SuperAdminLayout>
+                          </SuperAdminPrivateRoute>
+                        }
+                      />
+                      <Route path="*" element={<Navigate to="/superadmin/dashboard" />} />
+                    </Routes>
+                  </SuperAdminAuthProvider>
+                }
+              />
 
               {/* Protected Routes */}
               {employerRoutes.map(({ path, element }, index) => (

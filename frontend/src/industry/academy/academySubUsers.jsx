@@ -155,7 +155,7 @@ const AcademySubUsers = () => {
         return (
             <BillingLayout>
                 <div className="flex items-center justify-center min-h-screen">
-                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-500"></div>
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-500"></div>
                 </div>
             </BillingLayout>
         );
@@ -169,7 +169,7 @@ const AcademySubUsers = () => {
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                         <div>
                             <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
-                                <Users className="text-purple-600" />
+                                <Users className="text-green-600" />
                                 Staff Records & Activity
                             </h1>
                             <p className="text-slate-500 text-sm">Monitor all activities across your academy branches</p>
@@ -186,10 +186,10 @@ const AcademySubUsers = () => {
                     {/* Stats Grid */}
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                         {[
-                            { label: "Total Activities", value: filteredRecords.length, icon: Activity, iconBg: "bg-blue-50", iconColor: "text-blue-600" },
-                            { label: "Staff Members", value: subusers.length, icon: UserCheck, iconBg: "bg-purple-50", iconColor: "text-purple-600" },
+                            { label: "Total Activities", value: filteredRecords.length, icon: Activity, iconBg: "bg-green-50", iconColor: "text-green-600" },
+                            { label: "Staff Members", value: subusers.length, icon: UserCheck, iconBg: "bg-green-50", iconColor: "text-green-600" },
                             { label: "Current Session", value: "Active", icon: Briefcase, iconBg: "bg-emerald-50", iconColor: "text-emerald-600" },
-                            { label: "Sync Status", value: "Live", icon: LayoutDashboard, iconBg: "bg-indigo-50", iconColor: "text-indigo-600" }
+                            { label: "Sync Status", value: "Live", icon: LayoutDashboard, iconBg: "bg-emerald-50", iconColor: "text-emerald-600" }
                         ].map((stat, i) => (
                             <div key={i} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
                                 <div className={`w-12 h-12 rounded-xl ${stat.iconBg} flex items-center justify-center`}>
@@ -218,7 +218,7 @@ const AcademySubUsers = () => {
                                         key={tab.id}
                                         onClick={() => setActiveTab(tab.id)}
                                         className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all ${activeTab === tab.id
-                                            ? "bg-purple-600 text-white shadow-md shadow-purple-200"
+                                            ? "bg-green-600 text-white shadow-md shadow-green-200"
                                             : "text-slate-500 hover:bg-slate-50"
                                             }`}
                                     >
@@ -233,13 +233,13 @@ const AcademySubUsers = () => {
                                     <input
                                         type="text"
                                         placeholder="Search records..."
-                                        className="pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/20 w-full md:w-64"
+                                        className="pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-500/20 w-full md:w-64"
                                         value={searchTerm}
                                         onChange={(e) => setSearchTerm(e.target.value)}
                                     />
                                 </div>
                                 <select
-                                    className="bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-sm outline-none focus:ring-2 focus:ring-purple-500/20"
+                                    className="bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-sm outline-none focus:ring-2 focus:ring-green-500/20"
                                     value={selectedUser}
                                     onChange={(e) => setSelectedUser(e.target.value)}
                                 >
@@ -282,10 +282,10 @@ const AcademySubUsers = () => {
                                                 </td>
                                                 <td className="px-6 py-4">
                                                     <div className="flex items-center gap-3">
-                                                        <div className={`p-2 rounded-lg ${record.type === 'Inventory' ? 'bg-blue-50 text-blue-600' :
-                                                            record.type === 'Bill' ? 'bg-purple-50 text-purple-600' :
-                                                                record.type === 'Credit' ? 'bg-indigo-50 text-indigo-600' :
-                                                                    'bg-blue-50 text-blue-600'
+                                                        <div className={`p-2 rounded-lg ${record.type === 'Inventory' ? 'bg-green-50 text-green-600' :
+                                                            record.type === 'Bill' ? 'bg-green-50 text-green-600' :
+                                                                record.type === 'Credit' ? 'bg-emerald-50 text-emerald-600' :
+                                                                    'bg-green-50 text-green-600'
                                                             }`}>
                                                             {record.type === 'Inventory' && <BookOpen size={16} />}
                                                             {record.type === 'Bill' && <ShoppingCart size={16} />}
@@ -309,13 +309,13 @@ const AcademySubUsers = () => {
                                                 </td>
                                                 <td className="px-6 py-4 font-bold text-slate-800">
                                                     {record.type === "Inventory" ? (
-                                                        <span className="text-blue-600">₹{Number(record.salePrice || record.sellingPrice || 0).toLocaleString()}</span>
+                                                        <span className="text-green-600">₹{Number(record.salePrice || record.sellingPrice || 0).toLocaleString()}</span>
                                                     ) : record.type === "Bill" ? (
-                                                        <span className="text-purple-600">₹{Number(record.totalAmount || 0).toLocaleString()}</span>
+                                                        <span className="text-green-600">₹{Number(record.totalAmount || 0).toLocaleString()}</span>
                                                     ) : record.type === "Credit" ? (
-                                                        <span className="text-indigo-600">₹{Number(record.total || record.amount || 0).toLocaleString()}</span>
+                                                        <span className="text-emerald-600">₹{Number(record.total || record.amount || 0).toLocaleString()}</span>
                                                     ) : (
-                                                        <span className="text-blue-600">₹{Number(record.amount || 0).toLocaleString()}</span>
+                                                        <span className="text-green-600">₹{Number(record.amount || 0).toLocaleString()}</span>
                                                     )}
                                                 </td>
                                                 <td className="px-6 py-4 text-center">
@@ -324,7 +324,7 @@ const AcademySubUsers = () => {
                                                             setSelectedRecord(record);
                                                             setIsModalOpen(true);
                                                         }}
-                                                        className="p-2 text-slate-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-all active:scale-90"
+                                                        className="p-2 text-slate-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-all active:scale-90"
                                                     >
                                                         <ArrowRight size={18} />
                                                     </button>
@@ -378,12 +378,12 @@ const RecordDetailModal = ({ record, currentUser, onClose }) => {
                         {/* Header */}
                         <div className="flex justify-between items-center">
                             <div>
-                                <h1 className="text-xl font-bold text-blue-600">
+                                <h1 className="text-xl font-bold text-green-600">
                                     {businessName}
                                 </h1>
                             </div>
 
-                            <div className="bg-blue-600 text-white px-6 py-3 font-bold text-lg">
+                            <div className="bg-green-600 text-white px-6 py-3 font-bold text-lg">
                                 RECEIPT
                                 <p className="text-xs font-normal">FOR COURSE FEE</p>
                             </div>
@@ -396,7 +396,7 @@ const RecordDetailModal = ({ record, currentUser, onClose }) => {
                         </div>
 
                         {/* Info Box */}
-                        <div className="bg-blue-100 p-4 mt-4 grid grid-cols-2 gap-4 text-sm">
+                        <div className="bg-green-100 p-4 mt-4 grid grid-cols-2 gap-4 text-sm">
                             <div>
                                 <p className="font-semibold">Student Name:</p>
                                 <p>{record.customerName}</p>
@@ -423,7 +423,7 @@ const RecordDetailModal = ({ record, currentUser, onClose }) => {
 
                         {/* Course + Duration */}
                         {items.map((item, i) => (
-                            <div className="flex justify-between mt-5 text-sm bg-blue-100 p-2 mt-3" key={i}>
+                            <div className="flex justify-between mt-5 text-sm bg-green-100 p-2 mt-3" key={i}>
                                 <p>
                                     <span className="font-semibold ">Course</span> {item.name}
                                 </p>
@@ -511,7 +511,7 @@ const RecordDetailModal = ({ record, currentUser, onClose }) => {
             <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
                 <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
                     <div className="flex items-center gap-3">
-                        <div className={`p-2 rounded-xl ${record.type === 'Inventory' ? 'bg-blue-100 text-blue-600' :
+                        <div className={`p-2 rounded-xl ${record.type === 'Inventory' ? 'bg-green-100 text-green-600' :
                             record.type === 'Bill' ? 'bg-green-100 text-green-600' :
                                 record.type === 'Credit' ? 'bg-orange-100 text-orange-600' :
                                     'bg-emerald-100 text-emerald-600'

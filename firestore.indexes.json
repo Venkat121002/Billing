@@ -1,25 +1,23 @@
 {
-    "indexes": [
+    "indexes": [],
+    "fieldOverrides": [
         {
             "collectionGroup": "owner",
-            "queryScope": "COLLECTION_GROUP",
-            "fields": [
-                {
-                    "fieldPath": "userId",
-                    "order": "ASCENDING"
-                }
+            "fieldPath": "userId",
+            "indexes": [
+                { "order": "ASCENDING", "queryScope": "COLLECTION" },
+                { "order": "DESCENDING", "queryScope": "COLLECTION" },
+                { "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }
             ]
         },
         {
             "collectionGroup": "subuser",
-            "queryScope": "COLLECTION_GROUP",
-            "fields": [
-                {
-                    "fieldPath": "firebaseUid",
-                    "order": "ASCENDING"
-                }
+            "fieldPath": "firebaseUid",
+            "indexes": [
+                { "order": "ASCENDING", "queryScope": "COLLECTION" },
+                { "order": "DESCENDING", "queryScope": "COLLECTION" },
+                { "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }
             ]
         }
-    ],
-    "fieldOverrides": []
+    ]
 }
