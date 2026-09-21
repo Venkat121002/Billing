@@ -29,6 +29,7 @@ import logo from "../../assets/images/BILLING LOGO .png";
 import logo1 from "../../assets/images/BILLING_LOGO_LARGE2.png"
 import { getSidebarItems } from "../../config/industryModules";
 import { resolveIndustryProfile } from "../../config/industryProfiles";
+import { SubscriptionBadge } from "../../components/Auth/SubscriptionStatus";
 
 
 
@@ -264,6 +265,8 @@ const BillingLayout = ({ children, hideHeader = false, hideSidebar = false }) =>
                     )}
                   </div>
                 )}
+
+                <SubscriptionBadge user={userData} />
 
                 {/* Profile */}
                 <div className="flex items-center gap-3">

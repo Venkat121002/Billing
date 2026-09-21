@@ -17,6 +17,7 @@ const CreditSchema = new mongoose.Schema({
     status: { type: String, default: 'Pending' },
     history: { type: Array, default: [] },
     notes: { type: String, default: '' },
+    payToken: { type: String, index: true, sparse: true }, // public pay-link token (Razorpay)
     date: { type: String },
     createdAt: { type: String, default: () => new Date().toISOString() },
     updatedAt: { type: String, default: () => new Date().toISOString() }

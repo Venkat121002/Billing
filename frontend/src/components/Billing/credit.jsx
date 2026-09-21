@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Search, PlusCircle, Edit3, Trash2, CircleX, Eye, Lock, Crown, Table, Mail } from "lucide-react";
+import { Search, PlusCircle, Edit3, Trash2, CircleX, Eye, Lock, Crown, Table, Mail, Link2 } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
 import BillingLayout from "../../Layout/BillingLayout/AdminLayout";
 import { Link } from "react-router-dom";
@@ -90,6 +90,34 @@ const Credit = () => {
     setShowPayModal(true);
   };
 
+
+  // 🔹 Razorpay pay link (customer pays online; webhook updates the balance)
+  const authConfig = () => ({ headers: { "x-auth-token": sessionStorage.getItem("token") } });
+
+  const copyPayLink = async (c) => {
+    try {
+      const { data } = await axios.post(`${API_URL}/credit/${c.id}/pay-link`, {}, authConfig());
+      try {
+        await navigator.clipboard.writeText(data.url);
+        toast.success("Pay link copied. Share it with the customer.");
+      } catch {
+        window.prompt("Copy this pay link:", data.url);
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.msg || "Could not create pay link");
+    }
+  };
+
+  const emailPayLink = async (c) => {
+    const email = c.email || window.prompt("Customer email to send the pay link to:");
+    if (!email) return;
+    try {
+      await axios.post(`${API_URL}/credit/${c.id}/send-pay-link`, { email }, authConfig());
+      toast.success(`Pay link emailed to ${email}`);
+    } catch (err) {
+      toast.error(err.response?.data?.msg || "Could not email pay link");
+    }
+  };
 
   const handleConfirmPay = () => {
     console.log("Confirm Pay Clicked. Amount:", payAmount);
@@ -735,6 +763,16 @@ const Credit = () => {
                       <button onClick={() => setViewCustomer(c)} className="text-green-600">
                         < Eye size={18} />
                       </button>
+                      {c.balance > 0 && (
+                        <>
+                          <button onClick={() => copyPayLink(c)} className="text-emerald-600" title="Copy Razorpay pay link">
+                            <Link2 size={18} />
+                          </button>
+                          <button onClick={() => emailPayLink(c)} className="text-indigo-600" title="Email pay link">
+                            <Mail size={18} />
+                          </button>
+                        </>
+                      )}
                       <button
                         onClick={() => openModal(c)}
                         className={`text-blue-600 ${c.credit === c.total ? "opacity-50 cursor-not-allowed" : ""}`}

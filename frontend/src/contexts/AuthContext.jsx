@@ -75,12 +75,11 @@ export function AuthProvider({ children }) {
       sessionStorage.setItem("token", token);
       setCurrentUser(user);
 
-      // Navigate based on user state
-      if (user.Tenant && user.Tenant.subscription_status === "pending") {
-        navigate("/pricing");
-      } else {
-        navigate("/dashboard");
-      }
+      // Straight to the dashboard; only an expired owner plan goes to the plans page.
+      const expiry = user.Tenant?.subscription_expiry ? new Date(user.Tenant.subscription_expiry) : null;
+      const status = String(user.Tenant?.subscription_status || "").toLowerCase();
+      const planExpired = user.role === "owner" && (status !== "active" || (expiry && expiry < new Date()));
+      navigate(planExpired ? "/pricing" : "/dashboard");
 
       return user;
 
@@ -92,6 +91,25 @@ export function AuthProvider({ children }) {
   }
 
   // SIGNUP
+  // SIGNUP EMAIL OTP
+  async function sendSignupOtp(email) {
+    try {
+      const res = await api.post("otp/signup/send", { email });
+      return res.data;
+    } catch (err) {
+      throw err.response ? err.response.data : err;
+    }
+  }
+
+  async function verifySignupOtp(email, otp) {
+    try {
+      const res = await api.post("otp/signup/verify", { email, otp });
+      return res.data;
+    } catch (err) {
+      throw err.response ? err.response.data : err;
+    }
+  }
+
   async function employerSignup(data) {
     try {
       console.log("🚀 Registering via Backend API...");
@@ -114,7 +132,8 @@ export function AuthProvider({ children }) {
         country: data.country,
         gstin: data.gstin,
         pan: data.pan,
-        plan: data.plan
+        plan: data.plan,
+        verificationToken: data.verificationToken
       };
 
       const res = await api.post("auth/register", payload);
@@ -123,10 +142,19 @@ export function AuthProvider({ children }) {
       const { token, user } = res.data;
 
       sessionStorage.setItem("token", token);
-      setCurrentUser(user);
+      // The register response is minimal; load the full profile (incl. the auto-started
+      // trial) so the dashboard guard sees an active subscription.
+      let fullUser = user;
+      try {
+        const me = await api.get("auth/me");
+        fullUser = me.data;
+      } catch (meErr) {
+        console.warn("Could not load full profile after signup:", meErr);
+      }
+      setCurrentUser(fullUser);
       navigate("/dashboard");
 
-      return user;
+      return fullUser;
 
     } catch (err) {
       console.error("Signup Error:", err);
@@ -313,6 +341,8 @@ export function AuthProvider({ children }) {
     currentUser,
     employerLogin,
     employerSignup,
+    sendSignupOtp,
+    verifySignupOtp,
     createSubscriptionOrder,
     verifySubscriptionPayment,
     startTrial,

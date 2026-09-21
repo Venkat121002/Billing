@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "../../contexts/AuthContext";
 import toast from "react-hot-toast";
 import logo from "../../assets/images/BILLING LOGO .png";
@@ -8,7 +8,19 @@ const Signup = () => {
   // Changed max steps to 3
   const [currentStep, setCurrentStep] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
-  const { employerSignup } = useAuth();
+  const { employerSignup, sendSignupOtp, verifySignupOtp } = useAuth();
+
+  // Email OTP verification (runs inside step 2, before moving on to step 3)
+  const [otpStage, setOtpStage] = useState(false);
+  const [otp, setOtp] = useState("");
+  const [verified, setVerified] = useState({ email: "", token: "" });
+  const [resendIn, setResendIn] = useState(0);
+
+  useEffect(() => {
+    if (resendIn <= 0) return;
+    const t = setTimeout(() => setResendIn((n) => n - 1), 1000);
+    return () => clearTimeout(t);
+  }, [resendIn]);
 
   const strongPasswordRegex =
     /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&]).{8,}$/;
@@ -40,6 +52,42 @@ const Signup = () => {
     setFormData({ ...formData, [name]: value });
   };
 
+  const normalizedEmail = () => formData.email.trim().toLowerCase();
+
+  const requestOtp = async () => {
+    setIsLoading(true);
+    try {
+      await sendSignupOtp(normalizedEmail());
+      setOtp("");
+      setOtpStage(true);
+      setResendIn(30);
+      toast.success(`Verification code sent to ${normalizedEmail()}`);
+    } catch (e) {
+      toast.error(e?.msg || e?.message || "Could not send the code");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const confirmOtp = async () => {
+    if (!/^\d{6}$/.test(otp)) {
+      toast.error("Enter the 6-digit code");
+      return;
+    }
+    setIsLoading(true);
+    try {
+      const { verificationToken } = await verifySignupOtp(normalizedEmail(), otp);
+      setVerified({ email: normalizedEmail(), token: verificationToken });
+      setOtpStage(false);
+      toast.success("Email verified");
+      setCurrentStep(3);
+    } catch (e) {
+      toast.error(e?.msg || e?.message || "Verification failed");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const nextStep = () => {
     // Validation for Step 2 (Password)
     if (currentStep === 2) {
@@ -51,6 +99,17 @@ const Signup = () => {
         toast.error("Passwords do not match");
         return;
       }
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail())) {
+        toast.error("Please enter a valid email address");
+        return;
+      }
+      // Email must be verified by OTP before continuing.
+      if (verified.token && verified.email === normalizedEmail()) {
+        setCurrentStep(3);
+      } else {
+        requestOtp();
+      }
+      return;
     }
 
     setCurrentStep((prev) => prev + 1);
@@ -61,7 +120,7 @@ const Signup = () => {
   const handleSubmit = async () => {
     setIsLoading(true);
     try {
-      await employerSignup(formData);
+      await employerSignup({ ...formData, verificationToken: verified.token });
 
       // Move to success step (Step 4 internally, but shows as completion)
       setCurrentStep(4);
@@ -151,7 +210,45 @@ const Signup = () => {
           )}
 
           {/* STEP 2: Personal Info */}
-          {currentStep === 2 && (
+          {currentStep === 2 && otpStage && (
+            <>
+              <h2 className="text-xl font-bold mb-2">Verify your email</h2>
+              <p className="text-sm text-gray-600 mb-4">
+                We sent a 6-digit code to <b>{formData.email}</b>. It expires in 5 minutes.
+              </p>
+
+              <input
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                maxLength={6}
+                placeholder="Enter 6-digit code"
+                value={otp}
+                onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
+                onKeyDown={(e) => e.key === "Enter" && confirmOtp()}
+                className="input text-center tracking-widest text-lg"
+                autoFocus
+              />
+
+              <button onClick={confirmOtp} disabled={isLoading} className="btn w-full">
+                {isLoading ? "Verifying..." : "Verify & Continue"}
+              </button>
+
+              <div className="flex justify-between items-center mt-4 text-sm">
+                <button onClick={() => setOtpStage(false)} className="btn-gray">
+                  Change email
+                </button>
+                <button
+                  onClick={requestOtp}
+                  disabled={resendIn > 0 || isLoading}
+                  className="text-green-700 font-semibold disabled:text-gray-400"
+                >
+                  {resendIn > 0 ? `Resend in ${resendIn}s` : "Resend code"}
+                </button>
+              </div>
+            </>
+          )}
+
+          {currentStep === 2 && !otpStage && (
             <>
               <h2 className="text-xl font-bold mb-4">Personal Information</h2>
 
@@ -210,7 +307,9 @@ const Signup = () => {
 
               <div className="flex justify-between mt-4">
                 <button onClick={prevStep} className="btn-gray">Back</button>
-                <button onClick={nextStep} className="btn">Next</button>
+                <button onClick={nextStep} disabled={isLoading} className="btn">
+                  {isLoading ? "Sending code..." : "Next"}
+                </button>
               </div>
             </>
           )}

@@ -2,6 +2,7 @@ const { db, admin } = require('../config/firebase');
 const { getCollection, fetchUnifiedData } = require('../utils/dbUtils');
 const { instance: razorpay, enabled: razorpayEnabled } = require('../config/razorpay');
 const crypto = require('crypto');
+const { TRIAL_DAYS, addDays } = require('../utils/subscription');
 
 // MongoDB models
 const { Owner: OwnerModel, SubscriptionDetail: SubscriptionDetailModel } = require('../models/mongodb');
@@ -94,7 +95,7 @@ exports.verifySubscriptionPayment = async (req, res) => {
             return res.status(503).json({ msg: "Payments are not configured on this server." });
         }
 
-        const { paymentId, orderId, signature, plan, billingCycle } = req.body;
+        const { paymentId, orderId, signature } = req.body;
         const tenantId = process.env.TENANT_ID;
 
         // 1. Verify Signature
@@ -106,9 +107,27 @@ exports.verifySubscriptionPayment = async (req, res) => {
             return res.status(400).json({ msg: "Payment verification failed" });
         }
 
+        // 1b. Take plan/cycle/amount from the order WE created, never from the browser
+        //     (otherwise someone could pay for the cheapest plan and claim the 3-year one).
+        const order = await razorpay.orders.fetch(orderId);
+        if (order.notes?.ownerId !== req.ownerId || order.status !== 'paid') {
+            return res.status(400).json({ msg: "Payment verification failed" });
+        }
+        const plan = order.notes.plan;
+        const billingCycle = order.notes.billingCycle;
+        req.body.count = order.notes.count;
+        req.body.amount = order.amount / 100; // rupees (matches what the app has always stored)
+
         // 2. Calculate Dates
         const startDate = new Date();
-        const endDate = new Date(startDate);
+        // Unused days (trial or current plan) carry over: the new period is appended after them.
+        let periodBase = startDate;
+        if (plan !== 'additional_users' && DB_TYPE === 'mongodb') {
+            const current = await OwnerModel.findOne({ userId: req.user.userId, tenantId }).lean();
+            const currentEnd = current?.subscription?.endDate ? new Date(current.subscription.endDate) : null;
+            if (currentEnd && currentEnd > startDate) periodBase = currentEnd;
+        }
+        const endDate = new Date(periodBase);
 
         if (billingCycle === 'monthly') endDate.setMonth(endDate.getMonth() + 1);
         else if (billingCycle === 'yearly') endDate.setFullYear(endDate.getFullYear() + 1);
@@ -233,7 +252,7 @@ exports.verifySubscriptionPayment = async (req, res) => {
                     ownerEmail,
                     plan,
                     billingCycle,
-                    amount: (req.body.amount || 0) / 100, // Convert paise to rupees
+                    amount: req.body.amount || 0, // rupees
                     paymentId,
                     startDate: startDate.toLocaleDateString(),
                     endDate: endDate.toLocaleDateString()
@@ -336,7 +355,7 @@ exports.activateTrial = async (req, res) => {
 
             const startDate = new Date();
             const endDate = new Date(startDate);
-            endDate.setDate(endDate.getDate() + 15); // 15 Days Trial
+            endDate.setDate(endDate.getDate() + TRIAL_DAYS);
 
             await OwnerModel.updateOne(
                 { userId, tenantId },
@@ -385,7 +404,7 @@ exports.activateTrial = async (req, res) => {
 
             const startDate = new Date();
             const endDate = new Date(startDate);
-            endDate.setDate(endDate.getDate() + 15); // 15 Days Trial
+            endDate.setDate(endDate.getDate() + TRIAL_DAYS);
 
             await ownerDocRef.update({
                 'subscription.plan': 'Trial',
@@ -404,7 +423,7 @@ exports.activateTrial = async (req, res) => {
             try {
                 const startDate = new Date();
                 const endDate = new Date(startDate);
-                endDate.setDate(endDate.getDate() + 15);
+                endDate.setDate(endDate.getDate() + TRIAL_DAYS);
 
                 const emailSubject = `Free Trial Successful - SwordNex`;
                 const emailHtml = `
@@ -419,7 +438,7 @@ exports.activateTrial = async (req, res) => {
                             <div style="background-color: #f9fafb; padding: 20px; border-radius: 8px; margin: 20px 0;">
                                 <p style="margin: 0; font-weight: bold; color: #374151;">Subscription Details:</p>
                                 <table style="width: 100%; margin-top: 10px; font-size: 14px;">
-                                    <tr><td style="padding: 5px 0; color: #6b7280;">Plan</td><td style="padding: 5px 0; font-weight: bold; text-align: right;">TRIAL (15 Days)</td></tr>
+                                    <tr><td style="padding: 5px 0; color: #6b7280;">Plan</td><td style="padding: 5px 0; font-weight: bold; text-align: right;">TRIAL (${TRIAL_DAYS} Days)</td></tr>
                                     <tr><td style="padding: 5px 0; color: #6b7280;">Amount</td><td style="padding: 5px 0; font-weight: bold; text-align: right;">Free</td></tr>
                                     <tr><td style="padding: 5px 0; color: #6b7280;">Start Date</td><td style="padding: 5px 0; font-weight: bold; text-align: right;">${startDate.toLocaleDateString()}</td></tr>
                                     <tr><td style="padding: 5px 0; color: #6b7280;">End Date</td><td style="padding: 5px 0; font-weight: bold; text-align: right;">${endDate.toLocaleDateString()}</td></tr>
@@ -549,7 +568,7 @@ exports.testEmail = async (req, res) => {
         const testName = name || "Test User";
         const startDate = new Date();
         const endDate = new Date();
-        endDate.setDate(endDate.getDate() + 15);
+        endDate.setDate(endDate.getDate() + TRIAL_DAYS);
 
         let emailSubject, emailHtml;
 

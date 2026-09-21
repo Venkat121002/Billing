@@ -1,8 +1,10 @@
 
+const { newTrialSubscription, TRIAL_DAYS } = require('../utils/subscription');
 const { db, admin } = require('../config/firebase');
 const axios = require('axios');
 const { sendEmail } = require('../utils/emailService');
 const bcrypt = require('bcryptjs');
+const otpService = require('../utils/otpService');
 const jwt = require('jsonwebtoken');
 
 // MongoDB models
@@ -31,6 +33,12 @@ exports.register = async (req, res) => {
 
     if (!businessName || !email || !firstName || !password) {
         return res.status(400).json({ msg: "Please enter required fields" });
+    }
+
+    try {
+        otpService.assertVerifiedEmail(email, req.body.verificationToken);
+    } catch (err) {
+        return res.status(err.status || 403).json({ msg: err.message });
     }
 
     const tenantId = process.env.TENANT_ID;
@@ -77,12 +85,8 @@ exports.register = async (req, res) => {
                     pincode: pincode || '',
                     country: country || 'India'
                 },
-                subscription: {
-                    plan: plan || 'Free',
-                    status: 'Active',
-                    startDate: null,
-                    endDate: null
-                },
+                subscription: newTrialSubscription(),
+                trialUsed: true,
                 createdAt: new Date().toISOString(),
                 lastLogin: null
             };
@@ -135,12 +139,8 @@ exports.register = async (req, res) => {
                     pincode: pincode || '',
                     country: country || ''
                 },
-                subscription: {
-                    plan: plan || null,
-                    status: 'Inactive',
-                    startDate: null,
-                    endDate: null
-                },
+                subscription: newTrialSubscription(),
+                trialUsed: true,
                 createdAt: new Date().toISOString(),
                 lastLogin: null
             };
@@ -177,6 +177,7 @@ exports.register = async (req, res) => {
             <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
                 <h1 style="color: #CA8A04;">Welcome to SwordNex, ${firstName}!</h1>
                 <p>Thank you for choosing SwordNex Billing Software for <strong>${businessName}</strong>.</p>
+                <p>Your <strong>${TRIAL_DAYS}-day free trial</strong> has started. You can see the days remaining on your dashboard.</p>
             </div>
         `;
 
@@ -409,6 +410,8 @@ exports.login = async (req, res) => {
                     subscription_status: bossData.subscription?.status || 'Inactive',
                     subscription_plan: bossData.subscription?.plan || 'Free',
                     subscription_expiry: bossData.subscription?.endDate || null,
+                    subscription_start: bossData.subscription?.startDate || null,
+                    subscription_cycle: bossData.subscription?.billingCycle || null,
                     street: bossData.address?.street || '',
                     city: bossData.address?.city || '',
                     state: bossData.address?.state || '',
@@ -717,6 +720,8 @@ exports.getMe = async (req, res) => {
                 subscription_status: bossData.subscription?.status || 'Inactive',
                 subscription_plan: bossData.subscription?.plan || 'Free',
                 subscription_expiry: bossData.subscription?.endDate || null,
+                subscription_start: bossData.subscription?.startDate || null,
+                subscription_cycle: bossData.subscription?.billingCycle || null,
                 street: bossData.address?.street || '',
                 city: bossData.address?.city || '',
                 state: bossData.address?.state || '',

@@ -31,7 +31,7 @@ try {
       options = { credential: admin.credential.cert(serviceAccount), projectId: serviceAccount.project_id };
     } catch (err) {
       if (err.code !== 'MODULE_NOT_FOUND') throw err;
-      options = { credential: admin.credential.applicationDefault(), projectId: process.env.FIREBASE_PROJECT_ID };
+      options = { credential: admin.credential.applicationDefault(), projectId: process.env.FIREBASE_PROJECT_ID || process.env.GCLOUD_PROJECT };
     }
     admin.initializeApp(options);
     console.log(`🔥 Firebase Admin initialized (project: ${admin.app().options.projectId})`);

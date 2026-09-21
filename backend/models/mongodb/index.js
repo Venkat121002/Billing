@@ -16,6 +16,8 @@ const SupportRequest = require('./SupportRequest');
 const Salesman = require('./Salesman');
 const InventoryReturn = require('./InventoryReturn');
 const SubscriptionDetail = require('./SubscriptionDetail');
+const Payment = require('./Payment');
+const OtpVerification = require('./OtpVerification');
 
 // Collection name to Mongoose Model mapping
 const modelMap = {
@@ -75,6 +77,8 @@ module.exports = {
     Salesman,
     InventoryReturn,
     SubscriptionDetail,
+    Payment,
+    OtpVerification,
     getModel,
     modelMap
 };

@@ -5,18 +5,64 @@
             "collectionGroup": "owner",
             "fieldPath": "userId",
             "indexes": [
-                { "order": "ASCENDING", "queryScope": "COLLECTION" },
-                { "order": "DESCENDING", "queryScope": "COLLECTION" },
-                { "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }
+                {
+                    "order": "ASCENDING",
+                    "queryScope": "COLLECTION"
+                },
+                {
+                    "order": "DESCENDING",
+                    "queryScope": "COLLECTION"
+                },
+                {
+                    "order": "ASCENDING",
+                    "queryScope": "COLLECTION_GROUP"
+                }
             ]
         },
         {
             "collectionGroup": "subuser",
             "fieldPath": "firebaseUid",
             "indexes": [
-                { "order": "ASCENDING", "queryScope": "COLLECTION" },
-                { "order": "DESCENDING", "queryScope": "COLLECTION" },
-                { "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }
+                {
+                    "order": "ASCENDING",
+                    "queryScope": "COLLECTION"
+                },
+                {
+                    "order": "DESCENDING",
+                    "queryScope": "COLLECTION"
+                },
+                {
+                    "order": "ASCENDING",
+                    "queryScope": "COLLECTION_GROUP"
+                }
+            ]
+        },
+        {
+            "collectionGroup": "credit_customers",
+            "fieldPath": "payToken",
+            "indexes": [
+                {
+                    "order": "ASCENDING",
+                    "queryScope": "COLLECTION"
+                },
+                {
+                    "order": "ASCENDING",
+                    "queryScope": "COLLECTION_GROUP"
+                }
+            ]
+        },
+        {
+            "collectionGroup": "subusercredit",
+            "fieldPath": "payToken",
+            "indexes": [
+                {
+                    "order": "ASCENDING",
+                    "queryScope": "COLLECTION"
+                },
+                {
+                    "order": "ASCENDING",
+                    "queryScope": "COLLECTION_GROUP"
+                }
             ]
         }
     ]

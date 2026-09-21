@@ -61,7 +61,8 @@ app.use(
 app.use(helmet());
 app.use(morgan('dev'));
 
-app.use(express.json());
+// Keep the raw body: Razorpay webhook signatures are computed over the exact bytes.
+app.use(express.json({ verify: (req, _res, buf) => { req.rawBody = buf; } }));
 app.use(express.urlencoded({ extended: true }));
 
 // ---------------------------------------------------------
@@ -296,6 +297,14 @@ app.use(
     '/v2/support-requests',
     require('./routes/supportRequestRoutes')
 );
+
+// Payments: public pay-link endpoints (token-authenticated) + Razorpay webhook
+app.use('/api/v2/pay', require('./routes/paymentRoutes'));
+app.use('/v2/pay', require('./routes/paymentRoutes'));
+
+const { razorpayWebhook } = require('./controllers/paymentController');
+app.post('/api/v2/webhooks/razorpay', razorpayWebhook);
+app.post('/v2/webhooks/razorpay', razorpayWebhook);
 
 // Super Admin (platform-level, cross-tenant)
 app.use(

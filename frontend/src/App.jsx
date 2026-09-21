@@ -9,6 +9,7 @@ import {
 } from "react-router-dom";
 
 import Layout from "./Layout/Layout";
+import PayPage from "./components/Auth/PayPage";
 import { AuthProvider } from "./contexts/AuthContext";
 import PrivateRoute from "./contexts/PrivateRoute";
 import SubscriptionRoute from "./components/Auth/SubscriptionRoute";
@@ -120,6 +121,7 @@ function App() {
             
               <Route path="/signup" element={<Signup />} />
               <Route path="/pricing" element={<Pricing />} />
+              <Route path="/pay/:token" element={<PayPage />} />
               <Route path="/onboarding" element={<PrivateRoute><Onboarding /></PrivateRoute>} />
 
               {/* <Route path="/credit" element={<Credit />}/> */}
