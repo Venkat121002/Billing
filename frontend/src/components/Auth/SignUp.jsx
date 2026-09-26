@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "../../contexts/AuthContext";
 import toast from "react-hot-toast";
+import { EyeIcon, EyeOffIcon } from "lucide-react";
 import logo from "../../assets/images/BILLING LOGO .png";
 import billingDashboardImage from "../../assets/images/billing-dashboard.jpg";
 
@@ -15,6 +16,9 @@ const Signup = () => {
   const [otp, setOtp] = useState("");
   const [verified, setVerified] = useState({ email: "", token: "" });
   const [resendIn, setResendIn] = useState(0);
+
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   useEffect(() => {
     if (resendIn <= 0) return;
@@ -287,23 +291,43 @@ const Signup = () => {
                 className="input"
               />
 
-              <input
-                type="password"
-                name="password"
-                placeholder="Password"
-                value={formData.password}
-                onChange={handleChange}
-                className="input"
-              />
+              <div className="relative">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  name="password"
+                  placeholder="Password"
+                  value={formData.password}
+                  onChange={handleChange}
+                  className="input pr-11"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  tabIndex={-1}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 -mt-1.5 text-gray-400 hover:text-green-600"
+                >
+                  {showPassword ? <EyeOffIcon size={16} /> : <EyeIcon size={16} />}
+                </button>
+              </div>
 
-              <input
-                type="password"
-                name="confirmPassword"
-                placeholder="Confirm Password"
-                value={formData.confirmPassword}
-                onChange={handleChange}
-                className="input"
-              />
+              <div className="relative">
+                <input
+                  type={showConfirmPassword ? "text" : "password"}
+                  name="confirmPassword"
+                  placeholder="Confirm Password"
+                  value={formData.confirmPassword}
+                  onChange={handleChange}
+                  className="input pr-11"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword((v) => !v)}
+                  tabIndex={-1}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 -mt-1.5 text-gray-400 hover:text-green-600"
+                >
+                  {showConfirmPassword ? <EyeOffIcon size={16} /> : <EyeIcon size={16} />}
+                </button>
+              </div>
 
               <div className="flex justify-between mt-4">
                 <button onClick={prevStep} className="btn-gray">Back</button>

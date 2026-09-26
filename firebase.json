@@ -18,10 +18,13 @@
             ]
         }
     ],
-    "firestore": {
-        "rules": "firestore.rules",
-        "indexes": "firestore.indexes.json"
-    },
+    "firestore": [
+        {
+            "database": "billing",
+            "rules": "firestore.rules",
+            "indexes": "firestore.indexes.json"
+        }
+    ],
     "hosting": [
         {
             "public": "frontend/dist",

@@ -1,4 +1,5 @@
 const admin = require('firebase-admin');
+const { getFirestore } = require('firebase-admin/firestore');
 const path = require('path');
 
 /**
@@ -47,7 +48,12 @@ const db = new Proxy({}, {
   get(_target, prop) {
     if (initError) throw new Error('Firestore is unavailable: ' + initError.message);
     if (!_db) {
-      _db = admin.firestore();
+      // Billing lives in its own named database (BILLING_DB_ID), separate from the
+      // project's (default) database used by the main website.
+      const databaseId = process.env.BILLING_DB_ID;
+      _db = databaseId && databaseId !== '(default)'
+        ? getFirestore(admin.app(), databaseId)
+        : admin.firestore();
       _db.settings({ ignoreUndefinedProperties: true });
     }
     const value = _db[prop];

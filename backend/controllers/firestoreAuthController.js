@@ -5,6 +5,7 @@ const axios = require('axios');
 const { sendEmail } = require('../utils/emailService');
 const bcrypt = require('bcryptjs');
 const otpService = require('../utils/otpService');
+const platformStore = require('../utils/platformStore');
 const jwt = require('jsonwebtoken');
 
 // MongoDB models
@@ -744,14 +745,42 @@ exports.getMe = async (req, res) => {
 // All models, for the delete-account cascade
 const mongoModels = require('../models/mongodb');
 
+// Firestore mode: find the owner or sub-user document with this email. The
+// document id is always the Firebase Auth uid for that account. Sub-users are
+// nested per-owner, so (as in getMe()) this loops owners rather than needing a
+// collection-group index on `email`.
+async function findFirestoreAccountByEmail(tenantId, email) {
+    const ownersCol = db.collection('SwordNexBillingSoftware').doc(tenantId).collection('owner');
+    const ownerSnap = await ownersCol.where('email', '==', email).limit(1).get();
+    if (!ownerSnap.empty) {
+        return { uid: ownerSnap.docs[0].id, role: 'owner' };
+    }
+    const allOwners = await ownersCol.get();
+    for (const owner of allOwners.docs) {
+        const subSnap = await owner.ref.collection('subuser').where('email', '==', email).limit(1).get();
+        if (!subSnap.empty) {
+            return { uid: subSnap.docs[0].id, role: 'subuser', ownerId: owner.id };
+        }
+    }
+    return null;
+}
+
 // @desc    Logout (JWT is stateless — this just records the time, best-effort)
 // @route   POST /api/v2/auth/logout
 exports.logout = async (req, res) => {
     try {
-        const { userId, role } = req.user;
+        const { userId, ownerId, role } = req.user;
         const tenantId = process.env.TENANT_ID;
-        const Model = role === 'subuser' ? SubUserModel : OwnerModel;
-        await Model.updateOne({ userId, tenantId }, { $set: { lastLogout: new Date().toISOString() } });
+        const now = new Date().toISOString();
+
+        if (DB_TYPE === 'mongodb') {
+            const Model = role === 'subuser' ? SubUserModel : OwnerModel;
+            await Model.updateOne({ userId, tenantId }, { $set: { lastLogout: now } });
+        } else {
+            const ownerDocRef = db.collection('SwordNexBillingSoftware').doc(tenantId).collection('owner').doc(role === 'subuser' ? ownerId : userId);
+            const ref = role === 'subuser' ? ownerDocRef.collection('subuser').doc(userId) : ownerDocRef;
+            await ref.update({ lastLogout: now });
+        }
     } catch (err) {
         console.error("Logout Error:", err.message);
     }
@@ -762,26 +791,46 @@ exports.logout = async (req, res) => {
 // @route   DELETE /api/v2/auth/delete-account
 exports.deleteAccount = async (req, res) => {
     try {
-        const { userId, role } = req.user;
+        const { userId, ownerId, role } = req.user;
         const tenantId = process.env.TENANT_ID;
 
         if (role === 'subuser') {
-            await SubUserModel.deleteOne({ userId, tenantId });
+            if (DB_TYPE === 'mongodb') {
+                await SubUserModel.deleteOne({ userId, tenantId });
+            } else {
+                await db.collection('SwordNexBillingSoftware').doc(tenantId)
+                    .collection('owner').doc(ownerId).collection('subuser').doc(userId).delete();
+                // Sub-user credentials live in Firebase Auth in this mode, not the Firestore doc.
+                await admin.auth().deleteUser(userId).catch(e => console.error('Auth delete failed:', e.message));
+            }
             return res.json({ msg: "Account deleted" });
         }
 
-        // Owner: cascade delete everything scoped to this owner.
-        const ownedModels = [
-            mongoModels.SubUser, mongoModels.Product, mongoModels.Customer,
-            mongoModels.GstBill, mongoModels.Bill, mongoModels.Transaction,
-            mongoModels.Credit, mongoModels.Supplier, mongoModels.Trainer,
-            mongoModels.Client, mongoModels.Salesman, mongoModels.InventoryReturn,
-            mongoModels.SubscriptionDetail
-        ];
-        await Promise.all(
-            ownedModels.map(M => M.deleteMany({ tenantId, ownerId: userId }))
-        );
-        await OwnerModel.deleteOne({ userId, tenantId });
+        if (DB_TYPE === 'mongodb') {
+            // Owner: cascade delete everything scoped to this owner.
+            const ownedModels = [
+                mongoModels.SubUser, mongoModels.Product, mongoModels.Customer,
+                mongoModels.GstBill, mongoModels.Bill, mongoModels.Transaction,
+                mongoModels.Credit, mongoModels.Supplier, mongoModels.Trainer,
+                mongoModels.Client, mongoModels.Salesman, mongoModels.InventoryReturn,
+                mongoModels.SubscriptionDetail
+            ];
+            await Promise.all(
+                ownedModels.map(M => M.deleteMany({ tenantId, ownerId: userId }))
+            );
+            await OwnerModel.deleteOne({ userId, tenantId });
+        } else {
+            // Owner: every business record and sub-user lives nested under the owner
+            // doc, so deleting that subtree removes all of it in one call.
+            const subUsers = await platformStore.listSubUsers(userId);
+            const ownerDocRef = db.collection('SwordNexBillingSoftware').doc(tenantId).collection('owner').doc(userId);
+            await db.recursiveDelete(ownerDocRef);
+
+            const uids = [userId, ...subUsers.map(s => s.userId)];
+            await Promise.all(uids.map(uid =>
+                admin.auth().deleteUser(uid).catch(e => console.error('Auth delete failed for', uid, e.message))
+            ));
+        }
 
         res.json({ msg: "Account deleted" });
     } catch (err) {
@@ -800,11 +849,11 @@ exports.forgotPassword = async (req, res) => {
     try {
         if (!email) return res.status(400).json({ msg: "Email is required" });
 
-        const user =
-            (await OwnerModel.findOne({ email, tenantId })) ||
-            (await SubUserModel.findOne({ email, tenantId }));
+        const exists = DB_TYPE === 'mongodb'
+            ? !!((await OwnerModel.findOne({ email, tenantId })) || (await SubUserModel.findOne({ email, tenantId })))
+            : !!(await findFirestoreAccountByEmail(tenantId, email));
 
-        if (user) {
+        if (exists) {
             const token = jwt.sign(
                 { email, tenantId, purpose: 'pwreset' },
                 process.env.JWT_SECRET,
@@ -853,15 +902,24 @@ exports.resetPassword = async (req, res) => {
         }
 
         const { email, tenantId } = decoded;
-        const hash = await bcrypt.hash(password, 10);
 
-        const owner = await OwnerModel.findOne({ email, tenantId });
-        if (owner) {
-            await OwnerModel.updateOne({ _id: owner._id }, { $set: { password: hash } });
+        if (DB_TYPE === 'mongodb') {
+            const hash = await bcrypt.hash(password, 10);
+            const owner = await OwnerModel.findOne({ email, tenantId });
+            if (owner) {
+                await OwnerModel.updateOne({ _id: owner._id }, { $set: { password: hash } });
+            } else {
+                const sub = await SubUserModel.findOne({ email, tenantId });
+                if (!sub) return res.status(400).json({ msg: "Account not found" });
+                await SubUserModel.updateOne({ _id: sub._id }, { $set: { password: hash } });
+            }
         } else {
-            const sub = await SubUserModel.findOne({ email, tenantId });
-            if (!sub) return res.status(400).json({ msg: "Account not found" });
-            await SubUserModel.updateOne({ _id: sub._id }, { $set: { password: hash } });
+            // Firestore mode signs in through Firebase Auth (see login()), so the
+            // password lives there, not on the Firestore document — the doc id is
+            // the Firebase Auth uid for both owners and sub-users.
+            const account = await findFirestoreAccountByEmail(tenantId, email);
+            if (!account) return res.status(400).json({ msg: "Account not found" });
+            await admin.auth().updateUser(account.uid, { password });
         }
 
         res.json({ msg: "Password updated successfully" });
@@ -889,7 +947,8 @@ exports.selectIndustry = async (req, res) => {
             return res.status(400).json({ msg: "Unknown industry." });
         }
 
-        const owner = await OwnerModel.findOne({ userId: ownerId || userId, tenantId });
+        const targetOwnerId = ownerId || userId;
+        const owner = await platformStore.getOwner(targetOwnerId);
         if (!owner) {
             return res.status(404).json({ msg: "Owner record not found" });
         }
@@ -898,10 +957,7 @@ exports.selectIndustry = async (req, res) => {
             return res.status(409).json({ msg: "Industry is already set. Contact support to change it." });
         }
 
-        await OwnerModel.updateOne(
-            { userId: ownerId || userId, tenantId },
-            { $set: { 'companyDetails.industry': industry } }
-        );
+        await platformStore.updateOwner(targetOwnerId, { 'companyDetails.industry': industry });
 
         res.json({ msg: "Industry saved", industry });
     } catch (err) {
