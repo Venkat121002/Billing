@@ -1,6 +1,7 @@
 const jwt = require('jsonwebtoken');
 const { admin } = require('../config/firebase');
 const store = require('../utils/platformStore');
+const billDelivery = require('../utils/billDelivery');
 const { VALID_INDUSTRIES } = require('../utils/industries');
 
 const DB_TYPE = process.env.DB_TYPE || 'mongodb';
@@ -314,6 +315,51 @@ exports.updateSupportRequestStatus = async (req, res) => {
         res.json({ msg: `Request ${status.toLowerCase()}`, request: updated });
     } catch (err) {
         console.error('SuperAdmin updateSupportRequestStatus Error:', err.message);
+        res.status(500).json({ msg: 'Server error: ' + err.message });
+    }
+};
+
+// @desc    Platform settings (global WhatsApp bill delivery mode)
+// @route   GET /superadmin/settings
+exports.getPlatformSettings = async (req, res) => {
+    try {
+        const settings = await store.getPlatformSettings();
+        res.json({ ...settings, billTextEnabled: billDelivery.isTextEnabled() });
+    } catch (err) {
+        console.error('SuperAdmin getPlatformSettings Error:', err.message);
+        res.status(500).json({ msg: 'Server error: ' + err.message });
+    }
+};
+
+// @desc    Update platform settings
+// @route   PUT /superadmin/settings   body: { billDeliveryMode: 'pdf' | 'text' }
+exports.updatePlatformSettings = async (req, res) => {
+    try {
+        const { billDeliveryMode } = req.body;
+        if (!billDelivery.MODES.includes(billDeliveryMode)) {
+            return res.status(400).json({ msg: "billDeliveryMode must be 'pdf' or 'text'" });
+        }
+        const settings = await store.updatePlatformSettings({ billDeliveryMode });
+        res.json({ ...settings, billTextEnabled: billDelivery.isTextEnabled() });
+    } catch (err) {
+        console.error('SuperAdmin updatePlatformSettings Error:', err.message);
+        res.status(500).json({ msg: 'Server error: ' + err.message });
+    }
+};
+
+// @desc    Override how one store's bills are sent ('default' clears the override)
+// @route   PATCH /superadmin/tenants/:id/bill-delivery   body: { mode: 'default' | 'pdf' | 'text' }
+exports.updateTenantBillDelivery = async (req, res) => {
+    try {
+        const { mode } = req.body;
+        if (mode !== 'default' && !billDelivery.MODES.includes(mode)) {
+            return res.status(400).json({ msg: "mode must be 'default', 'pdf' or 'text'" });
+        }
+        const owner = await store.updateOwner(req.params.id, { billDeliveryMode: mode === 'default' ? null : mode });
+        if (!owner) return res.status(404).json({ msg: 'Tenant not found' });
+        res.json({ msg: 'Bill delivery updated', owner });
+    } catch (err) {
+        console.error('SuperAdmin updateTenantBillDelivery Error:', err.message);
         res.status(500).json({ msg: 'Server error: ' + err.message });
     }
 };

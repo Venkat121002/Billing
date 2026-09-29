@@ -12,8 +12,10 @@ const handle = (fn) => async (req, res) => {
     }
 };
 
-// Registration email verification (public: the user has no account yet)
-router.post('/signup/send', handle(({ email }) => otp.sendSignupOtp(email)));
-router.post('/signup/verify', handle(({ email, otp: code }) => otp.verifySignupOtp(email, code)));
+// Registration verification (public: the user has no account yet).
+// send: { email, mobile, channel? }  channel = 'email' | 'whatsapp' to resend just one code
+router.post('/signup/send', handle(({ email, mobile, channel }) => otp.sendSignupOtp(email, { mobile, channel })));
+// verify: { email, mobile, emailOtp, mobileOtp }  both codes are required
+router.post('/signup/verify', handle((body) => otp.verifySignupOtp(body)));
 
 module.exports = router;

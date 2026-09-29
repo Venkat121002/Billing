@@ -11,18 +11,22 @@ const Signup = () => {
   const [isLoading, setIsLoading] = useState(false);
   const { employerSignup, sendSignupOtp, verifySignupOtp } = useAuth();
 
-  // Email OTP verification (runs inside step 2, before moving on to step 3)
+  // Email + WhatsApp verification (runs inside step 2, before moving on to step 3).
+  // Two separate codes; both must be entered.
   const [otpStage, setOtpStage] = useState(false);
-  const [otp, setOtp] = useState("");
-  const [verified, setVerified] = useState({ email: "", token: "" });
-  const [resendIn, setResendIn] = useState(0);
+  const [codes, setCodes] = useState({ email: "", whatsapp: "" });
+  const [verified, setVerified] = useState({ email: "", mobile: "", token: "" });
+  const [resendIn, setResendIn] = useState({ email: 0, whatsapp: 0 });
 
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   useEffect(() => {
-    if (resendIn <= 0) return;
-    const t = setTimeout(() => setResendIn((n) => n - 1), 1000);
+    if (resendIn.email <= 0 && resendIn.whatsapp <= 0) return;
+    const t = setTimeout(
+      () => setResendIn((r) => ({ email: Math.max(0, r.email - 1), whatsapp: Math.max(0, r.whatsapp - 1) })),
+      1000
+    );
     return () => clearTimeout(t);
   }, [resendIn]);
 
@@ -58,14 +62,23 @@ const Signup = () => {
 
   const normalizedEmail = () => formData.email.trim().toLowerCase();
 
-  const requestOtp = async () => {
+  const mobileDigits = () => formData.mobile.replace(/\D/g, "");
+
+  // channel: "email" | "whatsapp" resends one code; omitted sends both.
+  const requestOtp = async (channel) => {
     setIsLoading(true);
     try {
-      await sendSignupOtp(normalizedEmail());
-      setOtp("");
-      setOtpStage(true);
-      setResendIn(30);
-      toast.success(`Verification code sent to ${normalizedEmail()}`);
+      await sendSignupOtp(normalizedEmail(), { mobile: mobileDigits(), channel });
+      if (channel) {
+        setCodes((c) => ({ ...c, [channel]: "" }));
+        setResendIn((r) => ({ ...r, [channel]: 30 }));
+        toast.success(channel === "email" ? "New email code sent" : "New WhatsApp code sent");
+      } else {
+        setCodes({ email: "", whatsapp: "" });
+        setResendIn({ email: 30, whatsapp: 30 });
+        setOtpStage(true);
+        toast.success("Codes sent to your email and WhatsApp");
+      }
     } catch (e) {
       toast.error(e?.msg || e?.message || "Could not send the code");
     } finally {
@@ -73,17 +86,25 @@ const Signup = () => {
     }
   };
 
+  const setCode = (channel) => (e) =>
+    setCodes((c) => ({ ...c, [channel]: e.target.value.replace(/\D/g, "") }));
+
   const confirmOtp = async () => {
-    if (!/^\d{6}$/.test(otp)) {
-      toast.error("Enter the 6-digit code");
+    if (!/^\d{6}$/.test(codes.email) || !/^\d{6}$/.test(codes.whatsapp)) {
+      toast.error("Enter both 6-digit codes");
       return;
     }
     setIsLoading(true);
     try {
-      const { verificationToken } = await verifySignupOtp(normalizedEmail(), otp);
-      setVerified({ email: normalizedEmail(), token: verificationToken });
+      const { verificationToken } = await verifySignupOtp({
+        email: normalizedEmail(),
+        mobile: mobileDigits(),
+        emailOtp: codes.email,
+        mobileOtp: codes.whatsapp,
+      });
+      setVerified({ email: normalizedEmail(), mobile: mobileDigits(), token: verificationToken });
       setOtpStage(false);
-      toast.success("Email verified");
+      toast.success("Email and WhatsApp number verified");
       setCurrentStep(3);
     } catch (e) {
       toast.error(e?.msg || e?.message || "Verification failed");
@@ -107,8 +128,12 @@ const Signup = () => {
         toast.error("Please enter a valid email address");
         return;
       }
-      // Email must be verified by OTP before continuing.
-      if (verified.token && verified.email === normalizedEmail()) {
+      if (!/^\d{10,15}$/.test(mobileDigits())) {
+        toast.error("Please enter a valid WhatsApp mobile number");
+        return;
+      }
+      // Email and mobile must both be verified by OTP before continuing.
+      if (verified.token && verified.email === normalizedEmail() && verified.mobile === mobileDigits()) {
         setCurrentStep(3);
       } else {
         requestOtp();
@@ -216,37 +241,51 @@ const Signup = () => {
           {/* STEP 2: Personal Info */}
           {currentStep === 2 && otpStage && (
             <>
-              <h2 className="text-xl font-bold mb-2">Verify your email</h2>
+              <h2 className="text-xl font-bold mb-2">Verify your email and WhatsApp</h2>
               <p className="text-sm text-gray-600 mb-4">
-                We sent a 6-digit code to <b>{formData.email}</b>. It expires in 5 minutes.
+                We sent two different 6-digit codes. Both expire in 5 minutes.
               </p>
 
-              <input
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                maxLength={6}
-                placeholder="Enter 6-digit code"
-                value={otp}
-                onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
-                onKeyDown={(e) => e.key === "Enter" && confirmOtp()}
-                className="input text-center tracking-widest text-lg"
-                autoFocus
-              />
+              {[
+                { channel: "email", label: "Email code", sentTo: formData.email },
+                { channel: "whatsapp", label: "WhatsApp code", sentTo: formData.mobile },
+              ].map(({ channel, label, sentTo }, i) => (
+                <div key={channel} className="mb-3">
+                  <div className="flex justify-between items-baseline text-sm mb-1">
+                    <label htmlFor={`otp-${channel}`} className="font-semibold text-gray-700">
+                      {label} <span className="font-normal text-gray-500">sent to {sentTo}</span>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => requestOtp(channel)}
+                      disabled={resendIn[channel] > 0 || isLoading}
+                      className="text-green-700 font-semibold disabled:text-gray-400"
+                    >
+                      {resendIn[channel] > 0 ? `Resend in ${resendIn[channel]}s` : "Resend"}
+                    </button>
+                  </div>
+                  <input
+                    id={`otp-${channel}`}
+                    inputMode="numeric"
+                    autoComplete={channel === "email" ? "one-time-code" : "off"}
+                    maxLength={6}
+                    placeholder="Enter 6-digit code"
+                    value={codes[channel]}
+                    onChange={setCode(channel)}
+                    onKeyDown={(e) => e.key === "Enter" && confirmOtp()}
+                    className="input text-center tracking-widest text-lg"
+                    autoFocus={i === 0}
+                  />
+                </div>
+              ))}
 
               <button onClick={confirmOtp} disabled={isLoading} className="btn w-full">
                 {isLoading ? "Verifying..." : "Verify & Continue"}
               </button>
 
-              <div className="flex justify-between items-center mt-4 text-sm">
+              <div className="flex justify-start items-center mt-4 text-sm">
                 <button onClick={() => setOtpStage(false)} className="btn-gray">
-                  Change email
-                </button>
-                <button
-                  onClick={requestOtp}
-                  disabled={resendIn > 0 || isLoading}
-                  className="text-green-700 font-semibold disabled:text-gray-400"
-                >
-                  {resendIn > 0 ? `Resend in ${resendIn}s` : "Resend code"}
+                  Change email or number
                 </button>
               </div>
             </>
@@ -284,7 +323,7 @@ const Signup = () => {
 
               <input
                 name="mobile"
-                placeholder="Mobile"
+                placeholder="WhatsApp mobile number"
                 type="tel"
                 value={formData.mobile}
                 onChange={handleChange}

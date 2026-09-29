@@ -211,7 +211,7 @@ const MobileInventory = () => {
       resetForm();
     } catch (err) {
       console.error("Error saving mobile:", err);
-      alert("Failed to save mobile.");
+      alert(err.response?.data?.msg || "Failed to save mobile.");
     }
   };
 

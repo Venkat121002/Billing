@@ -5,16 +5,15 @@ import { useAuth } from "../../contexts/AuthContext";
 import toast from "react-hot-toast";
 import icon1 from "../../assets/images/BILLING LOGO .png";
 
-const Login = () => {
+// Sub-user / staff sign-in — split out of Login.jsx so the owner login page
+// no longer needs an Admin/Team toggle. Same flow, fixed loginType="team".
+const TeamLogin = () => {
   const { employerLogin } = useAuth();
 
   const [formData, setFormData] = useState({ email: "", password: "" });
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  // This page is owner/admin login only — team members use /team-login.
-  const loginType = "admin";
 
-  // Typing animation
   const fullText = "Secure • Smart • Automated Billing";
   const [typedText, setTypedText] = useState("");
 
@@ -37,22 +36,22 @@ const Login = () => {
     e.preventDefault();
 
     if (!formData.email || !formData.password) {
-      toast.error("Please enter both email and password.");
+      toast.error("Please enter both your email/employee ID and password.");
       return;
     }
 
     setIsLoading(true);
     try {
-      await employerLogin(formData.email, formData.password, loginType);
+      await employerLogin(formData.email, formData.password, "team");
       toast.success("Successfully logged in!");
     } catch (error) {
-      console.error("Login component error:", error);
+      console.error("Team login error:", error);
 
       const serverMsg = error?.msg || error?.message || "";
       let friendlyMsg = "Login failed";
 
       if (serverMsg.includes("EMAIL_NOT_FOUND")) {
-        friendlyMsg = "Email is wrong";
+        friendlyMsg = "Email or employee ID is wrong";
       } else if (serverMsg.includes("INVALID_PASSWORD")) {
         friendlyMsg = "Password is wrong";
       } else if (serverMsg.includes("USER_DISABLED")) {
@@ -67,10 +66,6 @@ const Login = () => {
     }
   };
 
-  // Google sign-in is disabled while Firebase is removed.
-  // TODO: restore handleGoogleLogin + employerGoogleSignIn when a new
-  // Firebase project is configured.
-
   return (
     <div className="h-screen flex overflow-hidden">
 
@@ -79,41 +74,36 @@ const Login = () => {
 
         <div className="max-w-md w-full mx-auto">
 
-          {/* Centered Logo */}
-          <div className="flex justify-center  mb-8">
+          <div className="flex justify-center mb-8">
             <img src={icon1} alt="SwordNex" className="h-10 center" />
           </div>
 
-          {/* Heading */}
           <div className="text-center mb-6">
             <h1 className="text-2xl font-bold text-gray-900">
-              Welcome back
+              Team Sign In
             </h1>
             <p className="text-sm text-gray-500 mt-1">
-              Sign in to manage your dashboard
+              Sign in to your workspace
             </p>
           </div>
 
-          {/* Form */}
           <form onSubmit={handleLogin} className="space-y-4">
 
-            {/* Email */}
             <div>
-              <label className="block text-sm mb-1 text-gray-700">Email Address</label>
+              <label className="block text-sm mb-1 text-gray-700">Email or Employee ID</label>
               <input
                 type="text"
                 name="email"
                 value={formData.email}
                 onChange={handleChange}
                 placeholder="name@company.com"
-                className="w-full h-11 px-4 rounded-lg border border-gray-300 
-                focus:ring-2 focus:ring-green-300 focus:border-green-600 
+                className="w-full h-11 px-4 rounded-lg border border-gray-300
+                focus:ring-2 focus:ring-green-300 focus:border-green-600
                 outline-none text-black"
                 required
               />
             </div>
 
-            {/* Password */}
             <div>
               <div className="flex justify-between mb-1">
                 <label className="text-sm text-gray-700">Password</label>
@@ -132,8 +122,8 @@ const Login = () => {
                   value={formData.password}
                   onChange={handleChange}
                   placeholder="Enter password"
-                  className="w-full h-11 px-4 rounded-lg border border-gray-300 
-                  focus:ring-2 focus:ring-green-300 focus:border-green-600 
+                  className="w-full h-11 px-4 rounded-lg border border-gray-300
+                  focus:ring-2 focus:ring-green-300 focus:border-green-600
                   outline-none pr-12 text-black"
                   required
                 />
@@ -151,7 +141,6 @@ const Login = () => {
               </div>
             </div>
 
-            {/* Submit */}
             <button
               type="submit"
               disabled={isLoading}
@@ -164,19 +153,10 @@ const Login = () => {
             </button>
           </form>
 
-          {/* Google sign-in removed with Firebase — restore when reconfigured. */}
-
           <p className="text-center text-xs text-gray-500 mt-4">
-            Don’t have an account?{" "}
-            <Link to="/signup" className="text-green-600 font-medium">
-              Register
-            </Link>
-          </p>
-
-          <p className="text-center text-xs text-gray-500 mt-2">
-            Team member?{" "}
-            <Link to="/team-login" className="text-green-600 font-medium">
-              Sign in here
+            Not a team member?{" "}
+            <Link to="/login" className="text-green-600 font-medium">
+              Admin sign in
             </Link>
           </p>
 
@@ -191,14 +171,12 @@ const Login = () => {
 
         <div className="relative z-10 text-center px-12 max-w-md">
 
-          {/* Image via URL */}
           <img
             src="https://exclusive-harlequin-tuwmcrrggt.edgeone.app/3d-hand-with-safe-payment-confirmation-bill.jpg"
             alt="Billing Illustration"
             className="w-full max-w-md mb-8 object-contain drop-shadow-xl"
           />
 
-          {/* Typing Text */}
           <h2 className="text-2xl font-bold text-green-800 min-h-[32px]">
             {typedText}
             <span className="animate-pulse">|</span>
@@ -216,4 +194,4 @@ const Login = () => {
   );
 };
 
-export default Login;
+export default TeamLogin;

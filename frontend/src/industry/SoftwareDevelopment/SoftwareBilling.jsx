@@ -126,7 +126,11 @@ const SDBilling = () => {
   };
 
   const location = useLocation();
-  const { currentUser, updateProfile } = useAuth();
+  const { currentUser, updateProfile, hasCapability } = useAuth();
+  const canWhatsappBill = hasCapability("whatsappInvoices");
+  // How bills go out on WhatsApp, set by the super admin: "pdf" (receipt attached) or "text".
+  const billViaText = currentUser?.Tenant?.bill_delivery_mode === "text";
+  const [sendWhatsappBill, setSendWhatsappBill] = useState(true);
   const userData = currentUser;
 
   const [products, setProducts] = useState([]);
@@ -185,24 +189,12 @@ const SDBilling = () => {
   const [paymentMethod, setPaymentMethod] = useState("cash");
   const [categories, setCategories] = useState([]);
   const [isDueBill, setIsDueBill] = useState(false);
-  const [printerFormat, setPrinterFormat] = useState("A4");
+  const [printerFormat, setPrinterFormat] = useState(currentUser?.Tenant?.printer_format || "A4");
   const [termDuration, setTermDuration] = useState("Half-Yearly");
   const [creditPaymentData, setCreditPaymentData] = useState(null);
 
   const activePaymentColor = paymentColors[paymentMethod];
 
-  // Dynamic Printer Format Resolution
-  useEffect(() => {
-    if (cart.length > 0 && userData?.Tenant?.printer_configs) {
-      const firstItemCategory = cart[0].category?.toLowerCase();
-      const config = userData.Tenant.printer_configs.find(
-        (c) => c.category?.toLowerCase() === firstItemCategory
-      );
-      if (config && config.format) {
-        setPrinterFormat(config.format);
-      }
-    }
-  }, [cart, userData]);
 
   const receiptContentRef = useRef(null);
   const printAreaRef = useRef(null);
@@ -391,8 +383,9 @@ const SDBilling = () => {
   const clearSound = () => playSound("/sound/button-21.mp3");
   const playSound = (src) => { const sound = new Audio(src); sound.play().catch(() => { }); sound.onended = () => sound.remove(); };
 
-  const handleDownloadPdf = async () => {
-    if (!receiptContentRef.current) return;
+  // compact: JPEG instead of PNG (~10x smaller), used for the WhatsApp copy.
+  const buildReceiptPdf = async ({ compact = false } = {}) => {
+    if (!receiptContentRef.current) return null;
     const formatStr = printerFormat.toLowerCase();
     let format = { width: 70, height: null };
 
@@ -414,23 +407,46 @@ const SDBilling = () => {
     document.body.appendChild(container);
     try {
       const canvas = await html2canvas(container, { scale: 2, useCORS: true, logging: false, backgroundColor: '#ffffff', windowWidth: container.scrollWidth, windowHeight: container.scrollHeight });
-      const imgData = canvas.toDataURL("image/png");
+      const imgType = compact ? "JPEG" : "PNG";
+      const imgData = compact ? canvas.toDataURL("image/jpeg", 0.85) : canvas.toDataURL("image/png");
       const ratio = canvas.height / canvas.width;
       let pdf;
       if (formatStr.includes('thermal')) {
         const pdfWidth = format.width;
         pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: [pdfWidth, pdfWidth * ratio] });
-        pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, pdfWidth * ratio);
+        pdf.addImage(imgData, imgType, 0, 0, pdfWidth, pdfWidth * ratio);
       } else if (formatStr.includes('a5')) {
         pdf = new jsPDF('p', 'mm', 'a5');
-        pdf.addImage(imgData, "PNG", 0, 0, 148, 148 * ratio);
+        pdf.addImage(imgData, imgType, 0, 0, 148, 148 * ratio);
       } else {
         pdf = new jsPDF('p', 'mm', 'a4');
-        pdf.addImage(imgData, "PNG", 0, 0, 210, 210 * ratio);
+        pdf.addImage(imgData, imgType, 0, 0, 210, 210 * ratio);
       }
-      pdf.save(`${receiptNo || "receipt"}.pdf`);
+      return pdf;
+    } finally { document.body.removeChild(container); }
+  };
+
+  const handleDownloadPdf = async () => {
+    try {
+      const pdf = await buildReceiptPdf();
+      if (pdf) pdf.save(`${receiptNo || "receipt"}.pdf`);
     } catch (err) { console.error("PDF Gen Error:", err); alert("Error generating PDF."); }
-    finally { document.body.removeChild(container); }
+  };
+
+  // Sends the saved bill (same PDF as the receipt) to the customer's WhatsApp.
+  // Never blocks the sale: a failure only shows a message.
+  const sendBillOnWhatsapp = async (billId, token) => {
+    try {
+      // Text mode (super admin setting): the server builds the message from the saved bill, no PDF needed.
+      const pdf = billViaText ? null : await buildReceiptPdf({ compact: true });
+      if (!billViaText && !pdf) return;
+      await axios.post(`${API_URL}/billing/bills/${billId}/whatsapp`, pdf ? pdf.output("blob") : null, {
+        headers: { "x-auth-token": token, "Content-Type": "application/octet-stream" },
+      });
+    } catch (err) {
+      console.error("WhatsApp bill error:", err);
+      alert(`Sale saved, but the bill could not be sent on WhatsApp.\n${err.response?.data?.msg || err.message}`);
+    }
   };
 
   const handlePrint = () => {
@@ -491,6 +507,22 @@ const SDBilling = () => {
     }
   };
 
+  // Guards Finalize against double-clicks: the ref blocks a second click
+  // before React re-renders, the state disables the button.
+  const finalizingRef = useRef(false);
+  const [finalizing, setFinalizing] = useState(false);
+  const handleFinalize = async () => {
+    if (finalizingRef.current) return;
+    finalizingRef.current = true;
+    setFinalizing(true);
+    try {
+      await printAndProceed();
+    } finally {
+      finalizingRef.current = false;
+      setFinalizing(false);
+    }
+  };
+
   const printAndProceed = async () => {
     if (!receiptContentRef.current || !printAreaRef.current || !currentUser) { alert("Error preparing receipt or user not logged in."); return; }
 
@@ -507,6 +539,7 @@ const SDBilling = () => {
       const isDueSale = dueAmount > 0;
       const saleData = {
         receiptNo: receiptNo || "N/A", receiptDate: receiptDate || new Date().toISOString(), customerId: customerId || null,
+        customerName: customerForm.name || "", customerPhone: customerForm.phone || "",
         items: cart.map(item => ({ sku: item.productSku || "NA", name: item.name || "Unknown", price: Number(item.price || 0), qty: Number(item.qty || 1), category: item.category || "Uncategorized", gstRate: Number(item.gstRate || 0) })),
         totals: getTotals(),
         paymentMethod: paymentMethod === "term" ? `Term - ${termDuration}` : paymentMethod,
@@ -517,14 +550,20 @@ const SDBilling = () => {
       const config = { headers: { 'x-auth-token': token } };
 
       // 1. Create Bill / Sale Record
+      let savedBillId = null;
       try {
-        await axios.post(`${API_URL}/billing/bills`, saleData, config);
+        const billRes = await axios.post(`${API_URL}/billing/bills`, saleData, config);
+        savedBillId = billRes.data?.id || null;
       } catch (err) {
         console.error("Error creating bill via API:", err);
         // Fallback or alert? For now log and continue to stock deduction or alert.
         // If bill creation fails, maybe we shouldn't deduct stock?
         // But user asked generally to "update database".
         // I will proceed but warn.
+      }
+
+      if (savedBillId && canWhatsappBill && sendWhatsappBill && customerForm.phone) {
+        await sendBillOnWhatsapp(savedBillId, token);
       }
 
       // 1.5 Update Credit Record if this is a Credit Repayment
@@ -1459,7 +1498,7 @@ const SDBilling = () => {
 
       {/* ═══════════ CUSTOMER FORM MODAL ═══════════ */}
       {showCustomerForm && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black/40 backdrop-blur-sm z-50 p-4">
+        <div className="fixed inset-0 flex items-center justify-center bg-black/40 z-50 p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden animate-modal-in">
             <div className="bg-gradient-to-r from-green-600 to-emerald-700 px-5 py-3 flex items-center justify-between">
               <div className="flex items-center gap-2.5">
@@ -1516,7 +1555,7 @@ const SDBilling = () => {
 
       {/* ═══════════ RECEIPT MODAL ═══════════ */}
       {isShowModalReceipt && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl max-w-3xl w-[95vw] h-[95vh] flex flex-col overflow-hidden animate-modal-in">
             <div className="flex items-center justify-between px-4 py-2.5 border-b border-green-100 flex-shrink-0 bg-white">
               <div className="flex items-center gap-2">
@@ -1564,14 +1603,27 @@ const SDBilling = () => {
             </div>
 
             <div className="border-t border-green-100 p-3 flex flex-wrap gap-1.5 flex-shrink-0 bg-white print:hidden">
+              {canWhatsappBill && (
+                <label className="w-full flex items-center gap-2 px-1 pb-1 text-[11px] font-medium text-gray-600 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    className="accent-green-600"
+                    checked={sendWhatsappBill}
+                    onChange={(e) => setSendWhatsappBill(e.target.checked)}
+                  />
+                  {customerForm.phone
+                    ? `Send bill ${billViaText ? "details" : "PDF"} on WhatsApp to ${customerForm.phone}`
+                    : "Send bill on WhatsApp (enter customer phone)"}
+                </label>
+              )}
               <button onClick={handleDownloadPdf} className="flex-1 min-w-[100px] h-9 rounded-lg flex items-center justify-center gap-1 text-[11px] font-semibold bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 transition-all">
                 <Download size={12} /> PDF
               </button>
               <button onClick={handlePrint} className="flex-1 min-w-[100px] h-9 rounded-lg flex items-center justify-center gap-1 text-[11px] font-semibold bg-white border border-green-200 text-green-600 hover:bg-green-50 transition-all">
                 <Printer size={12} /> Print
               </button>
-              <button onClick={printAndProceed} className="flex-1 min-w-[120px] h-9 rounded-lg flex items-center justify-center gap-1 text-[11px] font-bold bg-gradient-to-r from-green-600 to-emerald-700 text-white hover:from-green-700 hover:to-emerald-800 shadow-md shadow-green-200/50 transition-all">
-                <CheckCircle size={12} /> Finalize
+              <button onClick={handleFinalize} disabled={finalizing} className="disabled:opacity-60 disabled:cursor-not-allowed flex-1 min-w-[120px] h-9 rounded-lg flex items-center justify-center gap-1 text-[11px] font-bold bg-gradient-to-r from-green-600 to-emerald-700 text-white hover:from-green-700 hover:to-emerald-800 shadow-md shadow-green-200/50 transition-all">
+                <CheckCircle size={12} /> {finalizing ? "Saving..." : "Finalize"}
               </button>
             </div>
           </div>

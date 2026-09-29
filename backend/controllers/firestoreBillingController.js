@@ -5,27 +5,15 @@ const crypto = require('crypto');
 const { TRIAL_DAYS, addDays } = require('../utils/subscription');
 
 // MongoDB models
-const { Owner: OwnerModel, SubscriptionDetail: SubscriptionDetailModel } = require('../models/mongodb');
+const { Owner: OwnerModel, SubscriptionDetail: SubscriptionDetailModel, Plan: PlanModel } = require('../models/mongodb');
 
 // Determine which database to use
 const DB_TYPE = process.env.DB_TYPE || 'mongodb';
 
-// Billing Plans Configuration
-const PLANS = {
-    standard: {
-        monthly: 1,
-        yearly: 1, // Adjust logic if needed (e.g., 10 * 12 * discount) - Matching frontend hardcoded for now
-        threeyear: 7999
-    },
-    premium: {
-        monthly: 1,
-        yearly: 1,
-        threeyear: 12999
-    },
-    additional_users: {
-        unitPrice: 15
-    }
-};
+// Per-seat add-on price is not part of the Free/Standard/Premium plan config
+// (superadmin doesn't manage it yet) — Standard/Premium prices themselves
+// come from the Plan collection, set on the superadmin Plans page.
+const ADDITIONAL_USER_UNIT_PRICE = 15;
 
 // @desc    Create Razorpay Order for Subscription
 // @route   POST /api/v2/billing/create-order
@@ -37,23 +25,26 @@ exports.createSubscriptionOrder = async (req, res) => {
 
         const { plan, billingCycle } = req.body;
 
-        if (!PLANS[plan]) {
-            return res.status(400).json({ msg: "Invalid plan selected" });
-        }
-
         let amount = 0;
         if (plan === 'additional_users') {
             const count = parseInt(req.body.count) || 1;
-            amount = PLANS.additional_users.unitPrice * count;
+            amount = ADDITIONAL_USER_UNIT_PRICE * count;
         } else {
-            if (billingCycle === 'monthly') amount = PLANS[plan].monthly;
-            else if (billingCycle === 'yearly') amount = PLANS[plan].yearly;
-            else if (billingCycle === '3years') amount = PLANS[plan].threeyear;
+            if (!['standard', 'premium'].includes(plan)) {
+                return res.status(400).json({ msg: "Invalid plan selected" });
+            }
+            if (!['monthly', 'yearly'].includes(billingCycle)) {
+                return res.status(400).json({ msg: "Invalid billing cycle" });
+            }
+
+            const planDoc = await PlanModel.findOne({ key: plan }).lean();
+            amount = planDoc ? (billingCycle === 'monthly' ? planDoc.monthly : planDoc.yearly) : 0;
+
+            if (!(amount > 0)) {
+                return res.status(400).json({ msg: "This plan isn't available for purchase yet. Please contact support." });
+            }
         }
 
-        // Note: Frontend seems to have specific logic (10/mo, 11/yr??). 
-        // I will trust the PLAN constants I defined above which mirror the initial view of the file or standard logic.
-        // For safety, let's log what we are processing.
         console.log(`Creating order for ${plan} - ${billingCycle}: ${amount}`);
 
         const ownerIdTag = req.ownerId ? req.ownerId.slice(0, 5) : 'unknown';
@@ -86,6 +77,11 @@ exports.createSubscriptionOrder = async (req, res) => {
 
 const { generateInvoicePDF } = require('../utils/pdfGenerator');
 const { sendEmail } = require('../utils/emailService');
+const emailTemplates = require('../utils/emailTemplates');
+const { sendInvoicePdf, sendInvoiceText } = require('../utils/whatsappNotify');
+const billDelivery = require('../utils/billDelivery');
+const platformStore = require('../utils/platformStore');
+const { normalizePhone } = require('../utils/whatsappService');
 
 // @desc    Verify Razorpay Payment & Update Subscription
 // @route   POST /api/v2/billing/verify-payment
@@ -260,43 +256,15 @@ exports.verifySubscriptionPayment = async (req, res) => {
 
                 const pdfBuffer = await generateInvoicePDF(invoiceData);
 
-                const emailSubject = `Subscription Successful - ${plan} Plan`;
-                const emailHtml = `
-                    <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; border: 1px solid #e5e7eb; border-radius: 12px; overflow: hidden;">
-                        <div style="background: linear-gradient(135deg, #10B981, #059669); padding: 30px; text-align: center;">
-                            <h1 style="color: white; margin: 0; font-size: 24px;">Subscription Successful!</h1>
-                        </div>
-                        <div style="padding: 30px;">
-                            <p>Dear ${ownerName},</p>
-                            <p>Your subscription was successful! Thank you for choosing SwordNex Billing Software.</p>
-                            
-                            <div style="background-color: #f9fafb; padding: 20px; border-radius: 8px; margin: 20px 0;">
-                                <p style="margin: 0; font-weight: bold; color: #374151;">Subscription Details:</p>
-                                <table style="width: 100%; margin-top: 10px; font-size: 14px;">
-                                    <tr><td style="padding: 5px 0; color: #6b7280;">Plan</td><td style="padding: 5px 0; font-weight: bold; text-align: right;">${plan.toUpperCase()}</td></tr>
-                                    <tr><td style="padding: 5px 0; color: #6b7280;">Amount Paid</td><td style="padding: 5px 0; font-weight: bold; text-align: right;">₹${invoiceData.amount.toLocaleString()}</td></tr>
-                                    <tr><td style="padding: 5px 0; color: #6b7280;">Start Date</td><td style="padding: 5px 0; font-weight: bold; text-align: right;">${invoiceData.startDate}</td></tr>
-                                    <tr><td style="padding: 5px 0; color: #6b7280;">End Date</td><td style="padding: 5px 0; font-weight: bold; text-align: right;">${invoiceData.endDate}</td></tr>
-                                </table>
-                            </div>
-                            
-                            <div style="text-align: center; margin-top: 30px;">
-                                <a href="https://swordnex-billing.web.app/login" style="display: inline-block; background-color: #10B981; color: white; padding: 12px 30px; text-decoration: none; border-radius: 8px; font-weight: bold;">Login and Continue</a>
-                            </div>
-                            
-                            <p style="margin-top: 30px; font-size: 14px; color: #6b7280;">Please find your invoice attached for your records.</p>
-                            <p style="margin-top: 20px;">Best regards,<br>The SwordNex Team</p>
-                        </div>
-                    </div>
-                `;
-
                 await sendEmail({
                     to: ownerEmail,
-                    subject: emailSubject,
-                    htmlContent: emailHtml,
+                    ...emailTemplates.subscriptionConfirmed({
+                        name: ownerName, plan, amount: invoiceData.amount,
+                        startDate, endDate, invoiceNo: invoiceData.invoiceNo
+                    }),
                     attachment: {
-                        filename: `Invoice_${invoiceData.invoiceNo}.pdf`,
-                        content: pdfBuffer
+                        name: `Invoice_${invoiceData.invoiceNo}.pdf`,
+                        content: pdfBuffer.toString('base64')
                     }
                 });
                 console.log(`Invoice email sent to ${ownerEmail}`);
@@ -425,40 +393,9 @@ exports.activateTrial = async (req, res) => {
                 const endDate = new Date(startDate);
                 endDate.setDate(endDate.getDate() + TRIAL_DAYS);
 
-                const emailSubject = `Free Trial Successful - SwordNex`;
-                const emailHtml = `
-                    <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; border: 1px solid #e5e7eb; border-radius: 12px; overflow: hidden;">
-                        <div style="background: linear-gradient(135deg, #CA8A04, #A16207); padding: 30px; text-align: center;">
-                            <h1 style="color: white; margin: 0; font-size: 24px;">Free Trial Successful!</h1>
-                        </div>
-                        <div style="padding: 30px;">
-                            <p>Dear ${ownerName},</p>
-                            <p>Your free trial was successful! Thank you for choosing SwordNex Billing Software.</p>
-
-                            <div style="background-color: #f9fafb; padding: 20px; border-radius: 8px; margin: 20px 0;">
-                                <p style="margin: 0; font-weight: bold; color: #374151;">Subscription Details:</p>
-                                <table style="width: 100%; margin-top: 10px; font-size: 14px;">
-                                    <tr><td style="padding: 5px 0; color: #6b7280;">Plan</td><td style="padding: 5px 0; font-weight: bold; text-align: right;">TRIAL (${TRIAL_DAYS} Days)</td></tr>
-                                    <tr><td style="padding: 5px 0; color: #6b7280;">Amount</td><td style="padding: 5px 0; font-weight: bold; text-align: right;">Free</td></tr>
-                                    <tr><td style="padding: 5px 0; color: #6b7280;">Start Date</td><td style="padding: 5px 0; font-weight: bold; text-align: right;">${startDate.toLocaleDateString()}</td></tr>
-                                    <tr><td style="padding: 5px 0; color: #6b7280;">End Date</td><td style="padding: 5px 0; font-weight: bold; text-align: right;">${endDate.toLocaleDateString()}</td></tr>
-                                </table>
-                            </div>
-
-                            <div style="text-align: center; margin-top: 30px;">
-                                <a href="https://swordnex-billing.web.app/login" style="display: inline-block; background-color: #CA8A04; color: white; padding: 12px 30px; text-decoration: none; border-radius: 8px; font-weight: bold;">Login and Continue</a>
-                            </div>
-
-                            <p style="margin-top: 30px; font-size: 14px; color: #6b7280;">Explore all premium features immediately. If you have any questions, feel free to reply to this email.</p>
-                            <p style="margin-top: 20px;">Best regards,<br>The SwordNex Team</p>
-                        </div>
-                    </div>
-                `;
-
                 await sendEmail({
                     to: ownerEmail,
-                    subject: emailSubject,
-                    htmlContent: emailHtml
+                    ...emailTemplates.trialStarted({ name: ownerName, startDate, endDate, trialDays: TRIAL_DAYS })
                 });
                 console.log(`Trial welcome email sent to ${ownerEmail}`);
             } catch (emailErr) {
@@ -508,6 +445,45 @@ exports.createBill = async (req, res) => {
     }
 };
 
+
+// @desc    Send a saved POS bill to the customer's WhatsApp, as a PDF or as a
+//          text summary depending on the store's delivery mode (utils/billDelivery.js)
+// @route   POST /api/v2/billing/bills/:id/whatsapp
+//          body: the receipt PDF (application/octet-stream); not needed in text mode
+exports.sendBillWhatsapp = async (req, res) => {
+    try {
+        const owner = await platformStore.getOwner(req.user.ownerId);
+        const mode = await billDelivery.effectiveMode(owner);
+
+        const pdf = Buffer.isBuffer(req.body) && req.body.length ? req.body : req.rawBody;
+        if (mode === 'pdf' && (!pdf || !pdf.length || pdf.subarray(0, 5).toString() !== '%PDF-')) {
+            return res.status(400).json({ msg: 'The bill PDF is missing or invalid.' });
+        }
+
+        const billRef = getCollection(req, 'bills').doc(req.params.id);
+        const doc = await billRef.get();
+        if (!doc.exists) return res.status(404).json({ msg: 'Bill not found' });
+        const bill = doc.data();
+
+        if (!normalizePhone(bill.customerPhone)) {
+            return res.status(400).json({ msg: 'This bill has no valid customer mobile number.' });
+        }
+
+        const result = mode === 'text'
+            ? await sendInvoiceText(bill, owner?.companyDetails?.name)
+            : await sendInvoicePdf(bill, pdf);
+        await billRef.update({
+            whatsappSentAt: new Date().toISOString(),
+            whatsappMessageId: result.messageId || null,
+            whatsappMode: mode
+        });
+
+        res.json({ msg: 'Bill sent on WhatsApp', to: bill.customerPhone, mode });
+    } catch (err) {
+        console.error('Send Bill WhatsApp Error:', err.message);
+        res.status(502).json({ msg: 'Could not send the bill on WhatsApp. ' + err.message.replace(/^Meta WhatsApp[^:]*: /, '') });
+    }
+};
 
 // @desc    Get all GST bills
 // @route   GET /api/v2/billing/gst-bills
@@ -570,63 +546,11 @@ exports.testEmail = async (req, res) => {
         const endDate = new Date();
         endDate.setDate(endDate.getDate() + TRIAL_DAYS);
 
-        let emailSubject, emailHtml;
+        const template = type === 'paid'
+            ? emailTemplates.subscriptionConfirmed({ name: testName, plan: 'Premium', amount: 999, startDate, endDate, test: true })
+            : emailTemplates.trialStarted({ name: testName, startDate, endDate, trialDays: TRIAL_DAYS, test: true });
 
-        if (type === 'paid') {
-            emailSubject = `Subscription Successful - Premium Plan (TEST)`;
-            emailHtml = `
-                <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; border: 1px solid #e5e7eb; border-radius: 12px; overflow: hidden;">
-                    <div style="background: linear-gradient(135deg, #10B981, #059669); padding: 30px; text-align: center;">
-                        <h1 style="color: white; margin: 0; font-size: 24px;">Subscription Successful! (TEST)</h1>
-                    </div>
-                    <div style="padding: 30px;">
-                        <p>Dear ${testName},</p>
-                        <p>This is a <b>TEST EMAIL</b> to verify your configuration. Your subscription was successful!</p>
-                        <div style="background-color: #f9fafb; padding: 20px; border-radius: 8px; margin: 20px 0;">
-                            <table style="width: 100%; margin-top: 10px; font-size: 14px;">
-                                <tr><td style="padding: 5px 0; color: #6b7280;">Plan</td><td style="padding: 5px 0; font-weight: bold; text-align: right;">PREMIUM (TEST)</td></tr>
-                                <tr><td style="padding: 5px 0; color: #6b7280;">Amount Paid</td><td style="padding: 5px 0; font-weight: bold; text-align: right;">₹999 (TEST)</td></tr>
-                                <tr><td style="padding: 5px 0; color: #6b7280;">Start Date</td><td style="padding: 5px 0; font-weight: bold; text-align: right;">${startDate.toLocaleDateString()}</td></tr>
-                                <tr><td style="padding: 5px 0; color: #6b7280;">End Date</td><td style="padding: 5px 0; font-weight: bold; text-align: right;">${endDate.toLocaleDateString()}</td></tr>
-                            </table>
-                        </div>
-                        <div style="text-align: center; margin-top: 30px;">
-                            <a href="https://swordnex-billing.web.app/login" style="display: inline-block; background-color: #10B981; color: white; padding: 12px 30px; text-decoration: none; border-radius: 8px; font-weight: bold;">Login and Continue</a>
-                        </div>
-                    </div>
-                </div>
-            `;
-        } else {
-            emailSubject = `Free Trial Successful - SwordNex (TEST)`;
-            emailHtml = `
-                <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; border: 1px solid #e5e7eb; border-radius: 12px; overflow: hidden;">
-                    <div style="background: linear-gradient(135deg, #CA8A04, #A16207); padding: 30px; text-align: center;">
-                        <h1 style="color: white; margin: 0; font-size: 24px;">Free Trial Successful! (TEST)</h1>
-                    </div>
-                    <div style="padding: 30px;">
-                        <p>Dear ${testName},</p>
-                        <p>This is a <b>TEST EMAIL</b>. Your free trial was successful!</p>
-                        <div style="background-color: #f9fafb; padding: 20px; border-radius: 8px; margin: 20px 0;">
-                            <table style="width: 100%; margin-top: 10px; font-size: 14px;">
-                                <tr><td style="padding: 5px 0; color: #6b7280;">Plan</td><td style="padding: 5px 0; font-weight: bold; text-align: right;">TRIAL (TEST)</td></tr>
-                                <tr><td style="padding: 5px 0; color: #6b7280;">Amount</td><td style="padding: 5px 0; font-weight: bold; text-align: right;">Free (TEST)</td></tr>
-                                <tr><td style="padding: 5px 0; color: #6b7280;">Start Date</td><td style="padding: 5px 0; font-weight: bold; text-align: right;">${startDate.toLocaleDateString()}</td></tr>
-                                <tr><td style="padding: 5px 0; color: #6b7280;">End Date</td><td style="padding: 5px 0; font-weight: bold; text-align: right;">${endDate.toLocaleDateString()}</td></tr>
-                            </table>
-                        </div>
-                        <div style="text-align: center; margin-top: 30px;">
-                            <a href="https://swordnex-billing.web.app/login" style="display: inline-block; background-color: #CA8A04; color: white; padding: 12px 30px; text-decoration: none; border-radius: 8px; font-weight: bold;">Login and Continue</a>
-                        </div>
-                    </div>
-                </div>
-            `;
-        }
-
-        await sendEmail({
-            to: email,
-            subject: emailSubject,
-            htmlContent: emailHtml
-        });
+        await sendEmail({ to: email, ...template });
 
         res.json({ msg: "Test email sent successfully", to: email });
     } catch (err) {

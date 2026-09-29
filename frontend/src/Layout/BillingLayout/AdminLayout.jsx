@@ -40,7 +40,7 @@ const BillingLayout = ({ children, hideHeader = false, hideSidebar = false }) =>
   const [showNotifications, setShowNotifications] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const location = useLocation();
-  const { currentUser, logout } = useAuth();
+  const { currentUser, logout, hasCapability } = useAuth();
   const userData = currentUser;
   const navigate = useNavigate();
   const [isBellOpen, setIsBellOpen] = useState(false);
@@ -50,11 +50,19 @@ const BillingLayout = ({ children, hideHeader = false, hideSidebar = false }) =>
 
   const isAcademy = industryKey === 'academy';
 
+  // barcodes/reports are also gated by plan (Standard vs Premium) — see
+  // ModuleRoute.jsx, which is the actual enforcement; this just keeps the
+  // sidebar from showing a link the user would immediately get bounced from.
+  const PLAN_GATED_MODULES = { barcodes: 'barcodes', reports: 'reports' };
   const menuItems = getSidebarItems(industryKey).filter(item => {
     if (userData?.role !== 'owner' && userData?.role !== 'TenantAdmin') {
       if (item.path.includes('section=sub_users') || item.path === '/staff-records') {
         return false;
       }
+    }
+    const capKey = PLAN_GATED_MODULES[item.moduleKey];
+    if (capKey && !hasCapability(capKey)) {
+      return false;
     }
     return true;
   });

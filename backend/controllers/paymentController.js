@@ -3,6 +3,9 @@ const store = require('../utils/paymentStore');
 const platformStore = require('../utils/platformStore');
 const { newPayToken, hmacMatches, settleOrder, money, esc } = require('../utils/paymentService');
 const { sendEmail } = require('../utils/emailService');
+const emailTemplates = require('../utils/emailTemplates');
+const wa = require('../utils/whatsappService');
+const { sendDuesPayLink } = require('../utils/whatsappNotify');
 
 const notConfigured = (res) => res.status(503).json({ msg: 'Online payments are not configured on this server.' });
 
@@ -69,17 +72,48 @@ exports.emailPayLink = async (req, res) => {
 
         await sendEmail({
             to,
-            subject: `Payment request from ${view.business} - ${money(view.balance)}`,
-            html: `<div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto">
-                <p>Hi ${esc(view.customerName || 'there')},</p>
-                <p>${esc(view.business)} has requested a payment of <b>${money(view.balance)}</b>.</p>
-                <p><a href="${esc(url)}" style="display:inline-block;background:#059669;color:#fff;padding:12px 26px;border-radius:8px;text-decoration:none;font-weight:bold">Pay securely</a></p>
-                <p style="font-size:12px;color:#6b7280">Payments are processed by Razorpay (UPI, cards, netbanking, wallets).</p></div>`
+            ...emailTemplates.payLink({
+                business: view.business, customerName: view.customerName, amount: money(view.balance), url
+            })
         });
         res.json({ msg: 'Pay link emailed', url });
     } catch (err) {
         console.error('Email pay link error:', err.message);
         res.status(500).send('Server Error');
+    }
+};
+
+// @route GET /api/v2/credit/whatsapp-status
+exports.whatsappStatus = (req, res) => {
+    res.json({ dues: wa.duesEnabled() });
+};
+
+// @route POST /api/v2/credit/:id/whatsapp-pay-link   body: { mobile? }
+exports.whatsappPayLink = async (req, res) => {
+    try {
+        if (!razorpayEnabled) return notConfigured(res);
+        if (!wa.duesEnabled()) {
+            return res.status(503).json({ msg: 'WhatsApp pay links are not enabled on this server yet.' });
+        }
+        const credit = await findOwnCredit(req);
+        if (!credit) return res.status(404).json({ msg: 'Record not found' });
+        if (!(Number(credit.balance) > 0)) return res.status(400).json({ msg: 'Nothing is due on this record.' });
+
+        const to = String(req.body.mobile || credit.mobile || credit.phone || '').trim();
+        if (!wa.normalizePhone(to)) return res.status(400).json({ msg: 'A valid customer mobile number is required.' });
+
+        if (!credit.payToken) {
+            credit.payToken = newPayToken();
+            await store.setPayToken(credit, credit.payToken);
+        }
+        const view = await publicView(credit);
+        const url = linkFor(req, credit.payToken);
+
+        await sendDuesPayLink({ to, customerName: view.customerName, business: view.business, balance: view.balance, url });
+        res.json({ msg: 'Pay link sent on WhatsApp', url });
+    } catch (err) {
+        console.error('WhatsApp pay link error:', err.message);
+        res.status(502).json({ msg: 'Could not send the WhatsApp message. Please try again or share the link manually.' });
     }
 };
 

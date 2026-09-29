@@ -18,13 +18,16 @@ import {
   ArrowLeft,
   Printer,
   Plus,
-  Trash2
+  Trash2,
+  Tags
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { handleEnterToNext } from '../utils/formUtils';
 import BillingLayout from '../Layout/BillingLayout/AdminLayout';
 import { resolveIndustryProfile, hasChosenIndustry, getSelectableProfiles } from '../config/industryProfiles';
+import useItemCategories from '../hooks/useItemCategories';
+import ItemCategoriesManager from '../components/Settings/ItemCategoriesManager';
 
 const ACCENTS = {
   emerald: {
@@ -246,16 +249,14 @@ const Settings = () => {
   const [savingTax, setSavingTax] = useState(false);
 
   const [isEditingPrinter, setIsEditingPrinter] = useState(false);
+  const PRINTER_FORMATS = ["A4", "A5", "A4 GST Invoice", "A5 GST Invoice", "Thermal 80mm", "Thermal 58mm"];
   const [printerForm, setPrinterForm] = useState({
-    configs: userData?.Tenant?.printer_configs || [
-      {
-        category: userData?.Tenant?.printer_category || 'Mobile',
-        format: userData?.Tenant?.printer_format || 'A4'
-      }
-    ],
+    format: userData?.Tenant?.printer_format || 'A4',
     autoPrint: userData?.Tenant?.printer_auto_print || false
   });
   const [savingPrinter, setSavingPrinter] = useState(false);
+  const { categories: itemCategories, save: saveItemCategories } = useItemCategories(userData);
+  const categoryNames = Object.keys(itemCategories).sort((a, b) => a.localeCompare(b));
 
   const toggleSection = (section) => {
     setActiveSection(prev => prev === section ? null : section);
@@ -337,26 +338,11 @@ const Settings = () => {
     }
   };
 
-  const addPrinterConfig = () => {
-    setPrinterForm(prev => ({
-      ...prev,
-      configs: [...prev.configs, { category: 'Mobile', format: 'A4' }]
-    }));
-  };
-
-  const removePrinterConfig = (index) => {
-    if (printerForm.configs.length <= 1) return;
-    setPrinterForm(prev => ({
-      ...prev,
-      configs: prev.configs.filter((_, i) => i !== index)
-    }));
-  };
-
   const handlePrinterSave = async () => {
     try {
       setSavingPrinter(true);
       await updateProfile({
-        printer_configs: printerForm.configs,
+        printer_format: printerForm.format,
         printer_auto_print: printerForm.autoPrint
       });
       setIsEditingPrinter(false);
@@ -574,7 +560,8 @@ const Settings = () => {
 
   const configurationRows = [
     ...(userData.role === 'owner' || userData.role === 'subuser' ? [{ id: 'tax_rates', label: 'Tax Rates', subtitle: `GST ${salesGst}% on sales`, icon: FileText }] : []),
-    { id: 'printer', label: 'Printer', subtitle: 'Receipt format & auto-print', icon: Printer },
+    { id: 'printer', label: 'Printer', subtitle: `Default format: ${userData?.Tenant?.printer_format || 'A4'}`, icon: Printer },
+    ...(isOwnerOrAdmin ? [{ id: 'item_categories', label: 'Categories & Products', subtitle: `${categoryNames.length} categories`, icon: Tags }] : []),
     ...(isOwnerOrAdmin ? [{ id: 'sub_users', label: 'Sub-Users', subtitle: 'Team access & permissions', icon: Users }] : []),
   ];
 
@@ -1667,194 +1654,30 @@ const Settings = () => {
               </div>
 
               <div className="space-y-6">
-                {printerForm.configs.map((config, index) => (
-                  <div key={index} className="relative group">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
-                      <div>
-                        <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">
-                          Category {printerForm.configs.length > 1 && `#${index + 1}`}
-                        </label>
-                        {isEditingPrinter  && userData.Tenant.industry ==="pharmacy" ?(
-
-                          <select
-                            className="w-full h-10 px-3 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-400 transition-all text-gray-900"
-                            value={config.category}
-                            onChange={(e) => {
-                              const newConfigs = [...printerForm.configs];
-                              newConfigs[index].category = e.target.value;
-                              setPrinterForm({ ...printerForm, configs: newConfigs });
-                            }}
-                            onKeyDown={handleEnterToNext}
-                          >
-
-                            {[  "Tablets", "Syrups","Capsules","Injections","Topical","Vitamins & Supplements","Pain Relief","Antibiotics","Antacids","Cough & Cold","First Aid", "Medical Devices","Baby Care","Personal Hygiene","Ayurvedic & Herbal" ].map(opt => (
-                              <option key={opt} value={opt}>{opt}</option>
-                            ))}
-
-                            
-                          </select>
-                         
-                        ) :
-                      
-                        isEditingPrinter  && userData.Tenant.industry ==="clothing" ?(
-
-                          <select
-                            className="w-full h-10 px-3 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-400 transition-all text-gray-900"
-                            value={config.category}
-                            onChange={(e) => {
-                              const newConfigs = [...printerForm.configs];
-                              newConfigs[index].category = e.target.value;
-                              setPrinterForm({ ...printerForm, configs: newConfigs });
-                            }}
-                            onKeyDown={handleEnterToNext}
-                          >
-
-                            {["Men", "Women", "Kids", "Accessories","Winter Wear","Sports Wear"].map(opt => (
-                              <option key={opt} value={opt}>{opt}</option>
-                            ))}
-
-                            
-                          </select>
-                        ) :
-                        isEditingPrinter  && userData.Tenant.industry ==="grocery_store" ?(
-
-                          <select
-                            className="w-full h-10 px-3 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-400 transition-all text-gray-900"
-                            value={config.category}
-                            onChange={(e) => {
-                              const newConfigs = [...printerForm.configs];
-                              newConfigs[index].category = e.target.value;
-                              setPrinterForm({ ...printerForm, configs: newConfigs });
-                            }}
-                            onKeyDown={handleEnterToNext}
-                          >
-
-                            {["Food & Staples", "Snacks & Packaged Foods", "Beverages", "Spices & Seasonings", "Oils & Fats", "Dairy Products","Bakery Items", "Ready-to-Eat / Packaged","Household Items","Personal Care","Fruits & Vegetables","Meat & Eggs"].map(opt => (
-                              <option key={opt} value={opt}>{opt}</option>
-                            ))}
-
-                            
-                          </select>
-                        ) :
-                        isEditingPrinter  && userData.Tenant.industry ==="software_development" ?(
-
-                          <select
-                            className="w-full h-10 px-3 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-400 transition-all text-gray-900"
-                            value={config.category}
-                            onChange={(e) => {
-                              const newConfigs = [...printerForm.configs];
-                              newConfigs[index].category = e.target.value;
-                              setPrinterForm({ ...printerForm, configs: newConfigs });
-                            }}
-                            onKeyDown={handleEnterToNext}
-                          >
-
-                            {["Web Development", "Mobile App", "UI/UX Design", "Devops", "Q/A Testing", "Maintanence","Consulting"].map(opt => (
-                              <option key={opt} value={opt}>{opt}</option>
-                            ))}
-
-                            
-                          </select>
-                        ) :
-                        isEditingPrinter  && userData.companyDetails.industry ==="mobile_shop" ?(
-
-                          <select
-                            className="w-full h-10 px-3 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-400 transition-all text-gray-900"
-                            value={config.category}
-                            onChange={(e) => {
-                              const newConfigs = [...printerForm.configs];
-                              newConfigs[index].category = e.target.value;
-                              setPrinterForm({ ...printerForm, configs: newConfigs });
-                            }}
-                            onKeyDown={handleEnterToNext}
-                          >
-
-                            {["Mobile", "Bluetooth", "Charger", "Headset", "Cable", "Academy"].map(opt => (
-                              <option key={opt} value={opt}>{opt}</option>
-                            ))}
-
-                            
-                          </select>
-                        ) :
-                        isEditingPrinter  && userData.Tenant.industry ==="academy" ?(
-
-                          <select
-                            className="w-full h-10 px-3 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-400 transition-all text-gray-900"
-                            value={config.category}
-                            onChange={(e) => {
-                              const newConfigs = [...printerForm.configs];
-                              newConfigs[index].category = e.target.value;
-                              setPrinterForm({ ...printerForm, configs: newConfigs });
-                            }}
-                            onKeyDown={handleEnterToNext}
-                          >
-
-                            {["IT", "Spoken English", "Design", "Bussiness", "Skill Development"].map(opt => (
-                              <option key={opt} value={opt}>{opt}</option>
-                            ))}
-
-                            
-                          </select>
-                        ) :
-                        
-                        
-                        (
-                          <div className="h-10 flex items-center px-3 text-sm rounded-lg bg-gray-50 border border-gray-100">
-                            <span className="text-gray-800 font-medium">{config.category}</span>
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="flex items-center gap-3">
-                        <div className="flex-1">
-                          <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">
-                            Printer Format
-                          </label>
-                          {isEditingPrinter ? (
-                            <select
-                              className="w-full h-10 px-3 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-400 transition-all text-gray-900"
-                              value={config.format}
-                              onChange={(e) => {
-                                const newConfigs = [...printerForm.configs];
-                                newConfigs[index].format = e.target.value;
-                                setPrinterForm({ ...printerForm, configs: newConfigs });
-                              }}
-                              onKeyDown={handleEnterToNext}
-                            >
-                              {["A4", "A5", "A4 GST Invoice", "A5 GST Invoice", "Thermal 80mm", "Thermal 58mm"].map(opt => (
-                                <option key={opt} value={opt}>{opt}</option>
-                              ))}
-                            </select>
-                          ) : (
-                            <div className="h-10 flex items-center px-3 text-sm rounded-lg bg-gray-50 border border-gray-100">
-                              <span className="text-gray-800 font-medium">{config.format}</span>
-                            </div>
-                          )}
-                        </div>
-
-                        {isEditingPrinter && printerForm.configs.length > 1 && (
-                          <button
-                            onClick={() => removePrinterConfig(index)}
-                            className="mb-0.5 p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                            title="Remove this configuration"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        )}
-                      </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">
+                    Default Receipt Format
+                  </label>
+                  {isEditingPrinter ? (
+                    <select
+                      className="w-full h-10 px-3 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-400 transition-all text-gray-900"
+                      value={printerForm.format}
+                      onChange={(e) => setPrinterForm({ ...printerForm, format: e.target.value })}
+                      onKeyDown={handleEnterToNext}
+                    >
+                      {PRINTER_FORMATS.map(opt => (
+                        <option key={opt} value={opt}>{opt}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <div className="h-10 flex items-center px-3 text-sm rounded-lg bg-gray-50 border border-gray-100">
+                      <span className="text-gray-800 font-medium">{userData?.Tenant?.printer_format || 'A4'}</span>
                     </div>
-                  </div>
-                ))}
-
-                {isEditingPrinter && (
-                  <button
-                    onClick={addPrinterConfig}
-                    className="w-full flex items-center justify-center gap-2 py-2.5 text-xs font-bold text-emerald-600 border-2 border-dashed border-emerald-100 rounded-xl hover:border-emerald-200 hover:bg-emerald-50 transition-all"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    Add Another Configuration
-                  </button>
-                )}
+                  )}
+                  <p className="mt-1.5 text-xs text-gray-500">
+                    Every bill opens in this format. You can still switch it for a single bill in the receipt preview.
+                  </p>
+                </div>
               </div>
 
               <div className="mt-6 flex items-center justify-between p-4 rounded-xl bg-orange-50 border border-orange-100">
@@ -1885,6 +1708,18 @@ const Settings = () => {
                 )}
               </div>
             </div>
+          </SettingsModal>
+        )}
+
+        {/* ── Categories & Products ── */}
+        {activeSection === 'item_categories' && isOwnerOrAdmin && (
+          <SettingsModal maxWidth="max-w-3xl">
+            <ItemCategoriesManager
+              categories={itemCategories}
+              onSave={saveItemCategories}
+              profileKey={industryProfile.key}
+              onClose={() => setActiveSection(null)}
+            />
           </SettingsModal>
         )}
 

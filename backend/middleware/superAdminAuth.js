@@ -4,7 +4,7 @@ const jwt = require('jsonwebtoken');
 // (firestoreAuth.js) — a superadmin token carries no ownerId/tenantId and
 // must never be accepted on tenant-scoped routes, or vice versa.
 module.exports = function (req, res, next) {
-    const token = req.header('x-auth-token') || req.query['x-auth-token'] || req.body['x-auth-token'];
+    const token = req.header('x-auth-token') || req.query['x-auth-token'] || req.body?.['x-auth-token'];
 
     if (!token) {
         return res.status(401).json({ msg: 'No token, authorization denied' });

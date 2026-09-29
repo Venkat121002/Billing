@@ -2,6 +2,7 @@ const crypto = require('crypto');
 const store = require('./paymentStore');
 const platformStore = require('./platformStore');
 const { sendEmail } = require('./emailService');
+const emailTemplates = require('./emailTemplates');
 
 const money = (n) => `₹${Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -65,33 +66,17 @@ async function sendReceipts({ payment, credit, remainingBalance }) {
     const payerEmail = payment.payerEmail || credit.email;
     const customer = credit.name || credit.customerName || '';
 
-    const rows = `
-        <tr><td style="padding:5px 0;color:#6b7280">Amount paid</td><td style="text-align:right;font-weight:bold">${money(payment.amount)}</td></tr>
-        <tr><td style="padding:5px 0;color:#6b7280">Payment ID</td><td style="text-align:right">${esc(payment.paymentId)}</td></tr>
-        <tr><td style="padding:5px 0;color:#6b7280">Method</td><td style="text-align:right">${esc(payment.method || 'Online')}</td></tr>
-        <tr><td style="padding:5px 0;color:#6b7280">Remaining balance</td><td style="text-align:right;font-weight:bold">${money(remainingBalance)}</td></tr>`;
-    const wrap = (title, intro) => `
-        <div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden">
-          <div style="background:#059669;padding:22px;text-align:center;color:#fff"><h2 style="margin:0">${title}</h2></div>
-          <div style="padding:24px;color:#333"><p>${intro}</p>
-            <table style="width:100%;font-size:14px;background:#f9fafb;padding:12px;border-radius:8px">${rows}</table>
-            <p style="margin-top:20px;font-size:13px;color:#6b7280">${esc(business)}</p></div>
-        </div>`;
+    const details = {
+        business, customerName: customer, amount: money(payment.amount),
+        paymentId: payment.paymentId, method: payment.method, remaining: money(remainingBalance)
+    };
 
     const jobs = [];
     if (payerEmail) {
-        jobs.push(sendEmail({
-            to: payerEmail,
-            subject: `Payment receipt - ${money(payment.amount)} to ${business}`,
-            html: wrap('Payment received', `Hi ${esc(customer || 'there')}, thank you. We received your payment.`)
-        }));
+        jobs.push(sendEmail({ to: payerEmail, ...emailTemplates.paymentReceipt({ ...details, audience: 'customer' }) }));
     }
     if (ownerEmail) {
-        jobs.push(sendEmail({
-            to: ownerEmail,
-            subject: `Payment received from ${customer || 'customer'} - ${money(payment.amount)}`,
-            html: wrap('Online payment received', `${esc(customer || 'A customer')} paid online via Razorpay.`)
-        }));
+        jobs.push(sendEmail({ to: ownerEmail, ...emailTemplates.paymentReceipt({ ...details, audience: 'owner' }) }));
     }
     const results = await Promise.allSettled(jobs);
     results.forEach((r) => r.status === 'rejected' && console.error('[payments] receipt email failed:', r.reason?.message || r.reason));

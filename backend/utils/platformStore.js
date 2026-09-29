@@ -185,3 +185,25 @@ exports.updateSupportRequest = async (id, patch) => {
     await ref.update(patch);
     return shape(await ref.get());
 };
+
+// ---------- Platform settings (single 'global' record) ----------
+const PLATFORM_DEFAULTS = { billDeliveryMode: 'pdf' };
+const settingsDoc = () => root().collection('platform').doc('settings');
+
+exports.getPlatformSettings = async () => {
+    if (isMongo()) {
+        const doc = await models.PlatformSetting.findOne({ key: 'global' }).lean();
+        return { ...PLATFORM_DEFAULTS, ...(doc ? { billDeliveryMode: doc.billDeliveryMode } : {}) };
+    }
+    const doc = await settingsDoc().get();
+    return { ...PLATFORM_DEFAULTS, ...(doc.exists ? doc.data() : {}) };
+};
+
+exports.updatePlatformSettings = async (patch) => {
+    if (isMongo()) {
+        await models.PlatformSetting.findOneAndUpdate({ key: 'global' }, { $set: patch }, { upsert: true });
+    } else {
+        await settingsDoc().set(patch, { merge: true });
+    }
+    return exports.getPlatformSettings();
+};

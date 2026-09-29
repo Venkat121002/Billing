@@ -25,9 +25,12 @@ import SuperAdminTenants from "./pages/SuperAdmin/SuperAdminTenants";
 import SuperAdminTenantDetail from "./pages/SuperAdmin/SuperAdminTenantDetail";
 import SuperAdminSubUsers from "./pages/SuperAdmin/SuperAdminSubUsers";
 import SuperAdminSupportRequests from "./pages/SuperAdmin/SuperAdminSupportRequests";
+import SuperAdminPlans from "./pages/SuperAdmin/SuperAdminPlans";
+import SuperAdminSettings from "./pages/SuperAdmin/SuperAdminSettings";
 
 import EmployerDashboard from "./components/Auth/EmployerDashboard";
 import Login from "./components/Auth/Login";
+import TeamLogin from "./components/Auth/TeamLogin";
 import Signup from "./components/Auth/SignUp";
 import Onboarding from "./components/Auth/Onboarding";
 import Settings from "./pages/Settings";
@@ -118,7 +121,8 @@ function App() {
             <Routes>
               <Route path="/" element={<Navigate to="/login" />} />
               <Route path="/login" element={<Login />} />
-            
+              <Route path="/team-login" element={<TeamLogin />} />
+
               <Route path="/signup" element={<Signup />} />
               <Route path="/pricing" element={<Pricing />} />
               <Route path="/pay/:token" element={<PayPage />} />
@@ -173,6 +177,22 @@ function App() {
                         element={
                           <SuperAdminPrivateRoute>
                             <SuperAdminLayout><SuperAdminSupportRequests /></SuperAdminLayout>
+                          </SuperAdminPrivateRoute>
+                        }
+                      />
+                      <Route
+                        path="plans"
+                        element={
+                          <SuperAdminPrivateRoute>
+                            <SuperAdminLayout><SuperAdminPlans /></SuperAdminLayout>
+                          </SuperAdminPrivateRoute>
+                        }
+                      />
+                      <Route
+                        path="settings"
+                        element={
+                          <SuperAdminPrivateRoute>
+                            <SuperAdminLayout><SuperAdminSettings /></SuperAdminLayout>
                           </SuperAdminPrivateRoute>
                         }
                       />

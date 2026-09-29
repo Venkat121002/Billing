@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Search, PlusCircle, Edit3, Trash2, CircleX, Eye, Lock, Crown, Table, Mail, Link2 } from "lucide-react";
+import { Search, PlusCircle, Edit3, Trash2, CircleX, Eye, Lock, Crown, Table, Mail, Link2, MessageCircle } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
 import BillingLayout from "../../Layout/BillingLayout/AdminLayout";
 import { Link } from "react-router-dom";
@@ -15,7 +15,7 @@ import API_URL from "../../config/api";
 
 
 const Credit = () => {
-  const { currentUser } = useAuth();
+  const { currentUser, hasCapability } = useAuth();
   const userData = currentUser;
 
   const [customers, setCustomers] = useState([]);
@@ -105,6 +105,26 @@ const Credit = () => {
       }
     } catch (err) {
       toast.error(err.response?.data?.msg || "Could not create pay link");
+    }
+  };
+
+  // WhatsApp pay links need an approved Meta template; the server says if they're on.
+  const [whatsappDues, setWhatsappDues] = useState(false);
+  useEffect(() => {
+    if (!hasCapability('payLinks')) return;
+    axios.get(`${API_URL}/credit/whatsapp-status`, authConfig())
+      .then(({ data }) => setWhatsappDues(!!data.dues))
+      .catch(() => setWhatsappDues(false));
+  }, []);
+
+  const whatsappPayLink = async (c) => {
+    const mobile = c.mobile || c.phone || window.prompt("Customer WhatsApp number to send the pay link to:");
+    if (!mobile) return;
+    try {
+      await axios.post(`${API_URL}/credit/${c.id}/whatsapp-pay-link`, { mobile }, authConfig());
+      toast.success(`Pay link sent on WhatsApp to ${mobile}`);
+    } catch (err) {
+      toast.error(err.response?.data?.msg || "Could not send pay link on WhatsApp");
     }
   };
 
@@ -763,7 +783,7 @@ const Credit = () => {
                       <button onClick={() => setViewCustomer(c)} className="text-green-600">
                         < Eye size={18} />
                       </button>
-                      {c.balance > 0 && (
+                      {c.balance > 0 && hasCapability('payLinks') && (
                         <>
                           <button onClick={() => copyPayLink(c)} className="text-emerald-600" title="Copy Razorpay pay link">
                             <Link2 size={18} />
@@ -771,6 +791,11 @@ const Credit = () => {
                           <button onClick={() => emailPayLink(c)} className="text-indigo-600" title="Email pay link">
                             <Mail size={18} />
                           </button>
+                          {whatsappDues && (
+                            <button onClick={() => whatsappPayLink(c)} className="text-green-600" title="Send pay link on WhatsApp">
+                              <MessageCircle size={18} />
+                            </button>
+                          )}
                         </>
                       )}
                       <button

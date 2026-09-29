@@ -156,7 +156,7 @@ const AddSoftwareService = () => {
       navigate("/softwaredevelopmentinventory");
     } catch (err) {
       console.error(err);
-      toast.error(err.response?.data?.message || "Failed to save service.");
+      toast.error(err.response?.data?.msg || "Failed to save service.");
     } finally {
       setIsSubmitting(false);
     }

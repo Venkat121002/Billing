@@ -23,6 +23,12 @@ api.interceptors.request.use((config) => {
 export function AuthProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  // The current owner's plan capabilities ({key: {limit?, enabled?}}), used to
+  // gate plan-limited screens/actions on the frontend (ModuleRoute, sidebar,
+  // Credit pay-link buttons). `planCapabilitiesLoading` starts true so a route
+  // guard can wait for it instead of flash-redirecting before it resolves.
+  const [planCapabilities, setPlanCapabilities] = useState(null);
+  const [planCapabilitiesLoading, setPlanCapabilitiesLoading] = useState(true);
   const navigate = useNavigate();
 
   // Check auth on load
@@ -91,19 +97,20 @@ export function AuthProvider({ children }) {
   }
 
   // SIGNUP
-  // SIGNUP EMAIL OTP
-  async function sendSignupOtp(email) {
+  // SIGNUP OTP: separate codes by email and WhatsApp.
+  // channel: "email" | "whatsapp" resends just one; omit to send both.
+  async function sendSignupOtp(email, { mobile, channel } = {}) {
     try {
-      const res = await api.post("otp/signup/send", { email });
+      const res = await api.post("otp/signup/send", { email, mobile, channel });
       return res.data;
     } catch (err) {
       throw err.response ? err.response.data : err;
     }
   }
 
-  async function verifySignupOtp(email, otp) {
+  async function verifySignupOtp({ email, mobile, emailOtp, mobileOtp }) {
     try {
-      const res = await api.post("otp/signup/verify", { email, otp });
+      const res = await api.post("otp/signup/verify", { email, mobile, emailOtp, mobileOtp });
       return res.data;
     } catch (err) {
       throw err.response ? err.response.data : err;
@@ -166,6 +173,53 @@ export function AuthProvider({ children }) {
   // TODO: restore when a new Firebase project is configured (needs
   // firebase/auth + ../config/FirebaseConfig + a backend auth/google-login route).
   // async function employerGoogleSignIn() { ... }
+
+  // GET SUBSCRIPTION PLANS (public — works logged out too; superadmin-controlled)
+  async function getPlans() {
+    try {
+      const res = await api.get("billing/plans");
+      return res.data;
+    } catch (err) {
+      throw err.response ? err.response.data : err;
+    }
+  }
+
+  // Refetch the current owner's plan capabilities whenever their plan changes
+  // (or on login / logout). Never throws — a failed fetch just leaves
+  // capabilities permissive (see hasCapability/getCapabilityLimit below).
+  const currentPlanKey = currentUser?.Tenant?.subscription_plan;
+  useEffect(() => {
+    let cancelled = false;
+    if (!currentUser || !currentPlanKey) {
+      setPlanCapabilities(null);
+      setPlanCapabilitiesLoading(false);
+      return;
+    }
+    setPlanCapabilitiesLoading(true);
+    (async () => {
+      try {
+        const plans = await getPlans();
+        const key = String(currentPlanKey).toLowerCase();
+        const match = plans.find((p) => p.key === key) || plans.find((p) => p.key === "trial");
+        const map = {};
+        (match?.capabilities || []).forEach((c) => { map[c.key] = c; });
+        if (!cancelled) setPlanCapabilities(map);
+      } catch (err) {
+        console.error("Could not load plan capabilities:", err);
+        if (!cancelled) setPlanCapabilities(null);
+      } finally {
+        if (!cancelled) setPlanCapabilitiesLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser?.userId, currentPlanKey]);
+
+  // Permissive by default (true/unlimited) while loading or on fetch failure —
+  // a locked screen should never flash open-then-closed, and a backend hiccup
+  // here should never lock someone out of something they're actually allowed.
+  const hasCapability = (key) => planCapabilities?.[key]?.enabled !== false;
+  const getCapabilityLimit = (key) => (planCapabilities ? planCapabilities[key]?.limit ?? null : null);
 
   // CREATE SUBSCRIPTION ORDER
   async function createSubscriptionOrder(data) {
@@ -343,6 +397,11 @@ export function AuthProvider({ children }) {
     employerSignup,
     sendSignupOtp,
     verifySignupOtp,
+    getPlans,
+    planCapabilities,
+    planCapabilitiesLoading,
+    hasCapability,
+    getCapabilityLimit,
     createSubscriptionOrder,
     verifySubscriptionPayment,
     startTrial,

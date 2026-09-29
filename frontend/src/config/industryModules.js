@@ -64,7 +64,7 @@ export function getAllowedModules(industryKey) {
 export function getSidebarItems(industryKey) {
   const normalizedKey = industryKey ? industryKey.toLowerCase() : "";
   return getAllowedModules(normalizedKey).map((k) => {
-    const module = MODULES[k];
+    const module = { ...MODULES[k], moduleKey: k };
     if (normalizedKey === "academy" && k === "inventory") {
       return { ...module, label: "Courses" };
     }

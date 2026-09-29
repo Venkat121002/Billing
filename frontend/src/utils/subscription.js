@@ -3,7 +3,7 @@ export const TRIAL_DAYS = 14;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 const PLAN_LABELS = {
-  trial: "Free Trial",
+  trial: "Free",
   standard: "Standard",
   premium: "Premium",
   free: "No plan",

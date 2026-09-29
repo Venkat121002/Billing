@@ -1,5 +1,6 @@
 
-const { newTrialSubscription, TRIAL_DAYS } = require('../utils/subscription');
+const { newTrialSubscription, addDays, TRIAL_DAYS } = require('../utils/subscription');
+const emailTemplates = require('../utils/emailTemplates');
 const { db, admin } = require('../config/firebase');
 const axios = require('axios');
 const { sendEmail } = require('../utils/emailService');
@@ -15,6 +16,7 @@ const { Owner: OwnerModel, SubUser: SubUserModel } = require('../models/mongodb'
 const DB_TYPE = process.env.DB_TYPE || 'mongodb';
 
 const { VALID_INDUSTRIES } = require('../utils/industries');
+const billDelivery = require('../utils/billDelivery');
 
 // Helper: Generate Secure ID
 const generateId = () => {
@@ -37,7 +39,7 @@ exports.register = async (req, res) => {
     }
 
     try {
-        otpService.assertVerifiedEmail(email, req.body.verificationToken);
+        otpService.assertVerifiedSignup(email, mobile, req.body.verificationToken);
     } catch (err) {
         return res.status(err.status || 403).json({ msg: err.message });
     }
@@ -174,18 +176,9 @@ exports.register = async (req, res) => {
         });
 
         // Send Welcome Email (Non-blocking)
-        const welcomeHtml = `
-            <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
-                <h1 style="color: #CA8A04;">Welcome to SwordNex, ${firstName}!</h1>
-                <p>Thank you for choosing SwordNex Billing Software for <strong>${businessName}</strong>.</p>
-                <p>Your <strong>${TRIAL_DAYS}-day free trial</strong> has started. You can see the days remaining on your dashboard.</p>
-            </div>
-        `;
-
         sendEmail({
             to: email,
-            subject: "Welcome to SwordNex!",
-            htmlContent: welcomeHtml
+            ...emailTemplates.welcome({ firstName, businessName, trialEndDate: addDays(new Date(), TRIAL_DAYS) })
         }).catch(emailErr => {
             console.error("❌ Failed to send welcome email:", emailErr.message);
         });
@@ -422,7 +415,13 @@ exports.login = async (req, res) => {
                     sales_gst: userData.sales_gst !== undefined ? userData.sales_gst : (bossData.sales_gst || 0),
                     sales_tax_type: userData.sales_tax_type !== undefined ? userData.sales_tax_type : (bossData.sales_tax_type || 'exclusive'),
                     printer_configs: userData.printer_configs !== undefined ? userData.printer_configs : (bossData.printer_configs || []),
-                    printer_auto_print: userData.printer_auto_print !== undefined ? userData.printer_auto_print : (bossData.printer_auto_print || false)
+                    printer_auto_print: userData.printer_auto_print !== undefined ? userData.printer_auto_print : (bossData.printer_auto_print || false),
+                    // Default receipt format picked in Settings -> Printer (older accounts
+                    // fall back to the format of their first per-category printer rule).
+                    printer_format: userData.printer_format || bossData.printer_format
+                        || (userData.printer_configs || bossData.printer_configs || [])[0]?.format || 'A4',
+                    // 'pdf' | 'text' — how POS bills go out on WhatsApp (super admin setting).
+                    bill_delivery_mode: await billDelivery.effectiveMode(bossData)
                 }
             }
         });
@@ -438,6 +437,8 @@ exports.login = async (req, res) => {
         res.status(500).json({ msg: "Server error during login: " + err.message });
     }
 };
+
+const PRINTER_FORMATS = ['A4', 'A5', 'A4 GST Invoice', 'A5 GST Invoice', 'Thermal 80mm', 'Thermal 58mm'];
 
 // @desc    Update Owner Profile & Business Details
 // @route   PUT /api/v2/auth/update-profile
@@ -459,7 +460,7 @@ exports.updateProfile = async (req, res) => {
             street, city, state, pincode,
             invoice_prefix, next_invoice_number,
             purchase_gst, purchase_tax_type, sales_gst, sales_tax_type,
-            printer_configs, printer_auto_print
+            printer_configs, printer_auto_print, printer_format
         } = req.body;
 
         // === MONGODB MODE ===
@@ -483,6 +484,7 @@ exports.updateProfile = async (req, res) => {
             if (sales_tax_type !== undefined) subuserSettings.sales_tax_type = sales_tax_type;
             if (printer_configs !== undefined) subuserSettings.printer_configs = printer_configs;
             if (printer_auto_print !== undefined) subuserSettings.printer_auto_print = printer_auto_print;
+            if (PRINTER_FORMATS.includes(printer_format)) subuserSettings.printer_format = printer_format;
 
             if (businessName || businessType || gstin || pan) {
                 businessUpdates.companyDetails = {
@@ -521,6 +523,7 @@ exports.updateProfile = async (req, res) => {
                 if (sales_tax_type !== undefined) businessUpdates.sales_tax_type = sales_tax_type;
                 if (printer_configs !== undefined) businessUpdates.printer_configs = printer_configs;
                 if (printer_auto_print !== undefined) businessUpdates.printer_auto_print = printer_auto_print;
+                if (PRINTER_FORMATS.includes(printer_format)) businessUpdates.printer_format = printer_format;
 
                 await OwnerModel.updateOne(
                     { userId: ownerId, tenantId },
@@ -564,6 +567,7 @@ exports.updateProfile = async (req, res) => {
         if (sales_tax_type !== undefined) subuserSettings.sales_tax_type = sales_tax_type;
         if (printer_configs !== undefined) subuserSettings.printer_configs = printer_configs;
         if (printer_auto_print !== undefined) subuserSettings.printer_auto_print = printer_auto_print;
+            if (PRINTER_FORMATS.includes(printer_format)) subuserSettings.printer_format = printer_format;
 
         if (businessName || businessType || gstin || pan) {
             businessUpdates.companyDetails = {
@@ -602,6 +606,7 @@ exports.updateProfile = async (req, res) => {
             if (sales_tax_type !== undefined) businessUpdates.sales_tax_type = sales_tax_type;
             if (printer_configs !== undefined) businessUpdates.printer_configs = printer_configs;
             if (printer_auto_print !== undefined) businessUpdates.printer_auto_print = printer_auto_print;
+            if (PRINTER_FORMATS.includes(printer_format)) businessUpdates.printer_format = printer_format;
         }
 
         if (Object.keys(businessUpdates).length > 0 || role === 'owner') {
@@ -732,7 +737,13 @@ exports.getMe = async (req, res) => {
                 sales_gst: userData.sales_gst !== undefined ? userData.sales_gst : (bossData.sales_gst || 0),
                 sales_tax_type: userData.sales_tax_type !== undefined ? userData.sales_tax_type : (bossData.sales_tax_type || 'exclusive'),
                 printer_configs: userData.printer_configs !== undefined ? userData.printer_configs : (bossData.printer_configs || []),
-                printer_auto_print: userData.printer_auto_print !== undefined ? userData.printer_auto_print : (bossData.printer_auto_print || false)
+                printer_auto_print: userData.printer_auto_print !== undefined ? userData.printer_auto_print : (bossData.printer_auto_print || false),
+                    // Default receipt format picked in Settings -> Printer (older accounts
+                    // fall back to the format of their first per-category printer rule).
+                    printer_format: userData.printer_format || bossData.printer_format
+                        || (userData.printer_configs || bossData.printer_configs || [])[0]?.format || 'A4',
+                    // 'pdf' | 'text' — how POS bills go out on WhatsApp (super admin setting).
+                    bill_delivery_mode: await billDelivery.effectiveMode(bossData)
             }
         });
 
@@ -862,13 +873,7 @@ exports.forgotPassword = async (req, res) => {
             const base = process.env.FRONTEND_URL || 'http://localhost:5173';
             const link = `${base}/forgot-password?oobCode=${token}`;
             console.log('[forgot-password] reset link for', email, '→', link);
-            await sendEmail({
-                to: email,
-                subject: 'Reset your SwordNex password',
-                html: `<p>We received a request to reset your password. This link is valid for 30 minutes:</p>
-                       <p><a href="${link}">${link}</a></p>
-                       <p>If you didn't request this, you can ignore this email.</p>`
-            }).catch(e => console.error('forgot-password email failed:', e.message));
+            await sendEmail({ to: email, ...emailTemplates.passwordReset({ link }) }).catch(e => console.error('forgot-password email failed:', e.message));
         }
 
         res.json(genericMsg);
@@ -962,6 +967,100 @@ exports.selectIndustry = async (req, res) => {
         res.json({ msg: "Industry saved", industry });
     } catch (err) {
         console.error("SelectIndustry Error:", err.message);
+        res.status(500).json({ msg: "Server Error" });
+    }
+};
+
+// ---------------------------------------------------------------------------
+// Item categories — the store's own Category → Product list used by the
+// Add Product dropdowns and the printer-routing picker. Stored on the owner
+// record as `item_categories: { [category]: [product, ...] }`. `null` means
+// the owner hasn't customised it yet; the frontend then shows its built-in
+// industry defaults (frontend/src/config/itemCategories.js).
+// ---------------------------------------------------------------------------
+const MAX_CATEGORIES = 200;
+const MAX_PRODUCTS_PER_CATEGORY = 500;
+const MAX_NAME_LENGTH = 100;
+
+// Returns a cleaned copy of the map, or null if the shape is invalid.
+const sanitizeItemCategories = (input) => {
+    if (!input || typeof input !== 'object' || Array.isArray(input)) return null;
+    const entries = Object.entries(input);
+    if (entries.length > MAX_CATEGORIES) return null;
+
+    const clean = {};
+    for (const [rawCategory, rawProducts] of entries) {
+        const category = String(rawCategory).trim().slice(0, MAX_NAME_LENGTH);
+        // Mongo field names can't contain '.' or start with '$'.
+        if (!category || category.startsWith('$') || category.includes('.')) return null;
+        if (!Array.isArray(rawProducts) || rawProducts.length > MAX_PRODUCTS_PER_CATEGORY) return null;
+
+        const seen = new Set();
+        const products = [];
+        for (const p of rawProducts) {
+            const name = String(p ?? '').trim().slice(0, MAX_NAME_LENGTH);
+            const key = name.toLowerCase();
+            if (name && !seen.has(key)) {
+                seen.add(key);
+                products.push(name);
+            }
+        }
+        clean[category] = products;
+    }
+    return clean;
+};
+
+// @desc    Get the store's item categories
+// @route   GET /api/v2/auth/item-categories
+exports.getItemCategories = async (req, res) => {
+    try {
+        const { ownerId } = req.user;
+        const tenantId = process.env.TENANT_ID;
+
+        let owner;
+        if (DB_TYPE === 'mongodb') {
+            owner = await OwnerModel.findOne({ userId: ownerId, tenantId }).select('item_categories').lean();
+        } else {
+            const doc = await db.collection('SwordNexBillingSoftware').doc(tenantId).collection('owner').doc(ownerId).get();
+            owner = doc.exists ? doc.data() : null;
+        }
+        if (!owner) return res.status(404).json({ msg: "Owner record not found" });
+
+        res.json({ categories: owner.item_categories || null });
+    } catch (err) {
+        console.error("Get Item Categories Error:", err.message);
+        res.status(500).json({ msg: "Server Error" });
+    }
+};
+
+// @desc    Replace the store's item categories (owner only — see route)
+// @route   PUT /api/v2/auth/item-categories
+exports.updateItemCategories = async (req, res) => {
+    try {
+        const { ownerId } = req.user;
+        const tenantId = process.env.TENANT_ID;
+
+        const categories = sanitizeItemCategories(req.body?.categories);
+        if (!categories) {
+            return res.status(400).json({ msg: "Invalid categories. Names can't contain '.' or start with '$'." });
+        }
+
+        if (DB_TYPE === 'mongodb') {
+            const result = await OwnerModel.updateOne(
+                { userId: ownerId, tenantId },
+                { $set: { item_categories: categories } }
+            );
+            if (result.matchedCount === 0) return res.status(404).json({ msg: "Owner record not found" });
+        } else {
+            const ref = db.collection('SwordNexBillingSoftware').doc(tenantId).collection('owner').doc(ownerId);
+            const doc = await ref.get();
+            if (!doc.exists) return res.status(404).json({ msg: "Owner record not found" });
+            await ref.update({ item_categories: categories });
+        }
+
+        res.json({ categories });
+    } catch (err) {
+        console.error("Update Item Categories Error:", err.message);
         res.status(500).json({ msg: "Server Error" });
     }
 };

@@ -3,6 +3,7 @@ import { useParams, Link } from "react-router-dom";
 import { ArrowLeft, Save } from "lucide-react";
 import toast from "react-hot-toast";
 import { superAdminApi } from "../../contexts/SuperAdminAuthContext";
+import { BILL_DELIVERY_OPTIONS, TextNotEnabledNote } from "./SuperAdminSettings";
 
 const DATA_LABELS = {
   bills: "Bills",
@@ -29,14 +30,20 @@ const SuperAdminTenantDetail = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ plan: "", amount: "", endDate: "", billingCycle: "" });
+  const [platform, setPlatform] = useState(null);
+  const [billMode, setBillMode] = useState("default");
+  const [savingBillMode, setSavingBillMode] = useState(false);
 
   const load = async () => {
     setLoading(true);
     try {
-      const [detailRes, dataRes] = await Promise.all([
+      const [detailRes, dataRes, settingsRes] = await Promise.all([
         superAdminApi.get(`tenants/${id}`),
         superAdminApi.get(`tenants/${id}/data`),
+        superAdminApi.get("settings"),
       ]);
+      setPlatform(settingsRes.data);
+      setBillMode(detailRes.data.owner.billDeliveryMode || "default");
       setOwner(detailRes.data.owner);
       setSubUsers(detailRes.data.subUsers);
       setTenantData(dataRes.data);
@@ -76,6 +83,22 @@ const SuperAdminTenantDetail = () => {
       setSaving(false);
     }
   };
+
+  const handleSaveBillMode = async () => {
+    setSavingBillMode(true);
+    try {
+      await superAdminApi.patch(`tenants/${id}/bill-delivery`, { mode: billMode });
+      toast.success("Bill delivery updated");
+      load();
+    } catch (err) {
+      toast.error(err.response?.data?.msg || "Failed to update bill delivery");
+    } finally {
+      setSavingBillMode(false);
+    }
+  };
+
+  const labelFor = (mode) => BILL_DELIVERY_OPTIONS.find((o) => o.value === mode)?.label || mode;
+  const resolvedBillMode = billMode === "default" ? platform?.billDeliveryMode : billMode;
 
   if (loading) {
     return <div className="text-gray-500 text-sm">Loading…</div>;
@@ -144,6 +167,7 @@ const SuperAdminTenantDetail = () => {
           </div>
         </div>
 
+        <div className="space-y-6">
         <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 h-fit">
           <h2 className="text-sm font-medium text-gray-300 mb-4">Edit Subscription</h2>
           <form onSubmit={handleSaveSubscription} className="space-y-3">
@@ -189,6 +213,32 @@ const SuperAdminTenantDetail = () => {
               <Save size={14} /> {saving ? "Saving…" : "Save Changes"}
             </button>
           </form>
+        </div>
+
+        <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 h-fit space-y-3">
+          <div>
+            <h2 className="text-sm font-medium text-gray-300">WhatsApp Bills</h2>
+            <p className="text-xs text-gray-500 mt-0.5">How this store's POS bills are sent to customers.</p>
+          </div>
+          <select
+            value={billMode}
+            onChange={(e) => setBillMode(e.target.value)}
+            className="w-full h-9 px-3 rounded-lg bg-gray-800 border border-gray-700 text-sm text-gray-200 focus:ring-2 focus:ring-emerald-600 outline-none"
+          >
+            <option value="default">Platform default ({labelFor(platform?.billDeliveryMode)})</option>
+            {BILL_DELIVERY_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+          {resolvedBillMode === "text" && platform && !platform.billTextEnabled && <TextNotEnabledNote />}
+          <button
+            onClick={handleSaveBillMode}
+            disabled={savingBillMode || billMode === (owner.billDeliveryMode || "default")}
+            className="w-full h-9 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium rounded-lg flex items-center justify-center gap-2 transition disabled:opacity-60"
+          >
+            <Save size={14} /> {savingBillMode ? "Saving…" : "Save"}
+          </button>
+        </div>
         </div>
       </div>
     </div>
