@@ -9,9 +9,17 @@ const Credit = require('./Credit');
 const Supplier = require('./Supplier');
 const Trainer = require('./Trainer');
 const Client = require('./Client');
+const RepairTicket = require('./RepairTicket');
+const Pet = require('./Pet');
+const Milestone = require('./Milestone');
+const SupportRequest = require('./SupportRequest');
 const Salesman = require('./Salesman');
 const InventoryReturn = require('./InventoryReturn');
 const SubscriptionDetail = require('./SubscriptionDetail');
+const Payment = require('./Payment');
+const OtpVerification = require('./OtpVerification');
+const Plan = require('./Plan');
+const PlatformSetting = require('./PlatformSetting');
 
 // Collection name to Mongoose Model mapping
 const modelMap = {
@@ -39,6 +47,10 @@ const modelMap = {
     'subusersupplier': Supplier,
     'trainers': Trainer,
     'clients': Client,
+    'repairtickets': RepairTicket,
+    'pets': Pet,
+    'milestones': Milestone,
+    'supportrequests': SupportRequest,
     'salesmen': Salesman,
     'inventory_returns': InventoryReturn,
     'subscriptiondetails': SubscriptionDetail
@@ -60,9 +72,17 @@ module.exports = {
     Supplier,
     Trainer,
     Client,
+    RepairTicket,
+    Pet,
+    Milestone,
+    SupportRequest,
     Salesman,
     InventoryReturn,
     SubscriptionDetail,
+    PlatformSetting,
+    Payment,
+    OtpVerification,
+    Plan,
     getModel,
     modelMap
 };

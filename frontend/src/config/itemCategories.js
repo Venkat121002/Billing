@@ -1,6 +1,7 @@
-// Per-industry category → sub-category taxonomy for the Item Master
-// (components/Billing/ItemForm.jsx). Purely reference data for the
-// category/product-type datalists — not validated server-side.
+// Built-in per-industry Category → Product lists. These are only the
+// starting defaults: each store can edit its own copy in Settings →
+// Categories & Products (saved as owner.item_categories, see
+// hooks/useItemCategories.js). Not validated server-side.
 export const CATEGORY_DATA = {
   grocery: {
     "Food & Staples": ["Rice", "Wheat", "Atta", "Dals & Pulses", "Flour", "Sugar"],
@@ -51,7 +52,21 @@ export const CATEGORY_DATA = {
     "Leashes & Collars": ["Collars", "Leashes", "Harnesses", "ID Tags"],
     "Aquarium & Bird Supplies": ["Fish Tanks", "Filters", "Bird Cages", "Perches"],
   },
+  mobile_shop: {
+    "Mobile": [], "Bluetooth": [], "Charger": [], "Headset": [], "Cable": [],
+  },
+  academy: {
+    "IT": [], "Spoken English": [], "Design": [], "Business": [], "Skill Development": [],
+  },
+  software_development: {
+    "Web Development": [], "Mobile App": [], "UI/UX Design": [], "DevOps": [],
+    "QA Testing": [], "Maintenance": [], "Consulting": [],
+  },
 };
+
+/** Fresh copy of the built-in list for an industry profile key (grocery as the fallback). */
+export const getDefaultCategories = (profileKey) =>
+  structuredClone(CATEGORY_DATA[profileKey] || CATEGORY_DATA.grocery);
 
 /** Standard clothing size options, used when the "Size" field (variants group) is shown. */
 export const CLOTHING_SIZE_OPTIONS = [

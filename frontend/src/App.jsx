@@ -6,19 +6,31 @@ import {
   Routes,
   Route,
   Navigate,
-  createBrowserRouter,
-  RouterProvider,
 } from "react-router-dom";
 
 import Layout from "./Layout/Layout";
-import { AuthProvider, useAuth } from "./contexts/AuthContext";
+import PayPage from "./components/Auth/PayPage";
+import { AuthProvider } from "./contexts/AuthContext";
 import PrivateRoute from "./contexts/PrivateRoute";
 import SubscriptionRoute from "./components/Auth/SubscriptionRoute";
 import ModuleRoute from "./contexts/ModuleRoute";
 import Pricing from "./components/Auth/Pricing";
 
+import { SuperAdminAuthProvider } from "./contexts/SuperAdminAuthContext";
+import SuperAdminPrivateRoute from "./contexts/SuperAdminPrivateRoute";
+import SuperAdminLayout from "./pages/SuperAdmin/SuperAdminLayout";
+import SuperAdminLogin from "./pages/SuperAdmin/SuperAdminLogin";
+import SuperAdminDashboard from "./pages/SuperAdmin/SuperAdminDashboard";
+import SuperAdminTenants from "./pages/SuperAdmin/SuperAdminTenants";
+import SuperAdminTenantDetail from "./pages/SuperAdmin/SuperAdminTenantDetail";
+import SuperAdminSubUsers from "./pages/SuperAdmin/SuperAdminSubUsers";
+import SuperAdminSupportRequests from "./pages/SuperAdmin/SuperAdminSupportRequests";
+import SuperAdminPlans from "./pages/SuperAdmin/SuperAdminPlans";
+import SuperAdminSettings from "./pages/SuperAdmin/SuperAdminSettings";
+
 import EmployerDashboard from "./components/Auth/EmployerDashboard";
 import Login from "./components/Auth/Login";
+import TeamLogin from "./components/Auth/TeamLogin";
 import Signup from "./components/Auth/SignUp";
 import Onboarding from "./components/Auth/Onboarding";
 import Settings from "./pages/Settings";
@@ -33,18 +45,19 @@ import Reports from "./components/Billing/Reports";
 import BarcodePage from "./industry/mobile/BarcodePage";
 import AcademyInventry from "./industry/academy/academyinventry";
 import Trainer from "./components/Billing/Trainer";
+import Students from "./industry/academy/Students";
+import Clients from "./industry/SoftwareDevelopment/Clients";
+import RepairTickets from "./industry/mobile/RepairTickets";
+import ImeiLookup from "./industry/mobile/ImeiLookup";
+import Pets from "./industry/petshop/Pets";
+import ExpiryAlerts from "./industry/Pharmacy/ExpiryAlerts";
+import Milestones from "./industry/SoftwareDevelopment/Milestones";
 import SoftwareDevelopmentInventory from "./industry/SoftwareDevelopment/SoftwareDevelopmentInventory";
 import AddClient from "./industry/SoftwareDevelopment/AddClient";
 import AddSoftwareService from "./industry/SoftwareDevelopment/AddSoftwareService";
 
 
 
-
-// Public Routes Component
-function PublicRoute({ children }) {
-  const { user } = useAuth();
-  return user ? <Navigate to="/login" /> : children;
-}
 
 // Employer routes
 const employerRoutes = [
@@ -83,19 +96,20 @@ const employerRoutes = [
         <Route element={<SubscriptionRoute><IndustryScreen kind="subUsers" /></SubscriptionRoute>} path="/staff-records" />
         <Route element={<SubscriptionRoute><AcademyInventry /></SubscriptionRoute>} path="/academyinventory" />
         <Route element={<SubscriptionRoute><Trainer /></SubscriptionRoute>} path="/trainers" />
+        <Route element={<SubscriptionRoute><Students /></SubscriptionRoute>} path="/students" />
         <Route element={<SubscriptionRoute><SoftwareDevelopmentInventory /></SubscriptionRoute>} path="/softwaredevelopmentinventory" />
+        <Route element={<SubscriptionRoute><Clients /></SubscriptionRoute>} path="/clients" />
+        <Route element={<SubscriptionRoute><RepairTickets /></SubscriptionRoute>} path="/repair-tickets" />
+        <Route element={<SubscriptionRoute><ImeiLookup /></SubscriptionRoute>} path="/imei-lookup" />
+        <Route element={<SubscriptionRoute><Pets /></SubscriptionRoute>} path="/pets" />
+        <Route element={<SubscriptionRoute><ExpiryAlerts /></SubscriptionRoute>} path="/expiry-alerts" />
+        <Route element={<SubscriptionRoute><Milestones /></SubscriptionRoute>} path="/milestones" />
         <Route element={<SubscriptionRoute><AddSoftwareService /></SubscriptionRoute>} path="add-service" />
         <Route element={<SubscriptionRoute><AddClient /></SubscriptionRoute>} path="add-client" />
       </Routes>
     ),
   },
-  // {
-  //   path: "/academyinventory",
-  //   element: <AcademyInventry />,
-  // }
 ];
-
-const protectedRoutes = employerRoutes; // All employer routes are now protected
 
 function App() {
   return (
@@ -105,28 +119,91 @@ function App() {
         <AuthProvider>
           <Layout>
             <Routes>
-              {/* Employer Routes */}
-              {employerRoutes.map(({ path, element }, index) => (
-                <Route key={index} element={element} path={path} />
-              ))}
               <Route path="/" element={<Navigate to="/login" />} />
               <Route path="/login" element={<Login />} />
-            
+              <Route path="/team-login" element={<TeamLogin />} />
+
               <Route path="/signup" element={<Signup />} />
               <Route path="/pricing" element={<Pricing />} />
+              <Route path="/pay/:token" element={<PayPage />} />
               <Route path="/onboarding" element={<PrivateRoute><Onboarding /></PrivateRoute>} />
-              <Route path="/trainers" element={<Trainer />} />
 
               {/* <Route path="/credit" element={<Credit />}/> */}
               <Route path="/support" element={<Support />} />
               <Route path="/forgot" element={<ForgotPassword />} />
               <Route path="/forgot-password" element={<ForgotPassword />} />
-              <Route path="/academyinventory" element={<AcademyInventry />} />
-              <Route path="/softwaredevelopmentinventory" element={<SoftwareDevelopmentInventory />} />
 
+              {/* Super Admin — separate, isolated auth domain (single hardcoded account) */}
+              <Route
+                path="/superadmin/*"
+                element={
+                  <SuperAdminAuthProvider>
+                    <Routes>
+                      <Route path="login" element={<SuperAdminLogin />} />
+                      <Route
+                        path="dashboard"
+                        element={
+                          <SuperAdminPrivateRoute>
+                            <SuperAdminLayout><SuperAdminDashboard /></SuperAdminLayout>
+                          </SuperAdminPrivateRoute>
+                        }
+                      />
+                      <Route
+                        path="tenants"
+                        element={
+                          <SuperAdminPrivateRoute>
+                            <SuperAdminLayout><SuperAdminTenants /></SuperAdminLayout>
+                          </SuperAdminPrivateRoute>
+                        }
+                      />
+                      <Route
+                        path="tenants/:id"
+                        element={
+                          <SuperAdminPrivateRoute>
+                            <SuperAdminLayout><SuperAdminTenantDetail /></SuperAdminLayout>
+                          </SuperAdminPrivateRoute>
+                        }
+                      />
+                      <Route
+                        path="subusers"
+                        element={
+                          <SuperAdminPrivateRoute>
+                            <SuperAdminLayout><SuperAdminSubUsers /></SuperAdminLayout>
+                          </SuperAdminPrivateRoute>
+                        }
+                      />
+                      <Route
+                        path="support"
+                        element={
+                          <SuperAdminPrivateRoute>
+                            <SuperAdminLayout><SuperAdminSupportRequests /></SuperAdminLayout>
+                          </SuperAdminPrivateRoute>
+                        }
+                      />
+                      <Route
+                        path="plans"
+                        element={
+                          <SuperAdminPrivateRoute>
+                            <SuperAdminLayout><SuperAdminPlans /></SuperAdminLayout>
+                          </SuperAdminPrivateRoute>
+                        }
+                      />
+                      <Route
+                        path="settings"
+                        element={
+                          <SuperAdminPrivateRoute>
+                            <SuperAdminLayout><SuperAdminSettings /></SuperAdminLayout>
+                          </SuperAdminPrivateRoute>
+                        }
+                      />
+                      <Route path="*" element={<Navigate to="/superadmin/dashboard" />} />
+                    </Routes>
+                  </SuperAdminAuthProvider>
+                }
+              />
 
               {/* Protected Routes */}
-              {protectedRoutes.map(({ path, element }, index) => (
+              {employerRoutes.map(({ path, element }, index) => (
                 <Route
                   key={index}
                   element={<PrivateRoute>{element}</PrivateRoute>}

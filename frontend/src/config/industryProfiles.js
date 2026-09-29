@@ -54,7 +54,7 @@ export const PROFILES = {
     key: "clothing",
     aliases: [],
     label: "Clothing",
-    theme: "pink",
+    theme: "green",
     itemFieldGroups: { ...RETAIL_DEFAULTS.itemFieldGroups, variants: true },
   },
   petshop: {
@@ -70,7 +70,7 @@ export const PROFILES = {
     key: "academy",
     aliases: ["acadamy", "education"], // "acadamy" = the historical SignUp typo
     label: "Academy",
-    theme: "purple",
+    theme: "green",
     billingModel: "instalment",
     roleLabels: { customer: "Student", item: "Course", inventory: "Courses" },
     itemFieldGroups: { batchExpiry: false, variants: false, itemType: true, serial: false },
@@ -82,7 +82,7 @@ export const PROFILES = {
     key: "software_development",
     aliases: ["software"],
     label: "Software Development",
-    theme: "blue",
+    theme: "green",
     billingModel: "milestone",
     roleLabels: { customer: "Client", item: "Service", inventory: "Services" },
     itemFieldGroups: { batchExpiry: false, variants: false, itemType: true, serial: false },

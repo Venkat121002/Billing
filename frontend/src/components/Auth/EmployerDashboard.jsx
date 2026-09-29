@@ -1,3 +1,4 @@
+import { SubscriptionCard } from "./SubscriptionStatus";
 import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { format } from "date-fns";
@@ -690,6 +691,7 @@ function EmployerDashboard() {
     <BillingLayout hideSidebar={false}>
       <div className="min-h-screen bg-white -m-4 p-3">
         <IndustryNudgeBanner currentUser={currentUser} />
+        <SubscriptionCard user={currentUser} />
         {/* ═══════════════ HEADER ═══════════════ */}
         <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-8">
           <div>

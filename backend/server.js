@@ -54,14 +54,15 @@ console.log(`🗄️  Database Mode: ${DB_TYPE.toUpperCase()}`);
 app.use(
     cors({
         origin: true,
-        methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
+        methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']
     })
 );
 
 app.use(helmet());
 app.use(morgan('dev'));
 
-app.use(express.json());
+// Keep the raw body: Razorpay webhook signatures are computed over the exact bytes.
+app.use(express.json({ verify: (req, _res, buf) => { req.rawBody = buf; } }));
 app.use(express.urlencoded({ extended: true }));
 
 // ---------------------------------------------------------
@@ -242,6 +243,39 @@ app.use(
     require('./routes/firestoreClientRoutes')
 );
 
+// Repair Tickets
+app.use(
+    '/api/v2/repair-tickets',
+    require('./routes/firestoreRepairTicketRoutes')
+);
+
+app.use(
+    '/v2/repair-tickets',
+    require('./routes/firestoreRepairTicketRoutes')
+);
+
+// Pets
+app.use(
+    '/api/v2/pets',
+    require('./routes/firestorePetRoutes')
+);
+
+app.use(
+    '/v2/pets',
+    require('./routes/firestorePetRoutes')
+);
+
+// Milestones
+app.use(
+    '/api/v2/milestones',
+    require('./routes/firestoreMilestoneRoutes')
+);
+
+app.use(
+    '/v2/milestones',
+    require('./routes/firestoreMilestoneRoutes')
+);
+
 // Salesman
 app.use(
     '/api/v2/salesman',
@@ -251,6 +285,36 @@ app.use(
 app.use(
     '/v2/salesman',
     require('./routes/firestoreSalesmanRoutes')
+);
+
+// Support Requests (tenant -> super admin messages / industry change requests)
+app.use(
+    '/api/v2/support-requests',
+    require('./routes/supportRequestRoutes')
+);
+
+app.use(
+    '/v2/support-requests',
+    require('./routes/supportRequestRoutes')
+);
+
+// Payments: public pay-link endpoints (token-authenticated) + Razorpay webhook
+app.use('/api/v2/pay', require('./routes/paymentRoutes'));
+app.use('/v2/pay', require('./routes/paymentRoutes'));
+
+const { razorpayWebhook } = require('./controllers/paymentController');
+app.post('/api/v2/webhooks/razorpay', razorpayWebhook);
+app.post('/v2/webhooks/razorpay', razorpayWebhook);
+
+// Super Admin (platform-level, cross-tenant)
+app.use(
+    '/api/v2/superadmin',
+    require('./routes/superAdminRoutes')
+);
+
+app.use(
+    '/v2/superadmin',
+    require('./routes/superAdminRoutes')
 );
 
 // ---------------------------------------------------------

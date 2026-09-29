@@ -26,7 +26,8 @@ import BillingLayout from "../../Layout/BillingLayout/AdminLayout";
 import toast from "react-hot-toast";
 import API_URL from "../../config/api";
 import { resolveIndustryProfile } from "../../config/industryProfiles";
-import { CATEGORY_DATA, CLOTHING_SIZE_OPTIONS } from "../../config/itemCategories";
+import { CLOTHING_SIZE_OPTIONS } from "../../config/itemCategories";
+import useItemCategories from "../../hooks/useItemCategories";
 
 // Per-industry visual theme for this screen. Every value is a complete
 // literal Tailwind class string (see IndustryGstBill.jsx for why). Only
@@ -117,6 +118,87 @@ const InputField = ({
   </div>
 );
 
+const ADD_NEW = "__add_new__";
+
+// Dropdown fed from the store's Category → Product list (Settings →
+// Categories & Products). When `onAdd` is given, a "+ Add new" option swaps
+// the select for a text box that saves the new name to that list.
+const SelectField = ({ label, icon: Icon, value, options, onChange, onAdd, disabled, placeholder, theme }) => {
+  const [adding, setAdding] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [saving, setSaving] = useState(false);
+  // Keep a value that's no longer in the list (e.g. an older product) selectable.
+  const allOptions = value && !options.includes(value) ? [value, ...options] : options;
+  const inputClass = `px-4 py-3 rounded-xl border ${theme.inputBorder} bg-white text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 transition-all duration-200`;
+
+  const submit = async () => {
+    const name = draft.trim();
+    if (!name) return;
+    setSaving(true);
+    try {
+      await onAdd(name);
+      setAdding(false);
+      setDraft("");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <label className={`flex items-center gap-2 text-sm font-semibold ${theme.labelText}`}>
+        {Icon && <Icon size={15} className={theme.labelIcon} />}
+        {label}
+      </label>
+      {adding ? (
+        <div className="flex gap-2">
+          <input
+            autoFocus
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") { e.preventDefault(); submit(); }
+              if (e.key === "Escape") setAdding(false);
+            }}
+            placeholder={`New ${label.toLowerCase()} name`}
+            maxLength={100}
+            className={`flex-1 min-w-0 ${inputClass}`}
+          />
+          <button
+            type="button"
+            onClick={submit}
+            disabled={saving || !draft.trim()}
+            className={`px-4 rounded-xl text-white font-medium disabled:opacity-50 ${theme.submitBtn}`}
+          >
+            {saving ? "..." : "Add"}
+          </button>
+          <button
+            type="button"
+            onClick={() => { setAdding(false); setDraft(""); }}
+            className="px-3 rounded-xl bg-gray-100 text-gray-600 hover:bg-gray-200"
+            aria-label="Cancel"
+          >
+            <X size={16} />
+          </button>
+        </div>
+      ) : (
+        <select
+          value={value}
+          disabled={disabled}
+          onChange={(e) => (e.target.value === ADD_NEW ? setAdding(true) : onChange(e.target.value))}
+          className={`${inputClass} ${value ? "" : "text-gray-400"} disabled:bg-gray-50 disabled:cursor-not-allowed`}
+        >
+          <option value="">{placeholder || `Select ${label.toLowerCase()}`}</option>
+          {allOptions.map((opt) => (
+            <option key={opt} value={opt} className="text-gray-700">{opt}</option>
+          ))}
+          {onAdd && <option value={ADD_NEW} className="text-gray-700">+ Add new {label.toLowerCase()}…</option>}
+        </select>
+      )}
+    </div>
+  );
+};
+
 // Field configs — outside the component, they never change.
 const buyFieldConfig = {
   category: { label: "Category", icon: Tag, type: "text" },
@@ -158,7 +240,8 @@ const ItemForm = () => {
   const profile = resolveIndustryProfile(currentUser);
   const theme = THEMES[profile.theme] || THEMES.green;
   const groups = profile.itemFieldGroups || {};
-  const categoryData = CATEGORY_DATA[profile.key] || CATEGORY_DATA.grocery;
+  const { categories: categoryData, save: saveCategories } = useItemCategories(currentUser);
+  const canEditCategories = currentUser?.role === "owner" || currentUser?.role === "TenantAdmin";
   const itemLabel = profile.roleLabels?.item || "Product";
   // The "variants" group repurposes the Description field as a Size picker
   // (clothing) instead of adding a whole new field — see UNIFICATION_PLAN.md §2.
@@ -364,6 +447,39 @@ const ItemForm = () => {
     setBuyData((prev) => ({ ...prev, [field]: val }));
   };
 
+  const setCategory = (category) =>
+    setBuyData((prev) => ({
+      ...prev,
+      category,
+      // Clear a product that doesn't belong to the newly picked category.
+      productType: (categoryData[category] || []).includes(prev.productType) ? prev.productType : "",
+    }));
+
+  const addCategory = async (name) => {
+    const existing = Object.keys(categoryData).find((c) => c.toLowerCase() === name.toLowerCase());
+    try {
+      if (!existing) await saveCategories({ ...categoryData, [name]: [] });
+      setCategory(existing || name);
+      if (!existing) toast.success(`Category "${name}" added`);
+    } catch (err) {
+      toast.error(err.response?.data?.msg || "Failed to add category");
+      throw err;
+    }
+  };
+
+  const addProductType = async (name) => {
+    const list = categoryData[buyData.category] || [];
+    const existing = list.find((p) => p.toLowerCase() === name.toLowerCase());
+    try {
+      if (!existing) await saveCategories({ ...categoryData, [buyData.category]: [...list, name] });
+      setBuyData((prev) => ({ ...prev, productType: existing || name }));
+      if (!existing) toast.success(`Product "${name}" added to ${buyData.category}`);
+    } catch (err) {
+      toast.error(err.response?.data?.msg || "Failed to add product");
+      throw err;
+    }
+  };
+
   const handleSaleChange = (field) => (e) => {
     const val = e.target.value;
     setSaleData((prev) => ({ ...prev, [field]: val }));
@@ -519,6 +635,36 @@ const ItemForm = () => {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                   {Object.keys(buyData).map((field) => {
                     if (field === "barcode") return null;
+                    if (field === "category") {
+                      return (
+                        <SelectField
+                          key={field}
+                          label="Category"
+                          icon={Tag}
+                          value={buyData.category}
+                          options={Object.keys(categoryData).sort()}
+                          onChange={setCategory}
+                          onAdd={canEditCategories ? addCategory : undefined}
+                          theme={theme}
+                        />
+                      );
+                    }
+                    if (field === "productType") {
+                      return (
+                        <SelectField
+                          key={field}
+                          label="Product"
+                          icon={Box}
+                          value={buyData.productType}
+                          options={(categoryData[buyData.category] || []).slice().sort()}
+                          onChange={(val) => setBuyData((prev) => ({ ...prev, productType: val }))}
+                          onAdd={canEditCategories && buyData.category ? addProductType : undefined}
+                          disabled={!buyData.category}
+                          placeholder={buyData.category ? "Select product" : "Select a category first"}
+                          theme={theme}
+                        />
+                      );
+                    }
                     if (field === "description") {
                       return (
                         <InputField
@@ -553,7 +699,7 @@ const ItemForm = () => {
                     const config = buyFieldConfig[field];
                     if (!config) return null; // Skip calculated fields not in config
 
-                    const listId = field === "category" ? "category-list" : field === "productType" ? "product-name-list" : field === "supplier" ? "supplier-list" : undefined;
+                    const listId = field === "supplier" ? "supplier-list" : undefined;
 
                     return (
                       <InputField
@@ -597,12 +743,6 @@ const ItemForm = () => {
                   />
                 </div>
 
-                <datalist id="category-list">
-                  {Object.keys(categoryData).sort().map(cat => <option key={cat} value={cat} />)}
-                </datalist>
-                <datalist id="product-name-list">
-                  {(categoryData[buyData.category] || []).slice().sort().map(prod => <option key={prod} value={prod} />)}
-                </datalist>
                 {groups.variants && (
                   <datalist id="size-list">
                     {CLOTHING_SIZE_OPTIONS.map(size => (

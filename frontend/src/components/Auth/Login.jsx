@@ -11,7 +11,8 @@ const Login = () => {
   const [formData, setFormData] = useState({ email: "", password: "" });
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [loginType, setLoginType] = useState("admin");
+  // This page is owner/admin login only — team members use /team-login.
+  const loginType = "admin";
 
   // Typing animation
   const fullText = "Secure • Smart • Automated Billing";
@@ -93,40 +94,12 @@ const Login = () => {
             </p>
           </div>
 
-          {/* Login Type Toggle */}
-          <div className="flex bg-green-50 rounded-lg p-1 mb-6">
-            <button
-              type="button"
-              onClick={() => setLoginType("admin")}
-              className={`flex-1 py-2 rounded-md text-sm font-medium transition ${loginType === "admin"
-                ? "bg-white shadow text-green-700"
-                : "text-gray-500"
-                }`}
-            >
-              Admin
-            </button>
-            <button
-              type="button"
-              onClick={() => setLoginType("team")}
-              className={`flex-1 py-2 rounded-md text-sm font-medium transition ${loginType === "team"
-                ? "bg-white shadow text-green-700"
-                : "text-gray-500"
-                }`}
-            >
-              Team
-            </button>
-          </div>
-
           {/* Form */}
           <form onSubmit={handleLogin} className="space-y-4">
 
             {/* Email */}
             <div>
-              <label className="block text-sm mb-1 text-gray-700">
-                {loginType === "admin"
-                  ? "Email Address"
-                  : "Email or Employee ID"}
-              </label>
+              <label className="block text-sm mb-1 text-gray-700">Email Address</label>
               <input
                 type="text"
                 name="email"
@@ -197,6 +170,13 @@ const Login = () => {
             Don’t have an account?{" "}
             <Link to="/signup" className="text-green-600 font-medium">
               Register
+            </Link>
+          </p>
+
+          <p className="text-center text-xs text-gray-500 mt-2">
+            Team member?{" "}
+            <Link to="/team-login" className="text-green-600 font-medium">
+              Sign in here
             </Link>
           </p>
 

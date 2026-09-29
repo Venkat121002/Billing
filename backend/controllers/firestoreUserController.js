@@ -2,6 +2,7 @@ const { db, admin } = require('../config/firebase');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const { Owner: OwnerModel, SubUser: SubUserModel } = require('../models/mongodb');
+const { getOwnerPlan } = require('../utils/planEnforcement');
 
 // Determine which database to use
 const DB_TYPE = process.env.DB_TYPE || 'mongodb';
@@ -9,7 +10,10 @@ const DB_TYPE = process.env.DB_TYPE || 'mongodb';
 // Helper: Generate Secure ID (matches firestoreAuthController.js)
 const generateId = () => crypto.randomBytes(16).toString('hex');
 
-// Plan limits for sub-users
+// Plan limits for sub-users — Firestore mode only. MongoDB mode reads the
+// staffLogins capability from the superadmin-editable Plan collection instead
+// (see planEnforcement.js); Plan docs are Mongo-only, so Firestore mode keeps
+// this hardcoded fallback table.
 const PLAN_LIMITS = {
     'Trial': 1,
     'Standard': 3,
@@ -47,17 +51,20 @@ exports.createSubUser = async (req, res) => {
                 return res.status(404).json({ msg: "Owner record not found" });
             }
 
-            const rawPlan = owner.subscription?.plan || 'Free';
-            const plan = rawPlan.charAt(0).toUpperCase() + rawPlan.slice(1).toLowerCase();
-            const limit = PLAN_LIMITS[plan] || 0;
+            // Base limit comes from the superadmin-editable Plan; a null/blank
+            // configured limit means unlimited (Number.MAX_SAFE_INTEGER stands
+            // in so the additionalUsers add-on below still adds cleanly).
+            const { caps, planName } = await getOwnerPlan(ownerId);
+            const configuredLimit = caps.staffLogins?.limit;
+            const limit = configuredLimit == null ? Number.MAX_SAFE_INTEGER : configuredLimit;
             const additionalUsers = owner.additionalSubUsers || 0;
-            const totalLimit = limit + additionalUsers;
+            const totalLimit = limit === Number.MAX_SAFE_INTEGER ? limit : limit + additionalUsers;
 
             const currentCount = await SubUserModel.countDocuments({ ownerId, tenantId });
 
             if (currentCount >= totalLimit) {
                 return res.status(403).json({
-                    msg: "Sub-user limit reached for your plan",
+                    msg: `Your ${planName} plan allows up to ${totalLimit} staff logins. Upgrade your plan or buy extra logins to add more.`,
                     limit: limit,
                     additional: additionalUsers,
                     total: totalLimit,
@@ -137,7 +144,7 @@ exports.createSubUser = async (req, res) => {
         }
 
         // 3. Create User in Firebase Auth (Tenant context)
-        const tenantAuth = admin.auth().tenantManager().authForTenant(tenantId);
+        const tenantAuth = admin.auth();
 
         let userRecord;
         try {
@@ -319,7 +326,7 @@ exports.updateSubUser = async (req, res) => {
         // 1. Update Firebase Auth if email or password changed
         if (email || password) {
             try {
-                const tenantAuth = admin.auth().tenantManager().authForTenant(tenantId);
+                const tenantAuth = admin.auth();
                 const authUpdates = {};
                 if (email) authUpdates.email = email;
                 if (password) authUpdates.password = password;
@@ -388,7 +395,7 @@ exports.deleteSubUser = async (req, res) => {
 
         // 1. Delete from Firebase Auth
         try {
-            const tenantAuth = admin.auth().tenantManager().authForTenant(tenantId);
+            const tenantAuth = admin.auth();
             await tenantAuth.deleteUser(subUserId);
         } catch (authError) {
             console.error("Firebase Auth Delete Error (proceeding with Firestore delete):", authError.message);

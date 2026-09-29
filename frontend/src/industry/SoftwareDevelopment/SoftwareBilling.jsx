@@ -61,12 +61,12 @@ const numberToWord = (num) => {
 
 const paymentColors = {
   cash: {
-    gradient: 'from-blue-500 to-indigo-500',
-    base: 'bg-blue-600',
-    ring: 'focus:ring-blue-300/40',
-    border: 'border-blue-600 focus:border-blue-300',
-    text: 'text-blue-100',
-    subtext: 'text-blue-200'
+    gradient: 'from-green-500 to-emerald-500',
+    base: 'bg-green-600',
+    ring: 'focus:ring-green-300/40',
+    border: 'border-green-600 focus:border-green-300',
+    text: 'text-green-100',
+    subtext: 'text-green-200'
   },
   card: {
     gradient: 'from-emerald-600 to-teal-700',
@@ -77,12 +77,12 @@ const paymentColors = {
     subtext: 'text-emerald-200'
   },
   upi: {
-    gradient: 'from-purple-500 to-violet-600',
-    base: 'bg-purple-600',
-    ring: 'focus:ring-purple-300/40',
-    border: 'border-purple-600 focus:border-purple-300',
-    text: 'text-purple-100',
-    subtext: 'text-purple-200'
+    gradient: 'from-green-500 to-green-600',
+    base: 'bg-green-600',
+    ring: 'focus:ring-green-300/40',
+    border: 'border-green-600 focus:border-green-300',
+    text: 'text-green-100',
+    subtext: 'text-green-200'
   },
   term: {
     gradient: 'from-orange-500 to-amber-600',
@@ -126,7 +126,11 @@ const SDBilling = () => {
   };
 
   const location = useLocation();
-  const { currentUser, updateProfile } = useAuth();
+  const { currentUser, updateProfile, hasCapability } = useAuth();
+  const canWhatsappBill = hasCapability("whatsappInvoices");
+  // How bills go out on WhatsApp, set by the super admin: "pdf" (receipt attached) or "text".
+  const billViaText = currentUser?.Tenant?.bill_delivery_mode === "text";
+  const [sendWhatsappBill, setSendWhatsappBill] = useState(true);
   const userData = currentUser;
 
   const [products, setProducts] = useState([]);
@@ -185,24 +189,12 @@ const SDBilling = () => {
   const [paymentMethod, setPaymentMethod] = useState("cash");
   const [categories, setCategories] = useState([]);
   const [isDueBill, setIsDueBill] = useState(false);
-  const [printerFormat, setPrinterFormat] = useState("A4");
+  const [printerFormat, setPrinterFormat] = useState(currentUser?.Tenant?.printer_format || "A4");
   const [termDuration, setTermDuration] = useState("Half-Yearly");
   const [creditPaymentData, setCreditPaymentData] = useState(null);
 
   const activePaymentColor = paymentColors[paymentMethod];
 
-  // Dynamic Printer Format Resolution
-  useEffect(() => {
-    if (cart.length > 0 && userData?.Tenant?.printer_configs) {
-      const firstItemCategory = cart[0].category?.toLowerCase();
-      const config = userData.Tenant.printer_configs.find(
-        (c) => c.category?.toLowerCase() === firstItemCategory
-      );
-      if (config && config.format) {
-        setPrinterFormat(config.format);
-      }
-    }
-  }, [cart, userData]);
 
   const receiptContentRef = useRef(null);
   const printAreaRef = useRef(null);
@@ -391,8 +383,9 @@ const SDBilling = () => {
   const clearSound = () => playSound("/sound/button-21.mp3");
   const playSound = (src) => { const sound = new Audio(src); sound.play().catch(() => { }); sound.onended = () => sound.remove(); };
 
-  const handleDownloadPdf = async () => {
-    if (!receiptContentRef.current) return;
+  // compact: JPEG instead of PNG (~10x smaller), used for the WhatsApp copy.
+  const buildReceiptPdf = async ({ compact = false } = {}) => {
+    if (!receiptContentRef.current) return null;
     const formatStr = printerFormat.toLowerCase();
     let format = { width: 70, height: null };
 
@@ -414,23 +407,46 @@ const SDBilling = () => {
     document.body.appendChild(container);
     try {
       const canvas = await html2canvas(container, { scale: 2, useCORS: true, logging: false, backgroundColor: '#ffffff', windowWidth: container.scrollWidth, windowHeight: container.scrollHeight });
-      const imgData = canvas.toDataURL("image/png");
+      const imgType = compact ? "JPEG" : "PNG";
+      const imgData = compact ? canvas.toDataURL("image/jpeg", 0.85) : canvas.toDataURL("image/png");
       const ratio = canvas.height / canvas.width;
       let pdf;
       if (formatStr.includes('thermal')) {
         const pdfWidth = format.width;
         pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: [pdfWidth, pdfWidth * ratio] });
-        pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, pdfWidth * ratio);
+        pdf.addImage(imgData, imgType, 0, 0, pdfWidth, pdfWidth * ratio);
       } else if (formatStr.includes('a5')) {
         pdf = new jsPDF('p', 'mm', 'a5');
-        pdf.addImage(imgData, "PNG", 0, 0, 148, 148 * ratio);
+        pdf.addImage(imgData, imgType, 0, 0, 148, 148 * ratio);
       } else {
         pdf = new jsPDF('p', 'mm', 'a4');
-        pdf.addImage(imgData, "PNG", 0, 0, 210, 210 * ratio);
+        pdf.addImage(imgData, imgType, 0, 0, 210, 210 * ratio);
       }
-      pdf.save(`${receiptNo || "receipt"}.pdf`);
+      return pdf;
+    } finally { document.body.removeChild(container); }
+  };
+
+  const handleDownloadPdf = async () => {
+    try {
+      const pdf = await buildReceiptPdf();
+      if (pdf) pdf.save(`${receiptNo || "receipt"}.pdf`);
     } catch (err) { console.error("PDF Gen Error:", err); alert("Error generating PDF."); }
-    finally { document.body.removeChild(container); }
+  };
+
+  // Sends the saved bill (same PDF as the receipt) to the customer's WhatsApp.
+  // Never blocks the sale: a failure only shows a message.
+  const sendBillOnWhatsapp = async (billId, token) => {
+    try {
+      // Text mode (super admin setting): the server builds the message from the saved bill, no PDF needed.
+      const pdf = billViaText ? null : await buildReceiptPdf({ compact: true });
+      if (!billViaText && !pdf) return;
+      await axios.post(`${API_URL}/billing/bills/${billId}/whatsapp`, pdf ? pdf.output("blob") : null, {
+        headers: { "x-auth-token": token, "Content-Type": "application/octet-stream" },
+      });
+    } catch (err) {
+      console.error("WhatsApp bill error:", err);
+      alert(`Sale saved, but the bill could not be sent on WhatsApp.\n${err.response?.data?.msg || err.message}`);
+    }
   };
 
   const handlePrint = () => {
@@ -491,6 +507,22 @@ const SDBilling = () => {
     }
   };
 
+  // Guards Finalize against double-clicks: the ref blocks a second click
+  // before React re-renders, the state disables the button.
+  const finalizingRef = useRef(false);
+  const [finalizing, setFinalizing] = useState(false);
+  const handleFinalize = async () => {
+    if (finalizingRef.current) return;
+    finalizingRef.current = true;
+    setFinalizing(true);
+    try {
+      await printAndProceed();
+    } finally {
+      finalizingRef.current = false;
+      setFinalizing(false);
+    }
+  };
+
   const printAndProceed = async () => {
     if (!receiptContentRef.current || !printAreaRef.current || !currentUser) { alert("Error preparing receipt or user not logged in."); return; }
 
@@ -507,6 +539,7 @@ const SDBilling = () => {
       const isDueSale = dueAmount > 0;
       const saleData = {
         receiptNo: receiptNo || "N/A", receiptDate: receiptDate || new Date().toISOString(), customerId: customerId || null,
+        customerName: customerForm.name || "", customerPhone: customerForm.phone || "",
         items: cart.map(item => ({ sku: item.productSku || "NA", name: item.name || "Unknown", price: Number(item.price || 0), qty: Number(item.qty || 1), category: item.category || "Uncategorized", gstRate: Number(item.gstRate || 0) })),
         totals: getTotals(),
         paymentMethod: paymentMethod === "term" ? `Term - ${termDuration}` : paymentMethod,
@@ -517,14 +550,20 @@ const SDBilling = () => {
       const config = { headers: { 'x-auth-token': token } };
 
       // 1. Create Bill / Sale Record
+      let savedBillId = null;
       try {
-        await axios.post(`${API_URL}/billing/bills`, saleData, config);
+        const billRes = await axios.post(`${API_URL}/billing/bills`, saleData, config);
+        savedBillId = billRes.data?.id || null;
       } catch (err) {
         console.error("Error creating bill via API:", err);
         // Fallback or alert? For now log and continue to stock deduction or alert.
         // If bill creation fails, maybe we shouldn't deduct stock?
         // But user asked generally to "update database".
         // I will proceed but warn.
+      }
+
+      if (savedBillId && canWhatsappBill && sendWhatsappBill && customerForm.phone) {
+        await sendBillOnWhatsapp(savedBillId, token);
       }
 
       // 1.5 Update Credit Record if this is a Credit Repayment
@@ -769,7 +808,7 @@ const SDBilling = () => {
           <div>
             <h1 className="text-xl font-semibold">{businessName}</h1>
           </div>
-          <h2 className="text-3xl font-bold text-blue-900">INVOICE</h2>
+          <h2 className="text-3xl font-bold text-green-900">INVOICE</h2>
         </div>
 
         {/* INVOICE DETAILS */}
@@ -870,7 +909,7 @@ const SDBilling = () => {
               </div>
             )}
 
-            <div className="flex justify-between bg-blue-900 text-white px-3 py-2 font-semibold">
+            <div className="flex justify-between bg-green-900 text-white px-3 py-2 font-semibold">
               <span>Grand Total:</span>
               <span>{priceFormat(currentGrandTotal)}</span>
             </div>
@@ -882,7 +921,7 @@ const SDBilling = () => {
                   <span>{priceFormat(cash)}</span>
                 </div>
 
-                <div className="flex justify-between bg-blue-900 text-white px-3 py-2 font-semibold">
+                <div className="flex justify-between bg-green-900 text-white px-3 py-2 font-semibold">
                   <span>{isDueBill ? "Balance Due" : "Change"}</span>
                   <span>
                     {isDueBill
@@ -981,10 +1020,10 @@ const SDBilling = () => {
   if (productsLoading && !products) {
     return (
       <BillingLayout hideHeader>
-        <div className="flex flex-col items-center justify-center h-screen bg-gradient-to-br from-blue-50 to-indigo-50">
+        <div className="flex flex-col items-center justify-center h-screen bg-gradient-to-br from-green-50 to-emerald-50">
           <div className="relative mb-6">
-            <div className="w-20 h-20 rounded-2xl bg-white shadow-xl shadow-blue-100 flex items-center justify-center">
-              <Loader2 className="w-10 h-10 text-blue-500 animate-spin" />
+            <div className="w-20 h-20 rounded-2xl bg-white shadow-xl shadow-green-100 flex items-center justify-center">
+              <Loader2 className="w-10 h-10 text-green-500 animate-spin" />
             </div>
           </div>
           <h2 className="text-xl font-bold text-gray-800 mb-1">Setting Up POS</h2>
@@ -1030,16 +1069,16 @@ const SDBilling = () => {
         <div className="flex flex-col w-full lg:w-[35%] h-full border-r border-gray-100 bg-white">
 
           {/* ── Header ── */}
-          <div className="bg-blue-50 border-b border-blue-100 px-4 py-2.5 flex-shrink-0">
+          <div className="bg-green-50 border-b border-green-100 px-4 py-2.5 flex-shrink-0">
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center">
+              <div className="w-8 h-8 bg-green-500 rounded-lg flex items-center justify-center">
                 <ScanBarcode size={15} className="text-white" />
               </div>
               <div>
-                <h1 className="text-blue-700 font-bold text-[13px] tracking-tight">
+                <h1 className="text-green-700 font-bold text-[13px] tracking-tight">
                   Billing Counter
                 </h1>
-                <p className="text-blue-600 text-[11px]">{
+                <p className="text-green-600 text-[11px]">{
                  `${productsToDisplay.length} Clients`}
                 </p>
               </div>
@@ -1060,14 +1099,14 @@ const SDBilling = () => {
                 placeholder={"Search Clients..."}
                 value={keyword}
                 onChange={(e) => setKeyword(e.target.value)}
-                className="w-full h-9 pl-8 pr-3 text-[11px] bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
+                className="w-full h-9 pl-8 pr-3 text-[11px] bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-400"
               />
             </div>
 
             {/* Barcode Input */}
             <div className="relative">
               <ScanBarcode
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-blue-500"
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-green-500"
                 size={14}
               />
               <input
@@ -1076,7 +1115,7 @@ const SDBilling = () => {
                 onChange={(e) => setBarcodeInput(e.target.value)}
                 onKeyDown={handleBarcodeScan}
                 placeholder="Scan barcode..."
-                className="w-full h-9 pl-8 pr-3 text-[11px] bg-blue-50 border border-blue-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
+                className="w-full h-9 pl-8 pr-3 text-[11px] bg-green-50 border border-green-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-400"
                 autoFocus
               />
             </div>
@@ -1094,8 +1133,8 @@ const SDBilling = () => {
               Object.entries(_.groupBy(filteredProducts(), p => p.category || "Uncategorized")).map(([category, items]) => (
                 <div key={category} className="mb-2">
                   <div className="bg-gray-50/90 px-4 py-1.5 sticky top-0 z-10 backdrop-blur-sm border-b border-gray-100">
-                    <div className="text-[10px] font-bold text-blue-700 uppercase tracking-widest flex items-center gap-1.5">
-                      <div className="w-1 h-3 bg-blue-500 rounded-full"></div>
+                    <div className="text-[10px] font-bold text-green-700 uppercase tracking-widest flex items-center gap-1.5">
+                      <div className="w-1 h-3 bg-green-500 rounded-full"></div>
                       {category}
                     </div>
                   </div>
@@ -1111,7 +1150,7 @@ const SDBilling = () => {
                         className={`flex justify-between items-center px-4 py-2.5 border-b border-gray-50 cursor-pointer transition-all
 
                   ${inCart
-                            ? "bg-blue-50/50 border-l-4 border-blue-500 shadow-sm"
+                            ? "bg-green-50/50 border-l-4 border-green-500 shadow-sm"
                             : "hover:bg-gray-50/80"
                           }`}
                       >
@@ -1120,13 +1159,13 @@ const SDBilling = () => {
                             {product.name}
                           </p>
                           {product.barcode && (
-                            <p className="text-[10px] text-blue-600 font-medium mt-0.5">
+                            <p className="text-[10px] text-green-600 font-medium mt-0.5">
                               #{product.barcode}
                             </p>
                           )}
                         </div>
 
-                        <span className="text-sm font-bold text-blue-700 bg-blue-50 px-2 py-1 rounded-md flex-shrink-0">
+                        <span className="text-sm font-bold text-green-700 bg-green-50 px-2 py-1 rounded-md flex-shrink-0">
                           ₹{product.budget || product.salePrice || product.salesPrice || product.price}
                         </span>
                       </div>
@@ -1143,15 +1182,15 @@ const SDBilling = () => {
         <div className="hidden lg:flex flex-col w-[35%] h-full bg-white border-r border-gray-100">
 
           {/* Cart Header */}
-          <div className="px-4 py-2.5 bg-gray-50/80 border-b border-blue-100 flex items-center justify-between flex-shrink-0">
+          <div className="px-4 py-2.5 bg-gray-50/80 border-b border-green-100 flex items-center justify-between flex-shrink-0">
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
-                <ShoppingCart size={14} className="text-blue-600" />
+              <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center">
+                <ShoppingCart size={14} className="text-green-600" />
               </div>
-              <span className="text-xs font-semibold text-blue-500 uppercase tracking-wider flex items-center gap-1.5">
+              <span className="text-xs font-semibold text-green-500 uppercase tracking-wider flex items-center gap-1.5">
                 Cart
                 {cartItemCount > 0 && (
-                  <span className="bg-blue-500 text-white px-1.5 py-0.5 rounded-full text-[10px] font-bold">
+                  <span className="bg-green-500 text-white px-1.5 py-0.5 rounded-full text-[10px] font-bold">
                     {cartItemCount}
                   </span>
                 )}
@@ -1168,8 +1207,8 @@ const SDBilling = () => {
           <div className="flex-1 overflow-y-auto min-h-0">
             {cart.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full px-6">
-                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-50 to-indigo-50 flex items-center justify-center mb-2.5">
-                  <ShoppingCart size={20} className="text-blue-200" />
+                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-green-50 to-emerald-50 flex items-center justify-center mb-2.5">
+                  <ShoppingCart size={20} className="text-green-200" />
                 </div>
                 <p className="text-xs text-gray-400 font-medium">No Clients Added</p>
                 <p className="text-xs text-gray-300 mt-0.5">Tap to Add Clients</p>
@@ -1177,8 +1216,8 @@ const SDBilling = () => {
             ) : (
               <div className="p-2 space-y-1">
                 {cart.map((item, index) => (
-                  <div key={item.productSku} className="flex items-center gap-2 p-2 rounded-lg bg-gray-50/60 hover:bg-blue-50/40 border border-transparent hover:border-blue-100 transition-all">
-                    <span className="w-5 h-5 rounded-md bg-blue-100/80 text-blue-600 text-[10px] font-bold flex items-center justify-center flex-shrink-0">
+                  <div key={item.productSku} className="flex items-center gap-2 p-2 rounded-lg bg-gray-50/60 hover:bg-green-50/40 border border-transparent hover:border-green-100 transition-all">
+                    <span className="w-5 h-5 rounded-md bg-green-100/80 text-green-600 text-[10px] font-bold flex items-center justify-center flex-shrink-0">
                       {index + 1}
                     </span>
                     <div className="flex-1 min-w-0">
@@ -1189,9 +1228,9 @@ const SDBilling = () => {
                           type="number"
                           value={item.price}
                           onChange={(e) => updatePrice(item.productSku, e.target.value)}
-                          className="w-20 bg-transparent border-b border-dashed border-gray-200 text-xs font-semibold text-gray-700 focus:outline-none focus:border-blue-400 transition-colors"
+                          className="w-20 bg-transparent border-b border-dashed border-gray-200 text-xs font-semibold text-gray-700 focus:outline-none focus:border-green-400 transition-colors"
                         />
-                        {item.gstRate > 0 && <span className="text-blue-500 text-[10px]">+{item.gstRate}%</span>}
+                        {item.gstRate > 0 && <span className="text-green-500 text-[10px]">+{item.gstRate}%</span>}
                       </div>
                     </div>
                     <div className="flex items-center bg-white border border-gray-200 rounded-md overflow-hidden flex-shrink-0">                      
@@ -1228,7 +1267,7 @@ const SDBilling = () => {
                 )}
                 <div className="flex justify-between items-center pt-1.5 border-t border-dashed border-gray-200">
                   <span className="text-base font-bold text-gray-700">Total</span>
-                  <span className="text-lg font-bold text-blue-600">{priceFormat(currentGrandTotal)}</span>
+                  <span className="text-lg font-bold text-green-600">{priceFormat(currentGrandTotal)}</span>
                 </div>
               </div>
             </div>
@@ -1291,13 +1330,13 @@ const SDBilling = () => {
                 <Tag size={10} /> Add Discount 
               </label>
               <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-blue-400 text-sm font-bold">₹</span>
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-green-400 text-sm font-bold">₹</span>
                 <input
                   type="number"
                   value={discount > 0 ? discount : ""}
                   onChange={(e) => setDiscount(parseFloat(e.target.value) || 0)}
                   placeholder="Discount Amount"
-                  className="w-full h-10 pl-8 pr-3 text-[11px] bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all font-semibold"
+                  className="w-full h-10 pl-8 pr-3 text-[11px] bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-400 transition-all font-semibold"
                 />
               </div>
             </div>
@@ -1310,9 +1349,9 @@ const SDBilling = () => {
               {/* <div className="grid grid-cols-3 gap-1.5"> */}
               <div className="grid grid-cols-2 gap-1.5">
                 {[
-                  { key: "cash", label: "Cash", icon: <Banknote size={16} />, active: "bg-blue-50 border-blue-400 text-blue-600", dot: "bg-blue-500" },
+                  { key: "cash", label: "Cash", icon: <Banknote size={16} />, active: "bg-green-50 border-green-400 text-green-600", dot: "bg-green-500" },
                   { key: "card", label: "Card", icon: <CreditCard size={16} />, active: "bg-emerald-50 border-emerald-400 text-emerald-600", dot: "bg-emerald-500" },
-                  { key: "upi", label: "UPI", icon: <Smartphone size={16} />, active: "bg-purple-50 border-purple-400 text-purple-600", dot: "bg-purple-500" },
+                  { key: "upi", label: "UPI", icon: <Smartphone size={16} />, active: "bg-green-50 border-green-400 text-green-600", dot: "bg-green-500" },
                   { key: "term", label: "Term", icon: <Calendar size={16} />, active: "bg-orange-50 border-orange-400 text-orange-600", dot: "bg-orange-500" },
                 ].map((m) => (
                   <button
@@ -1376,12 +1415,12 @@ const SDBilling = () => {
             {/* ── UPI Info ── */}
             {paymentMethod === "upi" && (
               <div className="px-3 pb-3">
-                <div className="bg-purple-50 rounded-lg p-3 border border-purple-100">
+                <div className="bg-green-50 rounded-lg p-3 border border-green-100">
                   <div className="flex items-center gap-1.5 mb-1">
-                    <Smartphone size={12} className="text-purple-500" />
-                    <span className="text-[11px] font-semibold text-purple-700">UPI Payment</span>
+                    <Smartphone size={12} className="text-green-500" />
+                    <span className="text-[11px] font-semibold text-green-700">UPI Payment</span>
                   </div>
-                  <p className="text-[11px] text-purple-500">{priceFormat(currentGrandTotal)} via UPI</p>
+                  <p className="text-[11px] text-green-500">{priceFormat(currentGrandTotal)} via UPI</p>
                 </div>
               </div>
             )}
@@ -1389,12 +1428,12 @@ const SDBilling = () => {
             {/* ── Card Info ── */}
             {paymentMethod === "card" && (
               <div className="px-3 pb-3">
-                <div className="bg-blue-50 rounded-lg p-3 border border-blue-100">
+                <div className="bg-green-50 rounded-lg p-3 border border-green-100">
                   <div className="flex items-center gap-1.5 mb-1">
-                    <CreditCard size={12} className="text-blue-500" />
-                    <span className="text-[11px] font-semibold text-blue-700">Card Payment</span>
+                    <CreditCard size={12} className="text-green-500" />
+                    <span className="text-[11px] font-semibold text-green-700">Card Payment</span>
                   </div>
-                  <p className="text-[11px] text-blue-500">{priceFormat(currentGrandTotal)} to card</p>
+                  <p className="text-[11px] text-green-500">{priceFormat(currentGrandTotal)} to card</p>
                 </div>
               </div>
             )}
@@ -1438,7 +1477,7 @@ const SDBilling = () => {
               onClick={handleCompleteSaleClick}
               disabled={!submitable()}
               className={`w-full h-12 rounded-xl flex items-center justify-center gap-2 text-sm font-bold transition-all duration-300 ${submitable()
-                ? "bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800 text-white shadow-lg shadow-blue-200/50 active:scale-[0.98]"
+                ? "bg-gradient-to-r from-green-600 to-emerald-700 hover:from-green-700 hover:to-emerald-800 text-white shadow-lg shadow-green-200/50 active:scale-[0.98]"
                 : "bg-gray-200 text-gray-400 cursor-not-allowed"
                 }`}
             >
@@ -1459,16 +1498,16 @@ const SDBilling = () => {
 
       {/* ═══════════ CUSTOMER FORM MODAL ═══════════ */}
       {showCustomerForm && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black/40 backdrop-blur-sm z-50 p-4">
+        <div className="fixed inset-0 flex items-center justify-center bg-black/40 z-50 p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden animate-modal-in">
-            <div className="bg-gradient-to-r from-blue-600 to-indigo-700 px-5 py-3 flex items-center justify-between">
+            <div className="bg-gradient-to-r from-green-600 to-emerald-700 px-5 py-3 flex items-center justify-between">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center">
                   <User className="text-white" size={14} />
                 </div>
                 <div>
                   <h2 className="text-[13px] font-bold text-white">Customer Details</h2>
-                  <p className="text-blue-100 text-[11px]">Add billing information</p>
+                  <p className="text-green-100 text-[11px]">Add billing information</p>
                 </div>
               </div>
               <button onClick={() => setShowCustomerForm(false)} className="w-6 h-6 rounded-md bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors">
@@ -1488,13 +1527,13 @@ const SDBilling = () => {
                     {f.label} {f.required && <span className="text-red-400">*</span>}
                   </label>
                   <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-blue-400">{f.icon}</span>
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-green-400">{f.icon}</span>
                     <input
                       type="text"
                       name={f.name}
                       value={customerForm[f.name]}
                       onChange={handleCustomerChange}
-                      className={`w-full h-9 pl-8 pr-3 text-[11px] border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-blue-300 transition-all ${f.extra || ""}`}
+                      className={`w-full h-9 pl-8 pr-3 text-[11px] border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-300 focus:border-green-300 transition-all ${f.extra || ""}`}
                       placeholder={f.placeholder}
                     />
                   </div>
@@ -1506,7 +1545,7 @@ const SDBilling = () => {
               <button onClick={() => setShowCustomerForm(false)} className="flex-1 h-9 rounded-lg border border-gray-200 bg-gray-50 hover:bg-gray-100 text-gray-600 text-[11px] font-medium transition-colors">
                 Cancel
               </button>
-              <button onClick={handleCustomerSubmit} className="flex-1 h-9 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-700 text-white text-[11px] font-bold hover:from-blue-700 hover:to-indigo-800 shadow-md shadow-blue-200/50 transition-all flex items-center justify-center gap-1">
+              <button onClick={handleCustomerSubmit} className="flex-1 h-9 rounded-lg bg-gradient-to-r from-green-600 to-emerald-700 text-white text-[11px] font-bold hover:from-green-700 hover:to-emerald-800 shadow-md shadow-green-200/50 transition-all flex items-center justify-center gap-1">
                 Continue <ArrowRight size={12} />
               </button>
             </div>
@@ -1516,12 +1555,12 @@ const SDBilling = () => {
 
       {/* ═══════════ RECEIPT MODAL ═══════════ */}
       {isShowModalReceipt && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl max-w-3xl w-[95vw] h-[95vh] flex flex-col overflow-hidden animate-modal-in">
-            <div className="flex items-center justify-between px-4 py-2.5 border-b border-blue-100 flex-shrink-0 bg-white">
+            <div className="flex items-center justify-between px-4 py-2.5 border-b border-green-100 flex-shrink-0 bg-white">
               <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg bg-blue-100 flex items-center justify-center">
-                  <Receipt size={13} className="text-blue-600" />
+                <div className="w-7 h-7 rounded-lg bg-green-100 flex items-center justify-center">
+                  <Receipt size={13} className="text-green-600" />
                 </div>
                 <h2 className="text-[11px] font-bold text-gray-800">Receipt Preview</h2>
               </div>
@@ -1530,11 +1569,11 @@ const SDBilling = () => {
               </button>
             </div>
 
-            <div className="flex items-center justify-between px-4 py-2 bg-blue-50/50 border-b border-blue-100 flex-shrink-0">
+            <div className="flex items-center justify-between px-4 py-2 bg-green-50/50 border-b border-green-100 flex-shrink-0">
               <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-1">
                 <Printer size={10} /> Format
               </span>
-              <select value={printerFormat} onChange={(e) => setPrinterFormat(e.target.value)} className="text-[11px] border border-blue-200 rounded-md focus:ring-2 focus:ring-blue-300 px-2 py-1 bg-white">
+              <select value={printerFormat} onChange={(e) => setPrinterFormat(e.target.value)} className="text-[11px] border border-green-200 rounded-md focus:ring-2 focus:ring-green-300 px-2 py-1 bg-white">
                 <option value="A4">A4</option>
                 <option value="A4 GST Invoice">A4 GST Invoice</option>
                 <option value="A5">A5</option>
@@ -1563,15 +1602,28 @@ const SDBilling = () => {
               </div>
             </div>
 
-            <div className="border-t border-blue-100 p-3 flex flex-wrap gap-1.5 flex-shrink-0 bg-white print:hidden">
+            <div className="border-t border-green-100 p-3 flex flex-wrap gap-1.5 flex-shrink-0 bg-white print:hidden">
+              {canWhatsappBill && (
+                <label className="w-full flex items-center gap-2 px-1 pb-1 text-[11px] font-medium text-gray-600 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    className="accent-green-600"
+                    checked={sendWhatsappBill}
+                    onChange={(e) => setSendWhatsappBill(e.target.checked)}
+                  />
+                  {customerForm.phone
+                    ? `Send bill ${billViaText ? "details" : "PDF"} on WhatsApp to ${customerForm.phone}`
+                    : "Send bill on WhatsApp (enter customer phone)"}
+                </label>
+              )}
               <button onClick={handleDownloadPdf} className="flex-1 min-w-[100px] h-9 rounded-lg flex items-center justify-center gap-1 text-[11px] font-semibold bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 transition-all">
                 <Download size={12} /> PDF
               </button>
-              <button onClick={handlePrint} className="flex-1 min-w-[100px] h-9 rounded-lg flex items-center justify-center gap-1 text-[11px] font-semibold bg-white border border-blue-200 text-blue-600 hover:bg-blue-50 transition-all">
+              <button onClick={handlePrint} className="flex-1 min-w-[100px] h-9 rounded-lg flex items-center justify-center gap-1 text-[11px] font-semibold bg-white border border-green-200 text-green-600 hover:bg-green-50 transition-all">
                 <Printer size={12} /> Print
               </button>
-              <button onClick={printAndProceed} className="flex-1 min-w-[120px] h-9 rounded-lg flex items-center justify-center gap-1 text-[11px] font-bold bg-gradient-to-r from-blue-600 to-indigo-700 text-white hover:from-blue-700 hover:to-indigo-800 shadow-md shadow-blue-200/50 transition-all">
-                <CheckCircle size={12} /> Finalize
+              <button onClick={handleFinalize} disabled={finalizing} className="disabled:opacity-60 disabled:cursor-not-allowed flex-1 min-w-[120px] h-9 rounded-lg flex items-center justify-center gap-1 text-[11px] font-bold bg-gradient-to-r from-green-600 to-emerald-700 text-white hover:from-green-700 hover:to-emerald-800 shadow-md shadow-green-200/50 transition-all">
+                <CheckCircle size={12} /> {finalizing ? "Saving..." : "Finalize"}
               </button>
             </div>
           </div>

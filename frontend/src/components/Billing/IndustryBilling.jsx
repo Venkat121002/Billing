@@ -195,7 +195,11 @@ const numberToWord = (num) => {
 };
 
 const IndustryBilling = () => {
-  const { currentUser, updateProfile } = useAuth();
+  const { currentUser, updateProfile, hasCapability } = useAuth();
+  const canWhatsappBill = hasCapability("whatsappInvoices");
+  // How bills go out on WhatsApp, set by the super admin: "pdf" (receipt attached) or "text".
+  const billViaText = currentUser?.Tenant?.bill_delivery_mode === "text";
+  const [sendWhatsappBill, setSendWhatsappBill] = useState(true);
   const userData = currentUser;
   const profile = resolveIndustryProfile(currentUser);
   const theme = THEMES[profile.theme] || THEMES.green;
@@ -292,6 +296,9 @@ const IndustryBilling = () => {
   const [keyword, setKeyword] = useState("");
   const [cart, setCart] = useState(initialCart);
   const [cash, setCash] = useState(initialCash);
+  // Cash Received follows the bill total until the cashier types an amount;
+  // clearing the field or emptying the cart hands control back to the total.
+  const [cashEdited, setCashEdited] = useState(() => localStorage.getItem("pos-cash-edited") === "true");
   const [discount, setDiscount] = useState(0);
   const [change, setChange] = useState(0);
   const [isShowModalReceipt, setIsShowModalReceipt] = useState(false);
@@ -301,28 +308,18 @@ const IndustryBilling = () => {
   const [paymentMethod, setPaymentMethod] = useState("cash");
   const [categories, setCategories] = useState([]);
   const [isDueBill, setIsDueBill] = useState(false);
-  const [printerFormat, setPrinterFormat] = useState("A4");
+  const [printerFormat, setPrinterFormat] = useState(currentUser?.Tenant?.printer_format || "A4");
   const [redeemPoints, setRedeemPoints] = useState(false);
   const [creditPaymentData, setCreditPaymentData] = useState(null);
 
-  // Dynamic Printer Format Resolution
-  useEffect(() => {
-    if (cart.length > 0 && userData?.Tenant?.printer_configs) {
-      const firstItemCategory = cart[0].category?.toLowerCase();
-      const config = userData.Tenant.printer_configs.find(
-        (c) => c.category?.toLowerCase() === firstItemCategory
-      );
-      if (config) {
-        setPrinterFormat(config.format);
-      }
-    }
-  }, [cart, userData]);
 
   const receiptContentRef = useRef(null);
   const printAreaRef = useRef(null);
 
   useEffect(() => { localStorage.setItem("pos-cart", JSON.stringify(cart)); }, [cart]);
   useEffect(() => { localStorage.setItem("pos-cash", cash.toString()); }, [cash]);
+  useEffect(() => { localStorage.setItem("pos-cash-edited", String(cashEdited)); }, [cashEdited]);
+  useEffect(() => { if (cart.length === 0) setCashEdited(false); }, [cart.length]);
   useEffect(() => { updateChange(); }, [cart, cash, discount]);
 
   // Handle Credit Payment Redirect (from the Credit page's "Pay Now")
@@ -484,6 +481,7 @@ const IndustryBilling = () => {
   const updateChange = () => setChange(cash - getTotals().grandTotal);
   const updateCashInput = (value) => {
     const numericValue = parseFloat(value.replace(/[^0-9.]/g, ""));
+    setCashEdited(!isNaN(numericValue));
     setCash(isNaN(numericValue) ? 0 : numericValue);
   };
 
@@ -557,12 +555,13 @@ const IndustryBilling = () => {
   const numberFormat = (number) => (number || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const priceFormat = (number) => `₹${numberFormat(number)}`;
 
-  const clear = () => { setCash(0); setDiscount(0); setCart([]); setPaymentMethod("cash"); updateChange(); clearSound(); };
+  const clear = () => { setCash(0); setCashEdited(false); setDiscount(0); setCart([]); setPaymentMethod("cash"); updateChange(); clearSound(); };
   const clearSound = () => playSound("/sound/button-21.mp3");
   const playSound = (src) => { const sound = new Audio(src); sound.play().catch(() => { }); sound.onended = () => sound.remove(); };
 
-  const handleDownloadPdf = async () => {
-    if (!receiptContentRef.current) return;
+  // compact: JPEG instead of PNG (~10x smaller), used for the WhatsApp copy.
+  const buildReceiptPdf = async ({ compact = false } = {}) => {
+    if (!receiptContentRef.current) return null;
     const formatStr = printerFormat.toLowerCase();
     let format = { width: 70, height: null };
 
@@ -584,23 +583,46 @@ const IndustryBilling = () => {
     document.body.appendChild(container);
     try {
       const canvas = await html2canvas(container, { scale: 2, useCORS: true, logging: false, backgroundColor: '#ffffff', windowWidth: container.scrollWidth, windowHeight: container.scrollHeight });
-      const imgData = canvas.toDataURL("image/png");
+      const imgType = compact ? "JPEG" : "PNG";
+      const imgData = compact ? canvas.toDataURL("image/jpeg", 0.85) : canvas.toDataURL("image/png");
       const ratio = canvas.height / canvas.width;
       let pdf;
       if (formatStr.includes('thermal')) {
         const pdfWidth = format.width;
         pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: [pdfWidth, pdfWidth * ratio] });
-        pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, pdfWidth * ratio);
+        pdf.addImage(imgData, imgType, 0, 0, pdfWidth, pdfWidth * ratio);
       } else if (formatStr.includes('a5')) {
         pdf = new jsPDF('p', 'mm', 'a5');
-        pdf.addImage(imgData, "PNG", 0, 0, 148, 148 * ratio);
+        pdf.addImage(imgData, imgType, 0, 0, 148, 148 * ratio);
       } else {
         pdf = new jsPDF('p', 'mm', 'a4');
-        pdf.addImage(imgData, "PNG", 0, 0, 210, 210 * ratio);
+        pdf.addImage(imgData, imgType, 0, 0, 210, 210 * ratio);
       }
-      pdf.save(`${receiptNo || "receipt"}.pdf`);
+      return pdf;
+    } finally { document.body.removeChild(container); }
+  };
+
+  const handleDownloadPdf = async () => {
+    try {
+      const pdf = await buildReceiptPdf();
+      if (pdf) pdf.save(`${receiptNo || "receipt"}.pdf`);
     } catch (err) { console.error("PDF Gen Error:", err); alert("Error generating PDF."); }
-    finally { document.body.removeChild(container); }
+  };
+
+  // Sends the saved bill (same PDF as the receipt) to the customer's WhatsApp.
+  // Never blocks the sale: a failure only shows a message.
+  const sendBillOnWhatsapp = async (billId, token) => {
+    try {
+      // Text mode (super admin setting): the server builds the message from the saved bill, no PDF needed.
+      const pdf = billViaText ? null : await buildReceiptPdf({ compact: true });
+      if (!billViaText && !pdf) return;
+      await axios.post(`${API_URL}/billing/bills/${billId}/whatsapp`, pdf ? pdf.output("blob") : null, {
+        headers: { "x-auth-token": token, "Content-Type": "application/octet-stream" },
+      });
+    } catch (err) {
+      console.error("WhatsApp bill error:", err);
+      alert(`Sale saved, but the bill could not be sent on WhatsApp.\n${err.response?.data?.msg || err.message}`);
+    }
   };
 
   const handlePrint = () => {
@@ -675,6 +697,22 @@ const IndustryBilling = () => {
     }
   };
 
+  // Guards Finalize against double-clicks: the ref blocks a second click
+  // before React re-renders, the state disables the button.
+  const finalizingRef = useRef(false);
+  const [finalizing, setFinalizing] = useState(false);
+  const handleFinalize = async () => {
+    if (finalizingRef.current) return;
+    finalizingRef.current = true;
+    setFinalizing(true);
+    try {
+      await printAndProceed();
+    } finally {
+      finalizingRef.current = false;
+      setFinalizing(false);
+    }
+  };
+
   const printAndProceed = async () => {
     if (!receiptContentRef.current || !printAreaRef.current || !currentUser) { alert("Error preparing receipt or user not logged in."); return; }
 
@@ -691,6 +729,7 @@ const IndustryBilling = () => {
       const isDueSale = flags.credit && dueAmount > 0;
       const saleData = {
         receiptNo: receiptNo || "N/A", receiptDate: receiptDate || new Date().toISOString(), customerId: customerId || null,
+        customerName: customerForm.name || "", customerPhone: customerForm.phone || "",
         items: cart.map(item => ({ sku: item.productSku || "NA", name: item.name || "Unknown", price: Number(item.price || 0), qty: Number(item.qty || 1), category: item.category || "Uncategorized", gstRate: Number(item.gstRate || 0) })),
         totals: getTotals(),
         paymentMethod: paymentMethod,
@@ -700,10 +739,16 @@ const IndustryBilling = () => {
 
       const config = { headers: { 'x-auth-token': token } };
 
+      let savedBillId = null;
       try {
-        await axios.post(`${API_URL}/billing/bills`, saleData, config);
+        const billRes = await axios.post(`${API_URL}/billing/bills`, saleData, config);
+        savedBillId = billRes.data?.id || null;
       } catch (err) {
         console.error("Error creating bill via API:", err);
+      }
+
+      if (savedBillId && canWhatsappBill && sendWhatsappBill && customerForm.phone) {
+        await sendBillOnWhatsapp(savedBillId, token);
       }
 
       if (flags.credit && creditPaymentData) {
@@ -943,14 +988,12 @@ const IndustryBilling = () => {
 
   const displayTotal = currentGrandTotal;
 
+  // Card/UPI/Wallet always take the full total; cash does too until the cashier types an amount.
   useEffect(() => {
-    if (paymentMethod !== "cash" && paymentMethod !== "wallet") {
+    if (paymentMethod !== "cash" || !cashEdited) {
       setCash(currentGrandTotal);
     }
-    if (paymentMethod === "wallet") {
-      setCash(currentGrandTotal);
-    }
-  }, [paymentMethod, currentGrandTotal]);
+  }, [paymentMethod, currentGrandTotal, cashEdited]);
 
   if (productsLoading && !products) {
     return (
@@ -1336,21 +1379,19 @@ const IndustryBilling = () => {
               <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2 block flex items-center gap-1">
                 <CreditCard size={10} /> Payment Method
               </label>
-              <div className="grid grid-cols-2 gap-1.5">
+              {/* One compact row so the whole cash-flow panel fits without scrolling. */}
+              <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${paymentMethods.length}, minmax(0, 1fr))` }}>
                 {paymentMethods.map((m) => (
                   <button
                     key={m.key}
                     onClick={() => setPaymentMethod(m.key)}
-                    className={`flex flex-col items-center gap-1.5 py-3 rounded-lg border-2 transition-all duration-200 ${paymentMethod === m.key
+                    className={`flex flex-col items-center justify-center gap-0.5 py-1.5 rounded-lg border-2 transition-all duration-200 ${paymentMethod === m.key
                       ? (m.key === "cash" ? `${theme.paymentActiveCash} shadow-sm` : `${m.active} shadow-sm`)
                       : `bg-white border-gray-200 text-gray-400 ${theme.paymentInactiveHover}`
                       }`}
                   >
                     {m.icon}
-                    <span className="text-xs font-semibold">{m.label}</span>
-                    {paymentMethod === m.key && (
-                      <div className={`w-1 h-1 rounded-full ${m.key === "cash" ? theme.paymentActiveCashDot : m.dot}`} />
-                    )}
+                    <span className="text-[11px] font-semibold leading-tight">{m.label}</span>
                   </button>
                 ))}
               </div>
@@ -1373,7 +1414,7 @@ const IndustryBilling = () => {
                 </div>
 
                 {(cash > 0 || currentGrandTotal > 0) && (
-                  <div className="mt-2 p-3 rounded-lg border transition-all bg-red-500 border-red-500 text-white">
+                  <div className={`mt-2 p-3 rounded-lg border transition-all text-white ${change >= 0 ? "bg-emerald-500 border-emerald-500" : "bg-red-500 border-red-500"}`}>
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-1.5">
                         <div className="w-6 h-6 rounded-md bg-white/20 flex items-center justify-center">
@@ -1417,7 +1458,7 @@ const IndustryBilling = () => {
             )}
           </div>
 
-          <div className="px-5 py-10 border-t border-gray-100 bg-white flex-shrink-0 space-y-2">
+          <div className="px-5 py-4 border-t border-gray-100 bg-white flex-shrink-0 space-y-2">
             {cart.length > 0 && (
               <button
                 onClick={clear}
@@ -1453,7 +1494,7 @@ const IndustryBilling = () => {
 
       {/* ═══════════ CUSTOMER FORM MODAL ═══════════ */}
       {showCustomerForm && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black/40 backdrop-blur-sm z-50 p-4">
+        <div className="fixed inset-0 flex items-center justify-center bg-black/40 z-50 p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden animate-modal-in">
             <div className={`${theme.modalHeaderBg} px-5 py-3 flex items-center justify-between`}>
               <div className="flex items-center gap-2.5">
@@ -1510,7 +1551,7 @@ const IndustryBilling = () => {
 
       {/* ═══════════ RECEIPT MODAL ═══════════ */}
       {isShowModalReceipt && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl max-w-3xl w-[95vw] h-[95vh] flex flex-col overflow-hidden animate-modal-in">
             <div className={`flex items-center justify-between px-4 py-2.5 border-b ${theme.receiptHeaderBorder} flex-shrink-0 bg-white`}>
               <div className="flex items-center gap-2">
@@ -1558,14 +1599,27 @@ const IndustryBilling = () => {
             </div>
 
             <div className={`border-t ${theme.receiptFooterBorder} p-3 flex flex-wrap gap-1.5 flex-shrink-0 bg-white print:hidden`}>
+              {canWhatsappBill && (
+                <label className="w-full flex items-center gap-2 px-1 pb-1 text-[11px] font-medium text-gray-600 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    className="accent-green-600"
+                    checked={sendWhatsappBill}
+                    onChange={(e) => setSendWhatsappBill(e.target.checked)}
+                  />
+                  {customerForm.phone
+                    ? `Send bill ${billViaText ? "details" : "PDF"} on WhatsApp to ${customerForm.phone}`
+                    : "Send bill on WhatsApp (enter customer phone)"}
+                </label>
+              )}
               <button onClick={handleDownloadPdf} className="flex-1 min-w-[100px] h-9 rounded-lg flex items-center justify-center gap-1 text-[11px] font-semibold bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 transition-all">
                 <Download size={12} /> PDF
               </button>
               <button onClick={handlePrint} className={`flex-1 min-w-[100px] h-9 rounded-lg flex items-center justify-center gap-1 text-[11px] font-semibold bg-white border transition-all ${theme.printBtn}`}>
                 <Printer size={12} /> Print
               </button>
-              <button onClick={printAndProceed} className={`flex-1 min-w-[120px] h-9 rounded-lg flex items-center justify-center gap-1 text-[11px] font-bold text-white transition-all ${theme.finalizeBtn}`}>
-                <CheckCircle size={12} /> Finalize
+              <button onClick={handleFinalize} disabled={finalizing} className={`disabled:opacity-60 disabled:cursor-not-allowed flex-1 min-w-[120px] h-9 rounded-lg flex items-center justify-center gap-1 text-[11px] font-bold text-white transition-all ${theme.finalizeBtn}`}>
+                <CheckCircle size={12} /> {finalizing ? "Saving..." : "Finalize"}
               </button>
             </div>
           </div>

@@ -1,25 +1,69 @@
 {
-    "indexes": [
+    "indexes": [],
+    "fieldOverrides": [
         {
             "collectionGroup": "owner",
-            "queryScope": "COLLECTION_GROUP",
-            "fields": [
+            "fieldPath": "userId",
+            "indexes": [
                 {
-                    "fieldPath": "userId",
-                    "order": "ASCENDING"
+                    "order": "ASCENDING",
+                    "queryScope": "COLLECTION"
+                },
+                {
+                    "order": "DESCENDING",
+                    "queryScope": "COLLECTION"
+                },
+                {
+                    "order": "ASCENDING",
+                    "queryScope": "COLLECTION_GROUP"
                 }
             ]
         },
         {
             "collectionGroup": "subuser",
-            "queryScope": "COLLECTION_GROUP",
-            "fields": [
+            "fieldPath": "firebaseUid",
+            "indexes": [
                 {
-                    "fieldPath": "firebaseUid",
-                    "order": "ASCENDING"
+                    "order": "ASCENDING",
+                    "queryScope": "COLLECTION"
+                },
+                {
+                    "order": "DESCENDING",
+                    "queryScope": "COLLECTION"
+                },
+                {
+                    "order": "ASCENDING",
+                    "queryScope": "COLLECTION_GROUP"
+                }
+            ]
+        },
+        {
+            "collectionGroup": "credit_customers",
+            "fieldPath": "payToken",
+            "indexes": [
+                {
+                    "order": "ASCENDING",
+                    "queryScope": "COLLECTION"
+                },
+                {
+                    "order": "ASCENDING",
+                    "queryScope": "COLLECTION_GROUP"
+                }
+            ]
+        },
+        {
+            "collectionGroup": "subusercredit",
+            "fieldPath": "payToken",
+            "indexes": [
+                {
+                    "order": "ASCENDING",
+                    "queryScope": "COLLECTION"
+                },
+                {
+                    "order": "ASCENDING",
+                    "queryScope": "COLLECTION_GROUP"
                 }
             ]
         }
-    ],
-    "fieldOverrides": []
+    ]
 }

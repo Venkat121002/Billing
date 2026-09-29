@@ -93,7 +93,11 @@ const AcademyBilling = () => {
   };
 
   const location = useLocation();
-  const { currentUser, updateProfile } = useAuth();
+  const { currentUser, updateProfile, hasCapability } = useAuth();
+  const canWhatsappBill = hasCapability("whatsappInvoices");
+  // How bills go out on WhatsApp, set by the super admin: "pdf" (receipt attached) or "text".
+  const billViaText = currentUser?.Tenant?.bill_delivery_mode === "text";
+  const [sendWhatsappBill, setSendWhatsappBill] = useState(true);
   const userData = currentUser;
 
   const [products, setProducts] = useState([]);
@@ -165,7 +169,7 @@ const AcademyBilling = () => {
   const [paymentMethod, setPaymentMethod] = useState("cash");
   const [categories, setCategories] = useState([]);
   const [isDueBill, setIsDueBill] = useState(false);
-  const [printerFormat, setPrinterFormat] = useState("thermal");
+  const [printerFormat, setPrinterFormat] = useState(currentUser?.Tenant?.printer_format || "A4");
   const [termDuration, setTermDuration] = useState("Monthly");
   const [creditPaymentData, setCreditPaymentData] = useState(null);
 
@@ -177,24 +181,24 @@ const AcademyBilling = () => {
   // string happened to appear literally elsewhere in the file).
   const themeStyles = {
     cash: {
-      card: "bg-gradient-to-br from-purple-700 to-indigo-700",
-      text100: "text-purple-100", text200: "text-purple-200", icon400: "text-purple-400",
-      ring400: "focus:ring-purple-400", cashInput: "bg-purple-600 border-purple-600 focus:ring-purple-300/40",
-      completeSaleShadow: "shadow-purple-200/50", ringBorder300: "focus:ring-purple-300 focus:border-purple-300",
-      gradientBtn: "bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-800 hover:to-indigo-800 shadow-md shadow-purple-200/50",
-      border100: "border-purple-100", bg100: "bg-purple-100", text600: "text-purple-600",
-      bg50half: "bg-purple-50/50", border200: "border-purple-200", ring300: "focus:ring-purple-300",
-      printBtn: "border-purple-200 text-purple-600 hover:bg-purple-50",
+      card: "bg-gradient-to-br from-green-700 to-emerald-700",
+      text100: "text-green-100", text200: "text-green-200", icon400: "text-green-400",
+      ring400: "focus:ring-green-400", cashInput: "bg-green-600 border-green-600 focus:ring-green-300/40",
+      completeSaleShadow: "shadow-green-200/50", ringBorder300: "focus:ring-green-300 focus:border-green-300",
+      gradientBtn: "bg-gradient-to-r from-green-700 to-emerald-700 hover:from-green-800 hover:to-emerald-800 shadow-md shadow-green-200/50",
+      border100: "border-green-100", bg100: "bg-green-100", text600: "text-green-600",
+      bg50half: "bg-green-50/50", border200: "border-green-200", ring300: "focus:ring-green-300",
+      printBtn: "border-green-200 text-green-600 hover:bg-green-50",
     },
     card: {
-      card: "bg-gradient-to-br from-blue-700 to-indigo-700",
-      text100: "text-blue-100", text200: "text-blue-200", icon400: "text-blue-400",
-      ring400: "focus:ring-blue-400", cashInput: "bg-blue-600 border-blue-600 focus:ring-blue-300/40",
-      completeSaleShadow: "shadow-blue-200/50", ringBorder300: "focus:ring-blue-300 focus:border-blue-300",
-      gradientBtn: "bg-gradient-to-r from-blue-700 to-indigo-700 hover:from-blue-800 hover:to-indigo-800 shadow-md shadow-blue-200/50",
-      border100: "border-blue-100", bg100: "bg-blue-100", text600: "text-blue-600",
-      bg50half: "bg-blue-50/50", border200: "border-blue-200", ring300: "focus:ring-blue-300",
-      printBtn: "border-blue-200 text-blue-600 hover:bg-blue-50",
+      card: "bg-gradient-to-br from-green-700 to-emerald-700",
+      text100: "text-green-100", text200: "text-green-200", icon400: "text-green-400",
+      ring400: "focus:ring-green-400", cashInput: "bg-green-600 border-green-600 focus:ring-green-300/40",
+      completeSaleShadow: "shadow-green-200/50", ringBorder300: "focus:ring-green-300 focus:border-green-300",
+      gradientBtn: "bg-gradient-to-r from-green-700 to-emerald-700 hover:from-green-800 hover:to-emerald-800 shadow-md shadow-green-200/50",
+      border100: "border-green-100", bg100: "bg-green-100", text600: "text-green-600",
+      bg50half: "bg-green-50/50", border200: "border-green-200", ring300: "focus:ring-green-300",
+      printBtn: "border-green-200 text-green-600 hover:bg-green-50",
     },
     upi: {
       card: "bg-gradient-to-br from-emerald-700 to-teal-700",
@@ -220,18 +224,6 @@ const AcademyBilling = () => {
 
   const activeTheme = themeStyles[paymentMethod] || themeStyles.cash;
 
-  // Dynamic Printer Format Resolution
-  useEffect(() => {
-    if (cart.length > 0 && userData?.Tenant?.printer_configs) {
-      const firstItemCategory = cart[0].category?.toLowerCase();
-      const config = userData.Tenant.printer_configs.find(
-        (c) => c.category?.toLowerCase() === firstItemCategory
-      );
-      if (config) {
-        setPrinterFormat(config.format);
-      }
-    }
-  }, [cart, userData]);
 
   const receiptContentRef = useRef(null);
   const printAreaRef = useRef(null);
@@ -433,8 +425,9 @@ const AcademyBilling = () => {
   const clearSound = () => playSound("/sound/button-21.mp3");
   const playSound = (src) => { const sound = new Audio(src); sound.play().catch(() => { }); sound.onended = () => sound.remove(); };
 
-  const handleDownloadPdf = async () => {
-    if (!receiptContentRef.current) return;
+  // compact: JPEG instead of PNG (~10x smaller), used for the WhatsApp copy.
+  const buildReceiptPdf = async ({ compact = false } = {}) => {
+    if (!receiptContentRef.current) return null;
     const formatStr = printerFormat.toLowerCase();
     let format = { width: 70, height: null };
 
@@ -456,23 +449,46 @@ const AcademyBilling = () => {
     document.body.appendChild(container);
     try {
       const canvas = await html2canvas(container, { scale: 2, useCORS: true, logging: false, backgroundColor: '#ffffff', windowWidth: container.scrollWidth, windowHeight: container.scrollHeight });
-      const imgData = canvas.toDataURL("image/png");
+      const imgType = compact ? "JPEG" : "PNG";
+      const imgData = compact ? canvas.toDataURL("image/jpeg", 0.85) : canvas.toDataURL("image/png");
       const ratio = canvas.height / canvas.width;
       let pdf;
       if (formatStr.includes('thermal')) {
         const pdfWidth = format.width;
         pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: [pdfWidth, pdfWidth * ratio] });
-        pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, pdfWidth * ratio);
+        pdf.addImage(imgData, imgType, 0, 0, pdfWidth, pdfWidth * ratio);
       } else if (formatStr.includes('a5')) {
         pdf = new jsPDF('p', 'mm', 'a5');
-        pdf.addImage(imgData, "PNG", 0, 0, 148, 148 * ratio);
+        pdf.addImage(imgData, imgType, 0, 0, 148, 148 * ratio);
       } else {
         pdf = new jsPDF('p', 'mm', 'a4');
-        pdf.addImage(imgData, "PNG", 0, 0, 210, 210 * ratio);
+        pdf.addImage(imgData, imgType, 0, 0, 210, 210 * ratio);
       }
-      pdf.save(`${receiptNo || "receipt"}.pdf`);
+      return pdf;
+    } finally { document.body.removeChild(container); }
+  };
+
+  const handleDownloadPdf = async () => {
+    try {
+      const pdf = await buildReceiptPdf();
+      if (pdf) pdf.save(`${receiptNo || "receipt"}.pdf`);
     } catch (err) { console.error("PDF Gen Error:", err); alert("Error generating PDF."); }
-    finally { document.body.removeChild(container); }
+  };
+
+  // Sends the saved bill (same PDF as the receipt) to the customer's WhatsApp.
+  // Never blocks the sale: a failure only shows a message.
+  const sendBillOnWhatsapp = async (billId, token) => {
+    try {
+      // Text mode (super admin setting): the server builds the message from the saved bill, no PDF needed.
+      const pdf = billViaText ? null : await buildReceiptPdf({ compact: true });
+      if (!billViaText && !pdf) return;
+      await axios.post(`${API_URL}/billing/bills/${billId}/whatsapp`, pdf ? pdf.output("blob") : null, {
+        headers: { "x-auth-token": token, "Content-Type": "application/octet-stream" },
+      });
+    } catch (err) {
+      console.error("WhatsApp bill error:", err);
+      alert(`Sale saved, but the bill could not be sent on WhatsApp.\n${err.response?.data?.msg || err.message}`);
+    }
   };
 
   const handlePrint = () => {
@@ -533,6 +549,22 @@ const AcademyBilling = () => {
     }
   };
 
+  // Guards Finalize against double-clicks: the ref blocks a second click
+  // before React re-renders, the state disables the button.
+  const finalizingRef = useRef(false);
+  const [finalizing, setFinalizing] = useState(false);
+  const handleFinalize = async () => {
+    if (finalizingRef.current) return;
+    finalizingRef.current = true;
+    setFinalizing(true);
+    try {
+      await printAndProceed();
+    } finally {
+      finalizingRef.current = false;
+      setFinalizing(false);
+    }
+  };
+
   const printAndProceed = async () => {
     if (!receiptContentRef.current || !printAreaRef.current || !currentUser) { alert("Error preparing receipt or user not logged in."); return; }
 
@@ -549,6 +581,7 @@ const AcademyBilling = () => {
       const isDueSale = dueAmount > 0;
       const saleData = {
         receiptNo: receiptNo || "N/A", receiptDate: receiptDate || new Date().toISOString(), customerId: customerId || null,
+        customerName: customerForm.name || "", customerPhone: customerForm.phone || "",
         items: cart.map(item => ({ sku: item.productSku || "NA", name: item.name || "Unknown", price: Number(item.price || 0), qty: Number(item.qty || 1), category: item.category || "Uncategorized", gstRate: Number(item.gstRate || 0) })),
         totals: getTotals(),
         paymentMethod: paymentMethod === "term" ? `Term - ${termDuration}` : paymentMethod,
@@ -559,14 +592,20 @@ const AcademyBilling = () => {
       const config = { headers: { 'x-auth-token': token } };
 
       // 1. Create Bill / Sale Record
+      let savedBillId = null;
       try {
-        await axios.post(`${API_URL}/billing/bills`, saleData, config);
+        const billRes = await axios.post(`${API_URL}/billing/bills`, saleData, config);
+        savedBillId = billRes.data?.id || null;
       } catch (err) {
         console.error("Error creating bill via API:", err);
         // Fallback or alert? For now log and continue to stock deduction or alert.
         // If bill creation fails, maybe we shouldn't deduct stock?
         // But user asked generally to "update database".
         // I will proceed but warn.
+      }
+
+      if (savedBillId && canWhatsappBill && sendWhatsappBill && customerForm.phone) {
+        await sendBillOnWhatsapp(savedBillId, token);
       }
 
       // 1.5 Update Credit Record if this is a Credit Repayment
@@ -803,7 +842,7 @@ const AcademyBilling = () => {
         <h1 className="text-xl font-semibold">{businessName}</h1>
         <p className="text-sm text-gray-500">MASTERCLASS</p>
       </div>
-      <h2 className="text-3xl font-bold text-blue-900">RECEIPT</h2>
+      <h2 className="text-3xl font-bold text-green-900">RECEIPT</h2>
     </div>
 
     {/* RECEIPT DETAILS */}
@@ -908,12 +947,12 @@ const AcademyBilling = () => {
           </div>
         )}
 
-        <div className="flex justify-between bg-blue-900 text-white px-3 py-2 font-semibold">
+        <div className="flex justify-between bg-green-900 text-white px-3 py-2 font-semibold">
           <span>Paid Amount:</span>
           <span>{priceFormat(cash)}</span>
         </div>
 
-        <div className="flex justify-between bg-blue-900 text-white px-3 py-2 font-semibold">
+        <div className="flex justify-between bg-green-900 text-white px-3 py-2 font-semibold">
           <span>Balance Due:</span>
           <span>
             {priceFormat(
@@ -1058,23 +1097,23 @@ const AcademyBilling = () => {
 
   return (
     <BillingLayout hideHeader>
-      <div className="hide-print flex h-screen bg-sky-50">
+      <div className="hide-print flex h-screen bg-green-50">
 
         {/* ═══════════ LEFT PANEL — PRODUCTS ═══════════ */}
         {/* ═══════════ LEFT PANEL — PRODUCTS WITH BARCODE ═══════════ */}
         <div className="flex flex-col w-full lg:w-[35%] h-full border-r border-gray-100 bg-white">
 
           {/* ── Header ── */}
-          <div className="bg-purple-50 border-b border-purple-100 px-4 py-2.5 flex-shrink-0">
+          <div className="bg-green-50 border-b border-green-100 px-4 py-2.5 flex-shrink-0">
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 bg-purple-500 rounded-lg flex items-center justify-center">
+              <div className="w-8 h-8 bg-green-500 rounded-lg flex items-center justify-center">
                 <ScanBarcode size={15} className="text-white" />
               </div>
               <div>
-                <h1 className="text-purple-700 font-bold text-[13px] tracking-tight">
+                <h1 className="text-green-700 font-bold text-[13px] tracking-tight">
                   Billing Counter 
                 </h1>
-                <p className="text-purple-600 text-[11px]">
+                <p className="text-green-600 text-[11px]">
                   {productsToDisplay.length} Products
                 </p>
               </div>
@@ -1095,14 +1134,14 @@ const AcademyBilling = () => {
                 placeholder="Search product..."
                 value={keyword}
                 onChange={(e) => setKeyword(e.target.value)}
-                className="w-full h-9 pl-8 pr-3 text-[11px] bg-purple-50 border border-purple-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-400"
+                className="w-full h-9 pl-8 pr-3 text-[11px] bg-green-50 border border-green-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-400"
               />
             </div>
 
             {/* Barcode Input */}
             <div className="relative">
               <ScanBarcode
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-purple-500"
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-green-500"
                 size={14}
               />
               <input
@@ -1111,7 +1150,7 @@ const AcademyBilling = () => {
                 onChange={(e) => setBarcodeInput(e.target.value)}
                 onKeyDown={handleBarcodeScan}
                 placeholder="Scan barcode..."
-                className="w-full h-9 pl-8 pr-3 text-[11px] bg-purple-50 border border-purple-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-400"
+                className="w-full h-9 pl-8 pr-3 text-[11px] bg-green-50 border border-green-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-400"
                 autoFocus
               />
             </div>
@@ -1128,8 +1167,8 @@ const AcademyBilling = () => {
               Object.entries(_.groupBy(filteredProducts(), p => p.category || "Uncategorized")).map(([category, items]) => (
                 <div key={category} className="mb-2">
                   <div className="bg-gray-50/90 px-4 py-1.5 sticky top-0 z-10 backdrop-blur-sm border-b border-gray-100">
-                    <div className="text-[10px] font-bold text-purple-700 uppercase tracking-widest flex items-center gap-1.5">
-                      <div className="w-1 h-3 bg-purple-500 rounded-full"></div>
+                    <div className="text-[10px] font-bold text-green-700 uppercase tracking-widest flex items-center gap-1.5">
+                      <div className="w-1 h-3 bg-green-500 rounded-full"></div>
                       {category}
                     </div>
                   </div>
@@ -1144,7 +1183,7 @@ const AcademyBilling = () => {
                         onClick={() => addToCart(product)}
                         className={`flex justify-between items-center px-4 py-2.5 border-b border-gray-50 cursor-pointer transition-all
                   ${inCart
-                            ? "bg-purple-50/50 border-l-4 border-purple-500 shadow-sm"
+                            ? "bg-green-50/50 border-l-4 border-green-500 shadow-sm"
                             : "hover:bg-gray-50/80"
                           }`}
                       >
@@ -1153,13 +1192,13 @@ const AcademyBilling = () => {
                             {product.name}
                           </p>
                           {product.barcode && (
-                            <p className="text-[10px] text-purple-600 font-medium mt-0.5">
+                            <p className="text-[10px] text-green-600 font-medium mt-0.5">
                               #{product.barcode}
                             </p>
                           )}
                         </div>
 
-                        <span className="text-sm font-bold text-purple-700 bg-purple-50 px-2 py-1 rounded-md flex-shrink-0">
+                        <span className="text-sm font-bold text-green-700 bg-green-50 px-2 py-1 rounded-md flex-shrink-0">
                           ₹{product.salePrice || product.salesPrice || product.price}
                         </span>
                       </div>
@@ -1178,13 +1217,13 @@ const AcademyBilling = () => {
           {/* Cart Header */}
           <div className="px-4 py-2.5 bg-gray-50/80 border-b border-gray-100 flex items-center justify-between flex-shrink-0">
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center">
-                <ShoppingCart size={14} className="text-purple-600" />
+              <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center">
+                <ShoppingCart size={14} className="text-green-600" />
               </div>
               <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
                 Cart
                 {cartItemCount > 0 && (
-                  <span className="bg-purple-500 text-white px-1.5 py-0.5 rounded-full text-[10px] font-bold">
+                  <span className="bg-green-500 text-white px-1.5 py-0.5 rounded-full text-[10px] font-bold">
                     {cartItemCount}
                   </span>
                 )}
@@ -1201,8 +1240,8 @@ const AcademyBilling = () => {
           <div className="flex-1 overflow-y-auto min-h-0">
             {cart.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full px-6">
-                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-50 to-indigo-50 flex items-center justify-center mb-2.5">
-                  <ShoppingCart size={20} className="text-purple-200" />
+                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-green-50 to-emerald-50 flex items-center justify-center mb-2.5">
+                  <ShoppingCart size={20} className="text-green-200" />
                 </div>
                 <p className="text-xs text-gray-400 font-medium">No items added</p>
                 <p className="text-xs text-gray-300 mt-0.5">Tap products to add</p>
@@ -1210,8 +1249,8 @@ const AcademyBilling = () => {
             ) : (
               <div className="p-2 space-y-1">
                 {cart.map((item, index) => (
-                  <div key={item.productSku} className="flex items-center gap-2 p-2 rounded-lg bg-gray-50/60 hover:bg-purple-50/40 border border-transparent hover:border-purple-100 transition-all">
-                    <span className="w-5 h-5 rounded-md bg-purple-100/80 text-purple-600 text-[10px] font-bold flex items-center justify-center flex-shrink-0">
+                  <div key={item.productSku} className="flex items-center gap-2 p-2 rounded-lg bg-gray-50/60 hover:bg-green-50/40 border border-transparent hover:border-green-100 transition-all">
+                    <span className="w-5 h-5 rounded-md bg-green-100/80 text-green-600 text-[10px] font-bold flex items-center justify-center flex-shrink-0">
                       {index + 1}
                     </span>
                     <div className="flex-1 min-w-0">
@@ -1222,9 +1261,9 @@ const AcademyBilling = () => {
                           type="number"
                           value={Math.ceil(item.price)}
                           onChange={(e) => updatePrice(item.productSku, e.target.value)}
-                          className="w-20 bg-transparent border-b border-dashed border-gray-200 text-xs font-semibold text-gray-700 focus:outline-none focus:border-purple-400 transition-colors"
+                          className="w-20 bg-transparent border-b border-dashed border-gray-200 text-xs font-semibold text-gray-700 focus:outline-none focus:border-green-400 transition-colors"
                         />
-                        {item.gstRate > 0 && <span className="text-purple-500 text-[10px]">+{item.gstRate}%</span>}
+                        {item.gstRate > 0 && <span className="text-green-500 text-[10px]">+{item.gstRate}%</span>}
                       </div>
                     </div>
                     <div className="flex items-center bg-white border border-gray-200 rounded-md overflow-hidden flex-shrink-0">
@@ -1234,7 +1273,7 @@ const AcademyBilling = () => {
                       <span className="w-6 h-6 flex items-center justify-center text-sm font-bold text-gray-700 border-x border-gray-200 bg-gray-50/50">
                         {item.qty}
                       </span>
-                      <button onClick={() => addQty(item.productSku, 1)} className="w-6 h-6 flex items-center justify-center text-gray-400 hover:text-purple-600 hover:bg-purple-50 transition-colors">
+                      <button onClick={() => addQty(item.productSku, 1)} className="w-6 h-6 flex items-center justify-center text-gray-400 hover:text-green-600 hover:bg-green-50 transition-colors">
                         <Plus size={10} />
                       </button>
                     </div>
@@ -1267,7 +1306,7 @@ const AcademyBilling = () => {
                 )}
                 <div className="flex justify-between items-center pt-1.5 border-t border-dashed border-gray-200">
                   <span className="text-base font-bold text-gray-700">Total</span>
-                  <span className="text-lg font-bold text-purple-600">{priceFormat(currentGrandTotal)}</span>
+                  <span className="text-lg font-bold text-green-600">{priceFormat(currentGrandTotal)}</span>
                 </div>
               </div>
             </div>
@@ -1349,8 +1388,8 @@ const AcademyBilling = () => {
               {/* <div className="grid grid-cols-3 gap-1.5"> */}
               <div className="grid grid-cols-2 gap-1.5">
                 {[
-                  { key: "cash", label: "Cash", icon: <Banknote size={16} />, active: "bg-purple-600 border-purple-600 text-white", dot: "bg-white" },
-                  { key: "card", label: "Card", icon: <CreditCard size={16} />, active: "bg-blue-600 border-blue-600 text-white", dot: "bg-white" },
+                  { key: "cash", label: "Cash", icon: <Banknote size={16} />, active: "bg-green-600 border-green-600 text-white", dot: "bg-white" },
+                  { key: "card", label: "Card", icon: <CreditCard size={16} />, active: "bg-green-600 border-green-600 text-white", dot: "bg-white" },
                   { key: "upi", label: "UPI", icon: <Smartphone size={16} />, active: "bg-emerald-600 border-emerald-600 text-white", dot: "bg-white" },
                   { key: "term", label: "Term", icon: <Calendar size={16} />, active: "bg-orange-600 border-orange-600 text-white", dot: "bg-white" },
                 ].map((m) => (
@@ -1428,12 +1467,12 @@ const AcademyBilling = () => {
             {/* ── Card Info ── */}
             {paymentMethod === "card" && (
               <div className="px-3 pb-3">
-                <div className="bg-blue-50 rounded-lg p-3 border border-blue-100">
+                <div className="bg-green-50 rounded-lg p-3 border border-green-100">
                   <div className="flex items-center gap-1.5 mb-1">
-                    <CreditCard size={12} className="text-blue-500" />
-                    <span className="text-[11px] font-semibold text-blue-700">Card Payment</span>
+                    <CreditCard size={12} className="text-green-500" />
+                    <span className="text-[11px] font-semibold text-green-700">Card Payment</span>
                   </div>
-                  <p className="text-[11px] text-blue-500">{priceFormat(currentGrandTotal)} to card</p>
+                  <p className="text-[11px] text-green-500">{priceFormat(currentGrandTotal)} to card</p>
                 </div>
               </div>
             )}
@@ -1498,7 +1537,7 @@ const AcademyBilling = () => {
 
       {/* ═══════════ CUSTOMER FORM MODAL ═══════════ */}
       {showCustomerForm && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black/40 backdrop-blur-sm z-50 p-4">
+        <div className="fixed inset-0 flex items-center justify-center bg-black/40 z-50 p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden animate-modal-in">
             <div className={`${activeTheme.card} px-5 py-3 flex items-center justify-between`}>
               <div className="flex items-center gap-2.5">
@@ -1555,7 +1594,7 @@ const AcademyBilling = () => {
 
       {/* ═══════════ RECEIPT MODAL ═══════════ */}
       {isShowModalReceipt && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl  max-w-3xl w-[95vw] h-[95vh] flex flex-col overflow-hidden animate-modal-in">
             <div className={`flex items-center justify-between px-4 py-2.5 border-b ${activeTheme.border100} flex-shrink-0 bg-white`}>
               <div className="flex items-center gap-2">
@@ -1603,14 +1642,27 @@ const AcademyBilling = () => {
             </div>
 
             <div className={`border-t ${activeTheme.border100} p-3 flex flex-wrap gap-1.5 flex-shrink-0 bg-white print:hidden`}>
+              {canWhatsappBill && (
+                <label className="w-full flex items-center gap-2 px-1 pb-1 text-[11px] font-medium text-gray-600 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    className="accent-green-600"
+                    checked={sendWhatsappBill}
+                    onChange={(e) => setSendWhatsappBill(e.target.checked)}
+                  />
+                  {customerForm.phone
+                    ? `Send bill ${billViaText ? "details" : "PDF"} on WhatsApp to ${customerForm.phone}`
+                    : "Send bill on WhatsApp (enter customer phone)"}
+                </label>
+              )}
               <button onClick={handleDownloadPdf} className="flex-1 min-w-[100px] h-9 rounded-lg flex items-center justify-center gap-1 text-[11px] font-semibold bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 transition-all">
                 <Download size={12} /> PDF
               </button>
               <button onClick={handlePrint} className={`flex-1 min-w-[100px] h-9 rounded-lg flex items-center justify-center gap-1 text-[11px] font-semibold bg-white border transition-all ${activeTheme.printBtn}`}>
                 <Printer size={12} /> Print
               </button>
-              <button onClick={printAndProceed} className={`flex-1 min-w-[120px] h-9 rounded-lg flex items-center justify-center gap-1 text-[11px] font-bold text-white transition-all ${activeTheme.gradientBtn}`}>
-                <CheckCircle size={12} /> Finalize
+              <button onClick={handleFinalize} disabled={finalizing} className={`disabled:opacity-60 disabled:cursor-not-allowed flex-1 min-w-[120px] h-9 rounded-lg flex items-center justify-center gap-1 text-[11px] font-bold text-white transition-all ${activeTheme.gradientBtn}`}>
+                <CheckCircle size={12} /> {finalizing ? "Saving..." : "Finalize"}
               </button>
             </div>
           </div>

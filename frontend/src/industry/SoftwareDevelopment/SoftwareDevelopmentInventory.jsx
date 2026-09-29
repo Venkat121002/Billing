@@ -184,12 +184,12 @@ const SoftwareDevelopmentInventory = () => {
 
   return (
     <BillingLayout>
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-white p-6">
+      <div className="min-h-screen bg-gradient-to-br from-green-50 to-white p-6">
 
         {/* Header */}
         <div className="flex justify-between items-center mb-6">
           <div className="flex items-center gap-3">
-            <div className="p-3 bg-blue-600 rounded-xl text-white shadow-lg shadow-blue-200">
+            <div className="p-3 bg-green-600 rounded-xl text-white shadow-lg shadow-green-200">
               <Code size={28} />
             </div>
             <div>
@@ -201,7 +201,7 @@ const SoftwareDevelopmentInventory = () => {
           <div className="flex gap-3">
             <button
               onClick={() => navigate("/add-client")}
-              className="flex items-center gap-2 px-5 py-2.5 bg-white text-blue-600 border border-blue-200 rounded-xl hover:bg-blue-50 transition-all shadow-sm hover:shadow-md font-medium"
+              className="flex items-center gap-2 px-5 py-2.5 bg-white text-green-600 border border-green-200 rounded-xl hover:bg-green-50 transition-all shadow-sm hover:shadow-md font-medium"
             >
               <UserPlus size={18} />
               Add Client
@@ -209,7 +209,7 @@ const SoftwareDevelopmentInventory = () => {
 
             <button
               onClick={() => navigate("/add-service")}
-              className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-all shadow-md hover:shadow-lg font-medium"
+              className="flex items-center gap-2 px-5 py-2.5 bg-green-600 text-white rounded-xl hover:bg-green-700 transition-all shadow-md hover:shadow-lg font-medium"
             >
               <PlusCircle size={18} />
               Add Service
@@ -221,26 +221,26 @@ const SoftwareDevelopmentInventory = () => {
         <div className="flex gap-4 border-b border-gray-200 mb-6">
           <button
             className={`pb-2 px-4 font-medium transition-colors relative ${activeView === "services"
-                ? "text-blue-600"
+                ? "text-green-600"
                 : "text-gray-500 hover:text-gray-700"
               }`}
             onClick={() => setActiveView("services")}
           >
             Service Details
             {activeView === "services" && (
-              <span className="absolute bottom-0 left-0 w-full h-0.5 bg-blue-600 rounded-t-full" />
+              <span className="absolute bottom-0 left-0 w-full h-0.5 bg-green-600 rounded-t-full" />
             )}
           </button>
           <button
             className={`pb-2 px-4 font-medium transition-colors relative ${activeView === "clients"
-                ? "text-blue-600"
+                ? "text-green-600"
                 : "text-gray-500 hover:text-gray-700"
               }`}
             onClick={() => setActiveView("clients")}
           >
             Client Details
             {activeView === "clients" && (
-              <span className="absolute bottom-0 left-0 w-full h-0.5 bg-blue-600 rounded-t-full" />
+              <span className="absolute bottom-0 left-0 w-full h-0.5 bg-green-600 rounded-t-full" />
             )}
           </button>
         </div>
@@ -253,7 +253,7 @@ const SoftwareDevelopmentInventory = () => {
             placeholder={activeView === "services" ? "Search services, codes, categories or leads..." : "Search clients, emails, phones or projects..."}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-12 pr-4 py-3.5 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all bg-white shadow-sm"
+            className="w-full pl-12 pr-4 py-3.5 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500 transition-all bg-white shadow-sm"
           />
         </div>
 
@@ -293,10 +293,10 @@ const SoftwareDevelopmentInventory = () => {
                 {activeView === "services" ? (
                   filteredServices.length > 0 ? (
                     filteredServices.map((service) => (
-                      <tr key={service.id} className="hover:bg-blue-50/30 transition-colors group">
+                      <tr key={service.id} className="hover:bg-green-50/30 transition-colors group">
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center">
+                            <div className="w-10 h-10 rounded-lg bg-green-100 text-green-600 flex items-center justify-center">
                               {service.category?.toLowerCase().includes("web") ? <Globe size={20} /> :
                                 service.category?.toLowerCase().includes("mobile") ? <Smartphone size={20} /> :
                                   service.category?.toLowerCase().includes("backend") ? <Server size={20} /> :
@@ -312,7 +312,7 @@ const SoftwareDevelopmentInventory = () => {
                         <td className="px-6 py-4 text-sm text-gray-600">{service.platform || "—"}</td>
                         <td className="px-6 py-4">
                           {service.lead ? (
-                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">
                               {service.lead}
                             </span>
                           ) : "—"}
@@ -324,7 +324,7 @@ const SoftwareDevelopmentInventory = () => {
                         </td>
                         <td className="px-6 py-4 text-right font-medium text-gray-900">
                           <div className="flex flex-col gap-1 items-end">
-                            {service.hourlyRate > 0 && <span className="text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded">₹{service.hourlyRate}/hr</span>}
+                            {service.hourlyRate > 0 && <span className="text-xs text-green-600 bg-green-50 px-2 py-0.5 rounded">₹{service.hourlyRate}/hr</span>}
                             {service.dailyRate > 0 && <span className="text-xs text-green-600 bg-green-50 px-2 py-0.5 rounded">₹{service.dailyRate}/day</span>}
                             {service.maintenanceRate > 0 && <span className="text-xs text-orange-600 bg-orange-50 px-2 py-0.5 rounded">₹{service.maintenanceRate} AMC</span>}
                             {!service.hourlyRate && !service.dailyRate && !service.maintenanceRate && <span className="text-gray-400 text-xs">—</span>}
@@ -334,7 +334,7 @@ const SoftwareDevelopmentInventory = () => {
                           <div className="flex justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                             <button
                               onClick={() => handleEdit(service)}
-                              className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                              className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
                               title="Edit Service"
                             >
                               <Edit3 size={16} />
@@ -365,7 +365,7 @@ const SoftwareDevelopmentInventory = () => {
                 ) : (
                   filteredClients.length > 0 ? (
                     filteredClients.map((client) => (
-                      <tr key={client.id} className="hover:bg-blue-50/30 transition-colors group">
+                      <tr key={client.id} className="hover:bg-green-50/30 transition-colors group">
                         <td className="px-6 py-4">
                           <div className="flex flex-col">
                             <span className="font-semibold text-gray-800">{client.name}</span>
@@ -382,7 +382,7 @@ const SoftwareDevelopmentInventory = () => {
                         <td className="px-6 py-4 text-sm text-gray-800">{client.projectName || "—"}</td>
                         <td className="px-6 py-4">
                           {client.projectType ? (
-                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
                               {client.projectType}
                             </span>
                           ) : "—"}
@@ -400,7 +400,7 @@ const SoftwareDevelopmentInventory = () => {
                             </button>
                             <button
                               onClick={() => handleEditClient(client)}
-                              className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                              className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
                               title="Edit Client"
                             >
                               <Edit3 size={16} />

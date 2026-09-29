@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const authController = require('../controllers/firestoreAuthController');
 const auth = require('../middleware/firestoreAuth');
+const roleAuth = require('../middleware/roleAuth');
 
 // @route   POST /api/v2/auth/register
 router.post('/register', authController.register);
@@ -29,5 +30,13 @@ router.post('/reset-password', authController.resetPassword);
 
 // @route   POST /api/v2/auth/select-industry
 router.post('/select-industry', auth, authController.selectIndustry);
+
+// @route   GET /api/v2/auth/item-categories
+// @desc    Store's category → product list (null until the owner saves one)
+router.get('/item-categories', auth, authController.getItemCategories);
+
+// @route   PUT /api/v2/auth/item-categories
+// @desc    Replace the store's category → product list (owner only)
+router.put('/item-categories', auth, roleAuth(['owner', 'TenantAdmin']), authController.updateItemCategories);
 
 module.exports = router;

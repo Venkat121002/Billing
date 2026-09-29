@@ -555,26 +555,29 @@ const IndustryInventory = () => {
           </div>
 
           {isSupplierModalOpen && (
-            <div className="fixed inset-0 bg-black/50 flex justify-center items-center p-4 z-50 overflow-y-auto">
-              <div className="bg-white rounded-2xl w-full max-w-2xl p-6 animate-fade-in relative my-8">
-                <button
-                  onClick={() => setIsSupplierModalOpen(false)}
-                  className="absolute right-4 top-4 text-gray-400 hover:text-gray-600"
-                >
-                  <X size={24} />
-                </button>
-
-                <div className="flex items-center gap-3 mb-6">
-                  <div className={`w-12 h-12 rounded-xl ${theme.modalIconBg} flex items-center justify-center`}>
-                    <UserPlus size={24} />
+            <div className="fixed inset-0 bg-black/50 flex justify-center items-center p-4 z-50">
+              <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[calc(100vh-2rem)] flex flex-col animate-fade-in relative overflow-hidden">
+                <div className="flex items-center justify-between gap-3 px-6 pt-6 pb-4 border-b border-gray-100 shrink-0">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className={`w-12 h-12 shrink-0 rounded-xl ${theme.modalIconBg} flex items-center justify-center`}>
+                      <UserPlus size={24} />
+                    </div>
+                    <div className="min-w-0">
+                      <h2 className="text-xl font-bold text-gray-900">Add New Supplier</h2>
+                      <p className="text-gray-500 text-sm">Save supplier details for purchase</p>
+                    </div>
                   </div>
-                  <div>
-                    <h2 className="text-xl font-bold text-gray-900">Add New Supplier</h2>
-                    <p className="text-gray-500 text-sm">Save supplier details for purchase</p>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsSupplierModalOpen(false)}
+                    className="shrink-0 p-1 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100"
+                  >
+                    <X size={22} />
+                  </button>
                 </div>
 
-                <form onSubmit={handleSaveSupplier} className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <form onSubmit={handleSaveSupplier} className="flex flex-col min-h-0 flex-1">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-5 gap-y-4 px-6 py-5 overflow-y-auto">
                   {[
                     { key: "name", label: "Supplier Name", icon: Briefcase, required: true, placeholder: "Enter supplier name" },
                     { key: "company", label: "Company Name", icon: Building2, placeholder: "Enter company name" },
@@ -600,7 +603,7 @@ const IndustryInventory = () => {
                         required={f.required}
                         value={supplierFormData[f.key]}
                         onChange={(e) => setSupplierFormData({ ...supplierFormData, [f.key]: e.target.value })}
-                        className={`px-4 py-3 rounded-xl border ${theme.fieldInput} bg-gray-50/50 focus:outline-none focus:ring-2 transition-all ${f.mono ? "font-mono" : ""}`}
+                        className={`w-full h-12 px-4 rounded-xl border ${theme.fieldInput} bg-gray-50/50 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 transition-all ${f.mono ? "uppercase tracking-wide placeholder:normal-case" : ""}`}
                         placeholder={f.placeholder}
                       />
                     </div>
@@ -614,7 +617,7 @@ const IndustryInventory = () => {
                     <select
                       value={supplierFormData.paymentMode}
                       onChange={(e) => setSupplierFormData({ ...supplierFormData, paymentMode: e.target.value })}
-                      className={`px-4 py-3 rounded-xl border ${theme.fieldInput} bg-gray-50/50 focus:outline-none focus:ring-2 transition-all`}
+                      className={`w-full h-12 px-4 rounded-xl border ${theme.fieldInput} bg-gray-50/50 text-sm text-gray-900 focus:outline-none focus:ring-2 transition-all`}
                     >
                       <option value="Cash">Cash</option>
                       <option value="UPI">UPI</option>
@@ -633,12 +636,13 @@ const IndustryInventory = () => {
                       rows="3"
                       value={supplierFormData.address}
                       onChange={(e) => setSupplierFormData({ ...supplierFormData, address: e.target.value })}
-                      className={`px-4 py-3 rounded-xl border ${theme.fieldInput} bg-gray-50/50 focus:outline-none focus:ring-2 transition-all resize-none`}
+                      className={`w-full px-4 py-3 rounded-xl border ${theme.fieldInput} bg-gray-50/50 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 transition-all resize-none`}
                       placeholder="Enter full address..."
                     ></textarea>
                   </div>
+                </div>
 
-                  <div className="flex justify-end gap-3 md:col-span-2 pt-4 border-t border-gray-100 mt-2">
+                  <div className="flex justify-end gap-3 px-6 py-4 border-t border-gray-100 bg-white shrink-0">
                     <button
                       type="button"
                       onClick={() => setIsSupplierModalOpen(false)}
