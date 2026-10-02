@@ -97,11 +97,11 @@ const CustomerSegmentationModal = ({ isOpen, onClose }) => {
               <Users className="w-5 h-5 text-purple-200" />
             </div>
             <div>
-              <h2 className="text-lg font-bold flex items-center gap-2">
-                Customer Insights & RFM Segmentation <span className="text-xs px-2 py-0.5 rounded-full bg-white/20 font-medium">Phase 2 AI</span>
+              <h2 className="text-lg font-bold">
+                Customer Insights & Retention
               </h2>
               <p className="text-xs text-white/80">
-                Segment customers by Recency, Frequency & Spend, and launch targeted WhatsApp offers
+                Groups customers into VIP, Regular, and At-Risk segments based on purchase history to send targeted WhatsApp offers.
               </p>
             </div>
           </div>

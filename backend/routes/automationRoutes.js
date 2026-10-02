@@ -9,7 +9,6 @@ const { isGeminiConfigured } = require('../config/gemini');
 const { Product } = require('../models/mongodb');
 
 // Phase 2 Utilities
-const { parseNaturalLanguageBill } = require('../utils/smartBillingAi');
 const { generateDemandForecast } = require('../utils/demandForecasting');
 const { analyzeCustomerSegments } = require('../utils/customerSegmentation');
 const { categorizeExpense } = require('../utils/expenseCategorization');
@@ -37,58 +36,15 @@ router.get('/status', (req, res) => {
         phase2: {
             status: 'active',
             features: [
-                '🧠 Smart Billing Assistant (AI Chat & Voice Parsing)',
-                '🧠 Demand Forecasting & Restock Suggestions',
-                '🧠 Customer Insights & RFM Segmentation',
-                '🧠 AI Expense Categorization for Cashbook',
-                '🧠 GST Return Preparation (GSTR-1 & GSTR-3B with Excel Export)'
+                'Demand Forecasting & Restock Suggestions',
+                'Customer Insights & RFM Segmentation',
+                'AI Expense Categorization for Cashbook',
+                'GST Return Preparation (GSTR-1 & GSTR-3B with Excel Export)'
             ]
         },
         geminiConfigured: isGeminiConfigured(),
         serverTimeIST: new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })
     });
-});
-
-// =========================================================================
-// Feature 6: Smart Billing Assistant (AI Chat / Voice input parser)
-// Allowed for all billing roles (cashier, subuser, owner, admin)
-// =========================================================================
-router.post('/smart-billing', async (req, res) => {
-    try {
-        const { orderText } = req.body;
-        if (!orderText || !orderText.trim()) {
-            return res.status(400).json({ msg: 'Order text is required' });
-        }
-
-        const ownerId = req.user.ownerId || req.user.userId;
-        const tenantId = req.user.tenantId || process.env.TENANT_ID;
-
-        // Fetch store products to provide catalog grounding for AI
-        const query = {};
-        if (ownerId && tenantId) {
-            query.$or = [{ ownerId }, { tenantId }];
-        } else if (ownerId) {
-            query.ownerId = ownerId;
-        }
-
-        const products = await Product.find(query).lean();
-
-        const result = await parseNaturalLanguageBill({
-            orderText,
-            catalog: products
-        });
-
-        res.json({
-            success: true,
-            orderText,
-            method: result.method,
-            parsedItems: result.parsedItems || [],
-            unmatched: result.unmatched || []
-        });
-    } catch (err) {
-        console.error('❌ Smart Billing Assistant Error:', err);
-        res.status(500).json({ msg: 'Failed to parse order text', error: err.message });
-    }
 });
 
 // =========================================================================

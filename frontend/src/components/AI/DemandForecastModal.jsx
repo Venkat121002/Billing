@@ -123,11 +123,11 @@ const DemandForecastModal = ({ isOpen, onClose }) => {
               <TrendingUp className="w-5 h-5 text-cyan-200" />
             </div>
             <div>
-              <h2 className="text-lg font-bold flex items-center gap-2">
-                Demand Forecasting & Smart Restock <span className="text-xs px-2 py-0.5 rounded-full bg-white/20 font-medium">Phase 2 AI</span>
+              <h2 className="text-lg font-bold">
+                Demand Forecasting & Smart Restock
               </h2>
               <p className="text-xs text-white/80">
-                Predict sales velocity and calculate exact restock quantities
+                Calculates daily sales velocity and stock runway to tell you exactly which items to reorder before running out.
               </p>
             </div>
           </div>

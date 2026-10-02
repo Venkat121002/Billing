@@ -93,11 +93,11 @@ const GstReturnModal = ({ isOpen, onClose }) => {
               <FileSpreadsheet className="w-5 h-5 text-emerald-100" />
             </div>
             <div>
-              <h2 className="text-lg font-bold flex items-center gap-2">
-                GST Return Preparation (GSTR-1 & 3B) <span className="text-xs px-2 py-0.5 rounded-full bg-white/20 font-medium">Phase 2 AI</span>
+              <h2 className="text-lg font-bold">
+                GST Return Preparation (GSTR-1 & 3B)
               </h2>
               <p className="text-xs text-white/80">
-                Auto-compile B2B, B2C, HSN tables & 1-click export Excel workbook for CA filing
+                Automatically compiles your sales into B2B, B2C, and HSN tables, and exports an Excel workbook ready for your CA or tax portal.
               </p>
             </div>
           </div>
