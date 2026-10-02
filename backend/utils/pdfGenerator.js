@@ -3,7 +3,7 @@ const PDFDocument = require('pdfkit');
 const generateInvoicePDF = (data) => {
     return new Promise((resolve, reject) => {
         try {
-            const doc = new PDFDocument({ margin: 50 });
+            const doc = new PDFDocument({ margin: 50, size: 'A4', bufferPages: true });
             let buffers = [];
 
             doc.on('data', buffers.push.bind(buffers));
@@ -132,7 +132,45 @@ const generateInvoicePDF = (data) => {
                     { align: "center", width: 500 }
                 );
 
+            // Apply copyright notice & pagination on every page
+            const pageRange = doc.bufferedPageRange();
+            for (let i = pageRange.start; i < pageRange.start + pageRange.count; i++) {
+                doc.switchToPage(i);
+                const bottomY = doc.page.height - 28;
+                const pageWidth = doc.page.width;
+
+                // Subtle hairline divider rule
+                doc
+                    .strokeColor("#E2E8F0")
+                    .lineWidth(0.5)
+                    .moveTo(50, bottomY - 8)
+                    .lineTo(pageWidth - 50, bottomY - 8)
+                    .stroke();
+
+                // Copyright Notice on every page
+                doc
+                    .fontSize(8.5)
+                    .font("Helvetica")
+                    .fillColor("#64748B")
+                    .text("© SwordNex Technologies Pvt. Ltd.", 50, bottomY, {
+                        align: "center",
+                        width: pageWidth - 100
+                    });
+
+                if (pageRange.count > 1) {
+                    doc
+                        .fontSize(8)
+                        .font("Helvetica")
+                        .fillColor("#94A3B8")
+                        .text(`Page ${i + 1} of ${pageRange.count}`, 50, bottomY, {
+                            align: "right",
+                            width: pageWidth - 100
+                        });
+                }
+            }
+
             doc.end();
+
 
         } catch (err) {
             reject(err);
