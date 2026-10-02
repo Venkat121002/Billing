@@ -38,6 +38,7 @@ import {
 import BillingLayout from "../../Layout/BillingLayout/AdminLayout";
 import { useNavigate } from "react-router-dom";
 import { resolveIndustryProfile } from "../../config/industryProfiles";
+import DemandForecastModal from "../AI/DemandForecastModal";
 
 // Per-industry visual theme. Every value is a complete literal Tailwind
 // class string — see IndustryGstBill.jsx for why. Only green/pink are
@@ -147,6 +148,7 @@ const IndustryInventory = () => {
   const groups = profile.itemFieldGroups || {};
 
   const [isSupplierModalOpen, setIsSupplierModalOpen] = useState(false);
+  const [showDemandModal, setShowDemandModal] = useState(false);
   const [supplierFormData, setSupplierFormData] = useState({
     name: "",
     company: "",
@@ -501,6 +503,14 @@ const IndustryInventory = () => {
                 </div>
               </div>
               <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowDemandModal(true)}
+                  className="flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl shadow-md transition-all font-semibold"
+                >
+                  <TrendingUp size={18} />
+                  Restock Forecast (AI)
+                </button>
                 <button
                   onClick={() => setIsSupplierModalOpen(true)}
                   className={`flex items-center gap-2 px-6 py-3 bg-white border rounded-xl shadow-sm transition-all font-medium ${theme.addSupplierBtn}`}
@@ -1094,6 +1104,12 @@ const IndustryInventory = () => {
             </div>
           </div>
         )}
+
+        {/* Demand Forecasting & Restock Modal (Phase 2 AI) */}
+        <DemandForecastModal
+          isOpen={showDemandModal}
+          onClose={() => setShowDemandModal(false)}
+        />
       </div>
     </BillingLayout>
   );

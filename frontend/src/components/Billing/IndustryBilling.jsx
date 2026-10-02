@@ -31,8 +31,11 @@ import {
   Hash,
   RotateCcw,
   ChevronRight,
+  Sparkles,
+  Mic,
 } from "lucide-react";
 import BillingLayout from "../../Layout/BillingLayout/AdminLayout";
+import SmartBillingAssistant from "../AI/SmartBillingAssistant";
 import { useAuth } from "../../contexts/AuthContext";
 import { resolveIndustryProfile } from "../../config/industryProfiles";
 import _ from "lodash";
@@ -325,6 +328,35 @@ const IndustryBilling = () => {
   const [printerFormat, setPrinterFormat] = useState(currentUser?.Tenant?.printer_format || "A4");
   const [redeemPoints, setRedeemPoints] = useState(false);
   const [creditPaymentData, setCreditPaymentData] = useState(null);
+  const [showAiAssistant, setShowAiAssistant] = useState(false);
+
+  const handleAiAddItems = (items) => {
+    let updatedCart = [...cart];
+    items.forEach((item) => {
+      const validSku = item.productSku || item.productId;
+      const existingIndex = updatedCart.findIndex(c => c.productSku === validSku);
+      if (existingIndex > -1) {
+        updatedCart[existingIndex] = {
+          ...updatedCart[existingIndex],
+          qty: (Number(updatedCart[existingIndex].qty) || 0) + (Number(item.quantity) || 1)
+        };
+      } else {
+        updatedCart.push({
+          productId: item.productId,
+          productSku: validSku,
+          image: item.image || null,
+          name: item.productName,
+          price: Number(item.price || 0),
+          category: item.category || 'General',
+          qty: Number(item.quantity) || 1,
+          gstRate: Number(item.gstRate || 0)
+        });
+      }
+    });
+    setCart(updatedCart);
+    beep();
+    updateChange();
+  };
 
   useEffect(() => {
     if (userData) {
@@ -1121,18 +1153,29 @@ const IndustryBilling = () => {
         <div className="flex flex-col w-full lg:w-[35%] h-full border-r border-gray-100 bg-white">
 
           <div className={`${theme.headerBg} border-b px-4 py-2.5 flex-shrink-0`}>
-            <div className="flex items-center gap-2.5">
-              <div className={`w-8 h-8 ${theme.headerIconBg} rounded-lg flex items-center justify-center`}>
-                <ScanBarcode size={15} className="text-white" />
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className={`w-8 h-8 ${theme.headerIconBg} rounded-lg flex items-center justify-center`}>
+                  <ScanBarcode size={15} className="text-white" />
+                </div>
+                <div>
+                  <h1 className={`${theme.headerTitle} font-bold text-[13px] tracking-tight`}>
+                    Billing Counter
+                  </h1>
+                  <p className={`${theme.headerSubtitle} text-[11px]`}>
+                    {productsToDisplay.length} Products
+                  </p>
+                </div>
               </div>
-              <div>
-                <h1 className={`${theme.headerTitle} font-bold text-[13px] tracking-tight`}>
-                  Billing Counter
-                </h1>
-                <p className={`${theme.headerSubtitle} text-[11px]`}>
-                  {productsToDisplay.length} Products
-                </p>
-              </div>
+              <button
+                type="button"
+                onClick={() => setShowAiAssistant(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white rounded-lg text-xs font-bold shadow-sm shadow-indigo-200 transition-all hover:scale-105"
+                title="Voice & AI Smart Billing Assistant"
+              >
+                <Sparkles size={13} className="text-amber-300 animate-pulse" />
+                <span>AI Assistant</span>
+              </button>
             </div>
           </div>
 
@@ -1718,6 +1761,13 @@ const IndustryBilling = () => {
           </div>
         </div>
       )}
+
+      {/* Smart Billing Assistant Modal (Phase 2 AI) */}
+      <SmartBillingAssistant
+        isOpen={showAiAssistant}
+        onClose={() => setShowAiAssistant(false)}
+        onAddItems={handleAiAddItems}
+      />
 
       <div ref={printAreaRef} id="print-area" className="hidden"></div>
 

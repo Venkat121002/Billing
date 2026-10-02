@@ -20,10 +20,15 @@ import {
     Clock,
     CircleDollarSign,
     ShieldCheck,
+    FileSpreadsheet,
+    Sparkles,
 } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
 import axios from "axios";
 import API_URL from "../../config/api";
+import DemandForecastModal from "../AI/DemandForecastModal";
+import CustomerSegmentationModal from "../AI/CustomerSegmentationModal";
+import GstReturnModal from "../AI/GstReturnModal";
 
 const Reports = () => {
     const { currentUser } = useAuth();
@@ -37,6 +42,10 @@ const Reports = () => {
     const [recentInvoices, setRecentInvoices] = useState([]);
     const [customers, setCustomers] = useState([]);
     const [activeTab, setActiveTab] = useState("invoices");
+
+    const [showDemandModal, setShowDemandModal] = useState(false);
+    const [showCustomerModal, setShowCustomerModal] = useState(false);
+    const [showGstModal, setShowGstModal] = useState(false);
 
     useEffect(() => {
         const fetchReportData = async () => {
@@ -228,12 +237,38 @@ const Reports = () => {
                                 </div>
                             </div>
 
-                            <div className="flex items-center gap-2 text-sm text-gray-500 bg-gray-50 px-3 py-2 rounded-lg border border-gray-100">
-                                <Calendar size={14} className="text-green-500" />
-                                {new Date().toLocaleDateString("en-IN", {
-                                    month: "long",
-                                    year: "numeric",
-                                })}
+                            <div className="flex items-center gap-2 flex-wrap">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowDemandModal(true)}
+                                    className="flex items-center gap-1.5 px-3 py-2 bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 rounded-lg text-xs font-bold transition-all shadow-sm"
+                                >
+                                    <TrendingUp size={14} className="text-blue-600" />
+                                    <span>Restock Forecast</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setShowCustomerModal(true)}
+                                    className="flex items-center gap-1.5 px-3 py-2 bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200 rounded-lg text-xs font-bold transition-all shadow-sm"
+                                >
+                                    <Users size={14} className="text-purple-600" />
+                                    <span>Customer Insights</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setShowGstModal(true)}
+                                    className="flex items-center gap-1.5 px-3 py-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 rounded-lg text-xs font-bold transition-all shadow-sm"
+                                >
+                                    <FileSpreadsheet size={14} className="text-emerald-600" />
+                                    <span>GST Returns</span>
+                                </button>
+                                <div className="flex items-center gap-2 text-sm text-gray-500 bg-gray-50 px-3 py-2 rounded-lg border border-gray-100">
+                                    <Calendar size={14} className="text-green-500" />
+                                    {new Date().toLocaleDateString("en-IN", {
+                                        month: "long",
+                                        year: "numeric",
+                                    })}
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -566,6 +601,20 @@ const Reports = () => {
                     )}
                 </div>
             </div>
+
+            {/* Phase 2 AI Modals */}
+            <DemandForecastModal
+                isOpen={showDemandModal}
+                onClose={() => setShowDemandModal(false)}
+            />
+            <CustomerSegmentationModal
+                isOpen={showCustomerModal}
+                onClose={() => setShowCustomerModal(false)}
+            />
+            <GstReturnModal
+                isOpen={showGstModal}
+                onClose={() => setShowGstModal(false)}
+            />
         </BillingLayout>
     );
 };
