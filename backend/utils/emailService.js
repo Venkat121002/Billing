@@ -1,3 +1,5 @@
+const fs = require("fs");
+const path = require("path");
 const SibApiV3Sdk = require("sib-api-v3-sdk");
 const nodemailer = require("nodemailer");
 
@@ -58,16 +60,29 @@ async function sendEmail({ to, subject, html, htmlContent, text, textContent, at
   const attachments = attachment ? (Array.isArray(attachment) ? attachment : [attachment]) : [];
 
   if (smtpConfigured()) {
+    const inlineAttachments = [];
+    const logoFile = path.resolve(__dirname, '../assets/company-logo.png');
+    if (fs.existsSync(logoFile) && body.includes('cid:swordnex-company-logo')) {
+      inlineAttachments.push({
+        filename: 'company-logo.png',
+        path: logoFile,
+        cid: 'swordnex-company-logo'
+      });
+    }
+
     const mailOptions = {
       from: `"${senderName}" <${process.env.SENDER_EMAIL || process.env.SMTP_USER}>`,
       to,
       subject,
       html: body,
-      attachments: attachments.map((a) => ({
-        filename: a.name,
-        content: a.content,
-        encoding: "base64",
-      })),
+      attachments: [
+        ...inlineAttachments,
+        ...attachments.map((a) => ({
+          filename: a.name,
+          content: a.content,
+          encoding: "base64",
+        }))
+      ],
     };
     if (plainText) {
       mailOptions.text = plainText;

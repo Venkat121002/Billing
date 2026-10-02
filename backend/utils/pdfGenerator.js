@@ -1,3 +1,5 @@
+const path = require('path');
+const fs = require('fs');
 const PDFDocument = require('pdfkit');
 
 const generateInvoicePDF = (data) => {
@@ -134,6 +136,9 @@ const generateInvoicePDF = (data) => {
 
             // Apply copyright notice & pagination on every page
             const pageRange = doc.bufferedPageRange();
+            const logoPath = path.resolve(__dirname, '../assets/company-logo.png');
+            const hasLogo = fs.existsSync(logoPath);
+
             for (let i = pageRange.start; i < pageRange.start + pageRange.count; i++) {
                 doc.switchToPage(i);
                 const bottomY = doc.page.height - 28;
@@ -147,15 +152,24 @@ const generateInvoicePDF = (data) => {
                     .lineTo(pageWidth - 50, bottomY - 8)
                     .stroke();
 
-                // Copyright Notice on every page
-                doc
-                    .fontSize(8.5)
-                    .font("Helvetica")
-                    .fillColor("#64748B")
-                    .text("© SwordNex Technologies Pvt. Ltd.", 50, bottomY, {
+                // Copyright Notice with small logo on every page
+                const companyText = "© SwordNex Technologies Pvt. Ltd.";
+                doc.fontSize(8.5).font("Helvetica").fillColor("#64748B");
+                const textWidth = doc.widthOfString(companyText);
+                const logoSize = 13;
+                const gap = 5;
+
+                if (hasLogo) {
+                    const totalWidth = logoSize + gap + textWidth;
+                    const startX = (pageWidth - totalWidth) / 2;
+                    doc.image(logoPath, startX, bottomY - 2.5, { width: logoSize, height: logoSize });
+                    doc.text(companyText, startX + logoSize + gap, bottomY);
+                } else {
+                    doc.text(companyText, 50, bottomY, {
                         align: "center",
                         width: pageWidth - 100
                     });
+                }
 
                 if (pageRange.count > 1) {
                     doc

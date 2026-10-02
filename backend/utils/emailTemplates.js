@@ -24,7 +24,7 @@ const FONT = "'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
 const PRODUCTION_SITE = 'https://swordnex-billing-app.web.app';
 const SUPPORT_EMAIL = 'support@swordnex.com';
 const SUPPORT_PHONE = '+91 94861 06953';
-const COMPANY = 'SwordNex Technologies';
+const COMPANY = 'SwordNex Technologies Pvt. Ltd.';
 
 const esc = (s) =>
     String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -127,8 +127,19 @@ function layout({ preheader = '', heading, body, onBehalfOf }) {
           </div>
         </td></tr>
         <tr><td align="center" style="padding:20px 16px 0">
-          <p style="margin:0 0 6px;font-size:13px;line-height:20px;color:${MUTED}">${footer}</p>
-          <p style="margin:0;font-size:12px;line-height:18px;color:#9CA3AF">&copy; ${new Date().getFullYear()} ${COMPANY}. All rights reserved.</p>
+          <p style="margin:0 0 8px;font-size:13px;line-height:20px;color:${MUTED}">${footer}</p>
+          <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:12px auto 4px">
+            <tr>
+              <td valign="middle" align="center" style="padding-right:8px">
+                <img src="cid:swordnex-company-logo" width="22" height="22" alt="SwordNex"
+                     style="display:block;width:22px;height:22px;border:0;border-radius:4px">
+              </td>
+              <td valign="middle" align="left" style="font-size:12px;line-height:18px;color:#64748B;font-weight:600">
+                &copy; ${new Date().getFullYear()} ${COMPANY}
+              </td>
+            </tr>
+          </table>
+          <p style="margin:2px 0 0;font-size:11px;line-height:16px;color:#9CA3AF">All rights reserved.</p>
         </td></tr>
       </table>
     </td></tr>
