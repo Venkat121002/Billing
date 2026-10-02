@@ -141,6 +141,7 @@ const generateInvoicePDF = (data) => {
 
             for (let i = pageRange.start; i < pageRange.start + pageRange.count; i++) {
                 doc.switchToPage(i);
+                doc.page.margins.bottom = 0;
                 const bottomY = doc.page.height - 28;
                 const pageWidth = doc.page.width;
 
@@ -163,11 +164,12 @@ const generateInvoicePDF = (data) => {
                     const totalWidth = logoSize + gap + textWidth;
                     const startX = (pageWidth - totalWidth) / 2;
                     doc.image(logoPath, startX, bottomY - 2.5, { width: logoSize, height: logoSize });
-                    doc.text(companyText, startX + logoSize + gap, bottomY);
+                    doc.text(companyText, startX + logoSize + gap, bottomY, { lineBreak: false });
                 } else {
                     doc.text(companyText, 50, bottomY, {
                         align: "center",
-                        width: pageWidth - 100
+                        width: pageWidth - 100,
+                        lineBreak: false
                     });
                 }
 
@@ -178,7 +180,8 @@ const generateInvoicePDF = (data) => {
                         .fillColor("#94A3B8")
                         .text(`Page ${i + 1} of ${pageRange.count}`, 50, bottomY, {
                             align: "right",
-                            width: pageWidth - 100
+                            width: pageWidth - 100,
+                            lineBreak: false
                         });
                 }
             }
