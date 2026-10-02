@@ -45,8 +45,9 @@ function getSmtpTransport() {
  *          attachment?:{name:string, content:string}|Array}} opts
  *        attachment content is base64, as with Brevo.
  */
-async function sendEmail({ to, subject, html, htmlContent, attachment } = {}) {
+async function sendEmail({ to, subject, html, htmlContent, text, textContent, attachment } = {}) {
   const body = html || htmlContent || "";
+  const plainText = text || textContent || "";
 
   if (!isConfigured()) {
     console.log("[emailService] no-op (no SMTP or BREVO config) →", { to, subject });
@@ -57,7 +58,7 @@ async function sendEmail({ to, subject, html, htmlContent, attachment } = {}) {
   const attachments = attachment ? (Array.isArray(attachment) ? attachment : [attachment]) : [];
 
   if (smtpConfigured()) {
-    return getSmtpTransport().sendMail({
+    const mailOptions = {
       from: `"${senderName}" <${process.env.SENDER_EMAIL || process.env.SMTP_USER}>`,
       to,
       subject,
@@ -67,7 +68,11 @@ async function sendEmail({ to, subject, html, htmlContent, attachment } = {}) {
         content: a.content,
         encoding: "base64",
       })),
-    });
+    };
+    if (plainText) {
+      mailOptions.text = plainText;
+    }
+    return getSmtpTransport().sendMail(mailOptions);
   }
 
   const client = SibApiV3Sdk.ApiClient.instance;

@@ -19,6 +19,8 @@ const CreditSchema = new mongoose.Schema({
     notes: { type: String, default: '' },
     payToken: { type: String, index: true, sparse: true }, // public pay-link token (Razorpay)
     date: { type: String },
+    remindersSent: { type: [String], default: [] },
+    lastReminderSentAt: { type: String, default: null },
     createdAt: { type: String, default: () => new Date().toISOString() },
     updatedAt: { type: String, default: () => new Date().toISOString() }
 }, {

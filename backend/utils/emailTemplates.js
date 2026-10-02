@@ -274,4 +274,157 @@ exports.paymentReceipt = ({ audience, business, customerName, amount, paymentId,
     };
 };
 
+/** Daily summary of low-stock items for store owner. */
+exports.lowStockSummary = ({ storeName, ownerName, date, items = [] }) => {
+    const rowsHtml = items.map((item) => `
+      <tr style="border-bottom:1px solid ${BORDER}">
+        <td style="padding:10px 8px;font-size:14px;color:${TEXT};font-weight:600">${esc(item.name)}</td>
+        <td style="padding:10px 8px;font-size:14px;color:${MUTED}">${esc(item.category || '-')}</td>
+        <td style="padding:10px 8px;font-size:14px;color:#DC2626;font-weight:700;text-align:center">${item.quantity} ${esc(item.unit || '')}</td>
+        <td style="padding:10px 8px;font-size:14px;color:${MUTED};text-align:center">${item.minStockThreshold || item.reorderLevel || 5}</td>
+      </tr>
+    `).join('');
+
+    return {
+        subject: `⚠️ Low Stock Summary: ${items.length} item${items.length === 1 ? '' : 's'} need restock - ${storeName}`,
+        html: layout({
+            preheader: `${items.length} product(s) in ${storeName} have dropped below their minimum stock threshold.`,
+            heading: 'Daily Low Stock Alert',
+            onBehalfOf: storeName,
+            body: [
+                p(`Hi ${esc(ownerName || 'Store Owner')},`),
+                p(`Here is your daily low-stock inventory report for <b>${esc(storeName)}</b> on <b>${esc(date)}</b>:`),
+                `<table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:16px 0 24px;border-collapse:collapse;width:100%">
+                  <thead>
+                    <tr style="background:#F9FAFB;border-bottom:2px solid ${BORDER}">
+                      <th align="left" style="padding:10px 8px;font-size:12px;font-weight:700;color:${MUTED};text-transform:uppercase">Product</th>
+                      <th align="left" style="padding:10px 8px;font-size:12px;font-weight:700;color:${MUTED};text-transform:uppercase">Category</th>
+                      <th align="center" style="padding:10px 8px;font-size:12px;font-weight:700;color:${MUTED};text-transform:uppercase">Current Stock</th>
+                      <th align="center" style="padding:10px 8px;font-size:12px;font-weight:700;color:${MUTED};text-transform:uppercase">Min Threshold</th>
+                    </tr>
+                  </thead>
+                  <tbody>${rowsHtml}</tbody>
+                </table>`,
+                p(`We recommend placing purchase orders with your suppliers soon to avoid stockouts.`),
+                button(loginUrl(), 'Open Inventory Management')
+            ].join('')
+        })
+    };
+};
+
+/** Daily sales summary email for store owner with both rich HTML and complete Plain Text details. */
+exports.dailySalesSummary = ({ storeName, ownerName, date, totalSales, totalBills, paymentBreakdown = {}, topProducts = [], duesIncurred = '₹0', lowStockItems = [] }) => {
+    const dashboardUrl = siteUrl();
+
+    // Top products HTML table rows
+    const topProductsHtml = topProducts.length ? topProducts.map((p, idx) => `
+      <tr style="border-bottom:1px solid ${BORDER}">
+        <td style="padding:8px;font-size:13px;color:${MUTED};width:30px">#${idx + 1}</td>
+        <td style="padding:8px;font-size:14px;color:${TEXT};font-weight:600">${esc(p.name)}</td>
+        <td style="padding:8px;font-size:14px;color:${TEXT};text-align:center">${p.qty} sold</td>
+        <td style="padding:8px;font-size:14px;color:${BRAND_DARK};font-weight:600;text-align:right">₹${Number(p.revenue || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+      </tr>
+    `).join('') : `<tr><td colspan="4" style="padding:12px;color:${MUTED};text-align:center">No items recorded today</td></tr>`;
+
+    // Low stock HTML table rows
+    const lowStockHtml = lowStockItems.length ? lowStockItems.map((p) => {
+        const isOut = Number(p.quantity || 0) <= 0;
+        return `
+          <tr style="border-bottom:1px solid ${BORDER};background:${isOut ? '#FEF2F2' : '#FFFFFF'}">
+            <td style="padding:8px;font-size:14px;color:${TEXT};font-weight:600">${esc(p.name)}</td>
+            <td style="padding:8px;font-size:13px;color:${isOut ? '#DC2626' : '#D97706'};font-weight:700;text-align:center">${p.quantity} ${esc(p.unit || '')}</td>
+            <td style="padding:8px;font-size:13px;color:${MUTED};text-align:center">${p.minStockThreshold}</td>
+            <td style="padding:8px;font-size:12px;color:${isOut ? '#DC2626' : '#D97706'};font-weight:700;text-align:center">${isOut ? '🔴 OUT OF STOCK' : '⚠️ LOW STOCK'}</td>
+          </tr>
+        `;
+    }).join('') : `<tr><td colspan="4" style="padding:12px;color:#16A34A;text-align:center;font-weight:600">✓ All products healthy. No low-stock items.</td></tr>`;
+
+    // Complete plain text version for email clients
+    const topProductsText = topProducts.length
+        ? topProducts.map((p, idx) => `  ${idx + 1}. ${p.name} — ${p.qty} sold (₹${Number(p.revenue || 0).toFixed(2)})`).join('\n')
+        : '  • No items recorded today';
+
+    const lowStockText = lowStockItems.length
+        ? lowStockItems.map((p) => `  • ${p.name}: ${p.quantity} ${p.unit || ''} remaining (Threshold: ${p.minStockThreshold}) [${Number(p.quantity) <= 0 ? 'OUT OF STOCK' : 'LOW STOCK'}]`).join('\n')
+        : '  • All products healthy. No low-stock warnings.';
+
+    const plainText = [
+        `===================================================`,
+        `DAILY STORE PERFORMANCE & CLOSING REPORT`,
+        `===================================================`,
+        `Store: ${storeName}`,
+        `Owner: ${ownerName || 'Store Owner'}`,
+        `Date: ${date}`,
+        `Website Dashboard: ${dashboardUrl}`,
+        `---------------------------------------------------`,
+        `FINANCIAL OVERVIEW:`,
+        `• Total Revenue: ${totalSales}`,
+        `• Total Invoices Generated: ${totalBills}`,
+        `• Cash Collected: ${paymentBreakdown.cash || '₹0'}`,
+        `• UPI / Digital Payments: ${paymentBreakdown.upi || paymentBreakdown.digital || '₹0'}`,
+        `• Card Payments: ${paymentBreakdown.card || '₹0'}`,
+        `• Customer Dues Incurred: ${duesIncurred}`,
+        `---------------------------------------------------`,
+        `TOP SELLING PRODUCTS TODAY:`,
+        topProductsText,
+        `---------------------------------------------------`,
+        `INVENTORY HEALTH & RESTOCK WARNINGS:`,
+        lowStockText,
+        `---------------------------------------------------`,
+        `ACCESS DETAILED REPORTS ONLINE:`,
+        `Visit: ${dashboardUrl}`,
+        `---------------------------------------------------`,
+        `📎 NOTE: A complete, branded PDF copy of this daily report is attached to this email.`,
+        `===================================================`
+    ].join('\n');
+
+    return {
+        subject: `📊 Daily Business Summary: ${totalSales} (${totalBills} bills) - ${storeName}`,
+        text: plainText,
+        html: layout({
+            preheader: `Daily sales report for ${storeName} on ${date}. Total Sales: ${totalSales}.`,
+            heading: 'Daily Sales & Closing Report',
+            onBehalfOf: storeName,
+            body: [
+                p(`Hi ${esc(ownerName || 'Store Owner')},`),
+                p(`Here is the business performance summary for <b>${esc(storeName)}</b> on <b>${esc(date)}</b>:`),
+                detailsTable([
+                    ['Total Revenue', totalSales, { bold: true }],
+                    ['Total Bills Generated', String(totalBills)],
+                    ['Cash Collected', paymentBreakdown.cash || '₹0'],
+                    ['UPI / Digital Payments', paymentBreakdown.upi || paymentBreakdown.digital || '₹0'],
+                    ['Cards', paymentBreakdown.card || '₹0'],
+                    ['Credit / Dues Created', duesIncurred, { bold: true }]
+                ]),
+                `<h3 style="margin:24px 0 12px;font-size:16px;color:${TEXT};border-bottom:2px solid ${BRAND};padding-bottom:6px">Top Selling Products Today</h3>
+                <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 24px;border-collapse:collapse;width:100%">
+                  <thead>
+                    <tr style="background:#F9FAFB;border-bottom:1px solid ${BORDER}">
+                      <th align="left" style="padding:8px;font-size:12px;color:${MUTED}">Rank</th>
+                      <th align="left" style="padding:8px;font-size:12px;color:${MUTED}">Product</th>
+                      <th align="center" style="padding:8px;font-size:12px;color:${MUTED}">Quantity</th>
+                      <th align="right" style="padding:8px;font-size:12px;color:${MUTED}">Revenue</th>
+                    </tr>
+                  </thead>
+                  <tbody>${topProductsHtml}</tbody>
+                </table>`,
+                `<h3 style="margin:24px 0 12px;font-size:16px;color:${TEXT};border-bottom:2px solid #DC2626;padding-bottom:6px">Inventory Health & Low Stock Alerts</h3>
+                <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 24px;border-collapse:collapse;width:100%">
+                  <thead>
+                    <tr style="background:#FEF2F2;border-bottom:1px solid ${BORDER}">
+                      <th align="left" style="padding:8px;font-size:12px;color:#991B1B">Product</th>
+                      <th align="center" style="padding:8px;font-size:12px;color:#991B1B">Stock Left</th>
+                      <th align="center" style="padding:8px;font-size:12px;color:#991B1B">Min Level</th>
+                      <th align="center" style="padding:8px;font-size:12px;color:#991B1B">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>${lowStockHtml}</tbody>
+                </table>`,
+                button(loginUrl(), 'View Detailed Reports & Analytics'),
+                note('📎 A comprehensive PDF copy of today\'s closing report is attached to this email for your records.')
+            ].join('')
+        })
+    };
+};
+
 exports.esc = esc;

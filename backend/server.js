@@ -2,9 +2,14 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
+const fs = require('fs');
 const dotenv = require('dotenv');
 
-dotenv.config({ path: '.env.custom' });
+// Load .env first, then let .env.custom override if present
+dotenv.config();
+if (fs.existsSync('.env.custom')) {
+    dotenv.config({ path: '.env.custom', override: true });
+}
 
 // Database Configuration
 const DB_TYPE = process.env.DB_TYPE || 'mongodb';
@@ -317,6 +322,17 @@ app.use(
     require('./routes/superAdminRoutes')
 );
 
+// Automation & AI (Phase 1)
+app.use(
+    '/api/v2/automation',
+    require('./routes/automationRoutes')
+);
+
+app.use(
+    '/v2/automation',
+    require('./routes/automationRoutes')
+);
+
 // ---------------------------------------------------------
 // Root Route
 // ---------------------------------------------------------
@@ -413,6 +429,10 @@ if (require.main === module) {
     (async () => {
         try {
             await initializeDatabase();
+            const { initScheduler } = require('./utils/scheduler');
+            initScheduler();
+            const { isGeminiConfigured } = require('./config/gemini');
+            console.log(`🤖 Gemini AI Configured: ${isGeminiConfigured() ? 'YES (GEMINI_AI variable active)' : 'NO'}`);
             app.listen(PORT, () => {
                 console.log(`🚀 SwordNex Billing API running on port ${PORT}`);
                 console.log(`🌐 Local URL: http://localhost:${PORT}`);

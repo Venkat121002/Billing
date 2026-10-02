@@ -23,6 +23,9 @@ const ProductSchema = new mongoose.Schema({
     color: { type: String, default: '' },
     expiryDate: { type: String },
     batchNo: { type: String },
+    minStockThreshold: { type: Number, default: 5 },
+    reorderLevel: { type: Number, default: 5 },
+    lowStockAlertSent: { type: Boolean, default: false },
     createdAt: { type: String, default: () => new Date().toISOString() }
 }, {
     timestamps: true,
