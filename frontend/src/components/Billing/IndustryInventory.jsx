@@ -34,11 +34,14 @@ import {
   ChevronDown,
   X,
   Check,
+  Camera,
 } from "lucide-react";
 import BillingLayout from "../../Layout/BillingLayout/AdminLayout";
 import { useNavigate } from "react-router-dom";
 import { resolveIndustryProfile } from "../../config/industryProfiles";
 import DemandForecastModal from "../AI/DemandForecastModal";
+import ReceiptScannerModal from "../AI/ReceiptScannerModal";
+
 
 // Per-industry visual theme. Every value is a complete literal Tailwind
 // class string — see IndustryGstBill.jsx for why. Only green/pink are
@@ -149,6 +152,8 @@ const IndustryInventory = () => {
 
   const [isSupplierModalOpen, setIsSupplierModalOpen] = useState(false);
   const [showDemandModal, setShowDemandModal] = useState(false);
+  const [showScannerModal, setShowScannerModal] = useState(false);
+
   const [supplierFormData, setSupplierFormData] = useState({
     name: "",
     company: "",
@@ -511,6 +516,15 @@ const IndustryInventory = () => {
                   <TrendingUp size={18} />
                   Restock Forecast (AI)
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setShowScannerModal(true)}
+                  className="flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white rounded-xl shadow-md transition-all font-semibold"
+                >
+                  <Camera size={18} />
+                  Scan Inward Bill (OCR)
+                </button>
+
                 <button
                   onClick={() => setIsSupplierModalOpen(true)}
                   className={`flex items-center gap-2 px-6 py-3 bg-white border rounded-xl shadow-sm transition-all font-medium ${theme.addSupplierBtn}`}
@@ -1110,8 +1124,19 @@ const IndustryInventory = () => {
           isOpen={showDemandModal}
           onClose={() => setShowDemandModal(false)}
         />
+
+        {/* Phase 3 Feature 11: AI Receipt & Inward Bill Scanner Modal */}
+        <ReceiptScannerModal
+          isOpen={showScannerModal}
+          onClose={() => setShowScannerModal(false)}
+          onInventorySaved={() => {
+            fetchProducts();
+            setShowScannerModal(false);
+          }}
+        />
       </div>
     </BillingLayout>
+
   );
 };
 

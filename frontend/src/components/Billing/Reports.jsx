@@ -22,6 +22,7 @@ import {
     ShieldCheck,
     FileSpreadsheet,
     Sparkles,
+    Camera
 } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
 import axios from "axios";
@@ -29,6 +30,8 @@ import API_URL from "../../config/api";
 import DemandForecastModal from "../AI/DemandForecastModal";
 import CustomerSegmentationModal from "../AI/CustomerSegmentationModal";
 import GstReturnModal from "../AI/GstReturnModal";
+import ReceiptScannerModal from "../AI/ReceiptScannerModal";
+
 
 const Reports = () => {
     const { currentUser } = useAuth();
@@ -46,6 +49,8 @@ const Reports = () => {
     const [showDemandModal, setShowDemandModal] = useState(false);
     const [showCustomerModal, setShowCustomerModal] = useState(false);
     const [showGstModal, setShowGstModal] = useState(false);
+    const [showScannerModal, setShowScannerModal] = useState(false);
+
 
     useEffect(() => {
         const fetchReportData = async () => {
@@ -262,6 +267,15 @@ const Reports = () => {
                                     <FileSpreadsheet size={14} className="text-emerald-600" />
                                     <span>GST Returns</span>
                                 </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setShowScannerModal(true)}
+                                    className="flex items-center gap-1.5 px-3 py-2 bg-gradient-to-r from-purple-50 to-indigo-50 text-purple-700 hover:from-purple-100 hover:to-indigo-100 border border-purple-200 rounded-lg text-xs font-bold transition-all shadow-sm"
+                                >
+                                    <Camera size={14} className="text-purple-600" />
+                                    <span>Scan Receipt/Invoice</span>
+                                </button>
+
                                 <div className="flex items-center gap-2 text-sm text-gray-500 bg-gray-50 px-3 py-2 rounded-lg border border-gray-100">
                                     <Calendar size={14} className="text-green-500" />
                                     {new Date().toLocaleDateString("en-IN", {
@@ -615,7 +629,13 @@ const Reports = () => {
                 isOpen={showGstModal}
                 onClose={() => setShowGstModal(false)}
             />
+            {/* Phase 3 Feature 11 AI Modal */}
+            <ReceiptScannerModal
+                isOpen={showScannerModal}
+                onClose={() => setShowScannerModal(false)}
+            />
         </BillingLayout>
+
     );
 };
 

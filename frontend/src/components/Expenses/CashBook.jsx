@@ -23,8 +23,11 @@ import {
   Search,
   X,
   SlidersHorizontal,
-  Sparkles
+  Sparkles,
+  Camera
 } from "lucide-react";
+import ReceiptScannerModal from "../AI/ReceiptScannerModal";
+
 import {
   BarChart as RechartsBarChart,
   Bar,
@@ -72,6 +75,8 @@ const CashBook = () => {
 
   const [activeTab, setActiveTab] = useState("list"); // 'list' or 'analytics'
   const [showFilters, setShowFilters] = useState(false);
+  const [showScannerModal, setShowScannerModal] = useState(false);
+
 
   // Fetch Logic
   useEffect(() => {
@@ -419,6 +424,12 @@ const CashBook = () => {
           <div className="flex items-center gap-3">
             <Tabs />
             <button
+              onClick={() => setShowScannerModal(true)}
+              className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-lg font-semibold text-sm hover:from-purple-700 hover:to-indigo-700 shadow-sm shadow-purple-200 transition-all"
+            >
+              <Camera size={18} /> 📸 Scan Receipt
+            </button>
+            <button
               onClick={() => openModal()}
               className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white rounded-lg font-semibold text-sm hover:bg-blue-700 shadow-sm transition-colors"
             >
@@ -426,6 +437,7 @@ const CashBook = () => {
             </button>
           </div>
         </div>
+
 
         {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -769,8 +781,19 @@ const CashBook = () => {
           </div>
         </div>
       )}
+
+      {/* Phase 3 Feature 11: AI Receipt & Invoice Scanner Modal */}
+      <ReceiptScannerModal
+        isOpen={showScannerModal}
+        onClose={() => setShowScannerModal(false)}
+        onExpenseSaved={() => {
+          fetchTransactions();
+          setShowScannerModal(false);
+        }}
+      />
     </BillingLayout>
   );
 };
+
 
 export default CashBook;

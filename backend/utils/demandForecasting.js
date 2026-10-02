@@ -182,7 +182,7 @@ async function generateDemandForecast({ ownerId, tenantId, lookbackDays = 30, fo
         let aiAdvice = null;
         if (isGeminiConfigured() && forecastItems.length > 0) {
             try {
-                const model = getGeminiModel('gemini-1.5-flash');
+                const model = getGeminiModel();
                 if (model) {
                     const topCritical = forecastItems.filter(i => i.status === 'critical').slice(0, 5).map(i => `${i.name} (Stock: ${i.currentStock}, Sugg. Order: ${i.suggestedReorder})`);
                     const topMoving = forecastItems.slice(0, 5).map(i => `${i.name} (Weekly Sold: ${i.weeklyVelocity})`);

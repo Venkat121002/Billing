@@ -105,7 +105,7 @@ function classifyHeuristic(description = '') {
  * AI-based classifier using Google Gemini
  */
 async function classifyWithGemini(description, amount, businessType = 'Retail/General') {
-    const model = getGeminiModel('gemini-1.5-flash');
+    const model = getGeminiModel();
     if (!model) return classifyHeuristic(description);
 
     const prompt = `You are an AI financial accountant for Indian small businesses (${businessType}).

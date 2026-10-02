@@ -15,6 +15,19 @@ const { categorizeExpense } = require('../utils/expenseCategorization');
 const { generateGstReturnsSummary, buildGstExcelWorkbook } = require('../utils/gstReturnGenerator');
 const wa = require('../utils/whatsappService');
 
+// Phase 3 Feature 11 Utilities (Receipt & Invoice Scanner OCR)
+const multer = require('multer');
+const uploadReceipt = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 15 * 1024 * 1024 } // 15MB limit
+});
+const {
+    scanReceiptOrInvoice,
+    saveScannedReceiptAsExpense,
+    saveScannedReceiptToInventory,
+    SAMPLE_RECEIPTS
+} = require('../utils/receiptScanner');
+
 // All automation routes require authentication
 router.use(auth);
 
@@ -42,10 +55,17 @@ router.get('/status', (req, res) => {
                 'GST Return Preparation (GSTR-1 & GSTR-3B with Excel Export)'
             ]
         },
+        phase3: {
+            status: 'active',
+            features: [
+                'Receipt/Invoice Scanner (OCR)'
+            ]
+        },
         geminiConfigured: isGeminiConfigured(),
         serverTimeIST: new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })
     });
 });
+
 
 // =========================================================================
 // Feature 7: Demand Forecasting & Smart Restock Suggestions
@@ -179,6 +199,126 @@ router.get('/gst-returns/export', async (req, res) => {
         res.status(500).json({ msg: 'Failed to export GST returns', error: err.message });
     }
 });
+
+// =========================================================================
+// Phase 3 Feature 11: 📸 Receipt / Invoice Scanner (OCR)
+// =========================================================================
+
+// Get list of interactive preset sample receipts for 1-click testing
+router.get('/scan-receipt/samples', (req, res) => {
+    res.json({
+        success: true,
+        samples: SAMPLE_RECEIPTS.map(s => ({
+            id: s.id,
+            name: s.name,
+            type: s.type,
+            vendor: s.data.vendor?.name,
+            total: s.data.financials?.grandTotal,
+            category: s.data.suggestedExpenseCategory
+        }))
+    });
+});
+
+// Scan uploaded receipt or invoice (File upload or base64)
+router.post('/scan-receipt', uploadReceipt.single('receipt'), async (req, res) => {
+    try {
+        const effectiveOwnerId = req.user.role === 'owner' || req.user.role === 'TenantAdmin'
+            ? (req.user.userId || req.user.ownerId)
+            : (req.user.ownerId || req.user.userId);
+        const businessType = req.body.businessType || req.user.businessType || req.user.industry || 'Retail';
+
+        let buffer = null;
+        let mimeType = null;
+        let filename = null;
+        let base64Data = req.body.base64Data || null;
+
+        const sampleId = req.body?.sampleId || req.query?.sampleId;
+
+        if (req.file) {
+            buffer = req.file.buffer;
+            mimeType = req.file.mimetype;
+            filename = req.file.originalname;
+        } else if (sampleId) {
+            filename = sampleId;
+        }
+
+        if (!buffer && !base64Data && !filename) {
+            return res.status(400).json({ msg: 'Please provide a receipt file, base64 image, or sampleId' });
+        }
+
+        const parsedData = await scanReceiptOrInvoice({
+            buffer,
+            base64Data,
+            mimeType: mimeType || req.body.mimeType,
+            filename,
+            ownerId: effectiveOwnerId,
+            businessType
+        });
+
+        res.json({
+            success: true,
+            data: parsedData
+        });
+    } catch (err) {
+        console.error('❌ Receipt Scanner OCR Error:', err);
+        res.status(500).json({ msg: 'Failed to process receipt', error: err.message });
+    }
+});
+
+// 1-Click: Save scanned receipt directly into CashBook as an Expense
+router.post('/scan-receipt/save-expense', async (req, res) => {
+    try {
+        const effectiveOwnerId = req.user.role === 'owner' || req.user.role === 'TenantAdmin'
+            ? (req.user.userId || req.user.ownerId)
+            : (req.user.ownerId || req.user.userId);
+        const userId = req.user.userId || req.user.uid;
+        const { receiptData } = req.body;
+
+        if (!receiptData) {
+            return res.status(400).json({ msg: 'Receipt data is required' });
+        }
+
+        const result = await saveScannedReceiptAsExpense({
+            ownerId: effectiveOwnerId,
+            userId,
+            receiptData,
+            req
+        });
+
+        res.json(result);
+    } catch (err) {
+        console.error('❌ Save Scanned Expense Error:', err);
+        res.status(500).json({ msg: 'Failed to save expense from receipt', error: err.message });
+    }
+});
+
+// 1-Click: Save scanned receipt line items directly into Products / Inventory
+router.post('/scan-receipt/save-inventory', async (req, res) => {
+    try {
+        const effectiveOwnerId = req.user.role === 'owner' || req.user.role === 'TenantAdmin'
+            ? (req.user.userId || req.user.ownerId)
+            : (req.user.ownerId || req.user.userId);
+        const userId = req.user.userId || req.user.uid;
+        const { receiptData } = req.body;
+
+        if (!receiptData || !receiptData.items || receiptData.items.length === 0) {
+            return res.status(400).json({ msg: 'Receipt items are required for inventory update' });
+        }
+
+        const result = await saveScannedReceiptToInventory({
+            ownerId: effectiveOwnerId,
+            userId,
+            receiptData,
+            req
+        });
+
+        res.json(result);
+    } catch (err) {
+        console.error('❌ Save Scanned Inventory Error:', err);
+        res.status(500).json({ msg: 'Failed to update inventory from receipt', error: err.message });
+    }
+});
+
 
 // =========================================================================
 // Phase 1 Scheduled Triggers (Restricted to Owner/Admin)

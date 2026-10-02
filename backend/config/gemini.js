@@ -26,15 +26,66 @@ const getGeminiClient = () => {
     return genAIInstance;
 };
 
-const getGeminiModel = (modelName = 'gemini-1.5-flash') => {
+const DEFAULT_MODELS = [
+    'gemini-3.5-flash',
+    'gemini-2.5-flash',
+    'gemini-3-flash-preview',
+    'gemini-flash-latest'
+];
+
+const getGeminiModel = (modelName = 'gemini-3.5-flash') => {
     const client = getGeminiClient();
     if (!client) return null;
     return client.getGenerativeModel({ model: modelName });
+};
+
+/**
+ * Execute a promise with a hard timeout
+ */
+const withTimeout = (promise, ms = 15000, errorMsg = 'AI request timed out') => {
+    return Promise.race([
+        promise,
+        new Promise((_, reject) => setTimeout(() => reject(new Error(errorMsg)), ms))
+    ]);
+};
+
+/**
+ * Execute a prompt or generator with automatic model fallback and strict per-attempt timeout
+ */
+const generateWithFallback = async (runWithModel, candidateModels = DEFAULT_MODELS, timeoutMs = 15000) => {
+    const client = getGeminiClient();
+    if (!client) throw new Error('Gemini AI is not configured');
+
+    let lastError = null;
+    for (const modelName of candidateModels) {
+        try {
+            const model = client.getGenerativeModel({
+                model: modelName,
+                generationConfig: {
+                    temperature: 0.1,
+                    maxOutputTokens: 2048,
+                    responseMimeType: "application/json"
+                }
+            });
+            return await withTimeout(
+                runWithModel(model, modelName),
+                timeoutMs,
+                `Model ${modelName} exceeded ${timeoutMs / 1000}s limit`
+            );
+        } catch (err) {
+            lastError = err;
+            console.warn(`⚠️ [Gemini] Model ${modelName} failed or timed out (${err.message}). Trying next...`);
+        }
+    }
+    throw lastError || new Error('All Gemini model candidates failed');
 };
 
 module.exports = {
     isGeminiConfigured,
     getGeminiClient,
     getGeminiModel,
-    getApiKey
+    generateWithFallback,
+    getApiKey,
+    DEFAULT_MODELS
 };
+
