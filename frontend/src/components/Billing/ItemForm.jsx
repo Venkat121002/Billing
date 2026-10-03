@@ -515,7 +515,8 @@ const ItemForm = () => {
         purchaseGst: Number(buyData.purchaseGst),
         salesGst: Number(saleData.salesGst),
         quantity: Number(buyData.quantity),
-        reorderLevel: Number(buyData.reorderLevel),
+        reorderLevel: Number(buyData.reorderLevel || 5),
+        minStockThreshold: Number(buyData.reorderLevel || buyData.minStockThreshold || 5),
         updatedAt: new Date().toISOString(),
       };
 

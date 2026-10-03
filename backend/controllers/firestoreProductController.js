@@ -1,5 +1,6 @@
 const { db } = require('../config/firebase');
 const { getCollection, fetchUnifiedData } = require('../utils/dbUtils');
+const { checkAndAlertLowStock } = require('../utils/inventoryAlerts');
 
 // @desc    Get all products
 // @route   GET /api/v2/products
@@ -68,7 +69,19 @@ exports.updateProduct = async (req, res) => {
             return res.status(404).json({ msg: "Product not found" });
         }
 
+        const prevData = doc.data() || {};
         await productDoc.update(req.body);
+
+        // Check for low stock alert if quantity was updated
+        if (req.body.quantity !== undefined) {
+            checkAndAlertLowStock({
+                productDoc: { ...prevData, id },
+                updatedQuantity: req.body.quantity,
+                ownerId: req.user?.ownerId || prevData.ownerId,
+                productDocRef: productDoc
+            }).catch((err) => console.error('[updateProduct] Low stock check failed:', err.message));
+        }
+
         res.json({ id, ...req.body });
     } catch (err) {
         console.error("Update Product Error:", err.message);

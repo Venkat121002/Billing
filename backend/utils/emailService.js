@@ -1,3 +1,5 @@
+const fs = require("fs");
+const path = require("path");
 const SibApiV3Sdk = require("sib-api-v3-sdk");
 const nodemailer = require("nodemailer");
 
@@ -45,8 +47,9 @@ function getSmtpTransport() {
  *          attachment?:{name:string, content:string}|Array}} opts
  *        attachment content is base64, as with Brevo.
  */
-async function sendEmail({ to, subject, html, htmlContent, attachment } = {}) {
+async function sendEmail({ to, subject, html, htmlContent, text, textContent, attachment } = {}) {
   const body = html || htmlContent || "";
+  const plainText = text || textContent || "";
 
   if (!isConfigured()) {
     console.log("[emailService] no-op (no SMTP or BREVO config) →", { to, subject });
@@ -57,17 +60,34 @@ async function sendEmail({ to, subject, html, htmlContent, attachment } = {}) {
   const attachments = attachment ? (Array.isArray(attachment) ? attachment : [attachment]) : [];
 
   if (smtpConfigured()) {
-    return getSmtpTransport().sendMail({
+    const inlineAttachments = [];
+    const logoFile = path.resolve(__dirname, '../assets/company-logo.png');
+    if (fs.existsSync(logoFile) && body.includes('cid:swordnex-company-logo')) {
+      inlineAttachments.push({
+        filename: 'company-logo.png',
+        path: logoFile,
+        cid: 'swordnex-company-logo'
+      });
+    }
+
+    const mailOptions = {
       from: `"${senderName}" <${process.env.SENDER_EMAIL || process.env.SMTP_USER}>`,
       to,
       subject,
       html: body,
-      attachments: attachments.map((a) => ({
-        filename: a.name,
-        content: a.content,
-        encoding: "base64",
-      })),
-    });
+      attachments: [
+        ...inlineAttachments,
+        ...attachments.map((a) => ({
+          filename: a.name,
+          content: a.content,
+          encoding: "base64",
+        }))
+      ],
+    };
+    if (plainText) {
+      mailOptions.text = plainText;
+    }
+    return getSmtpTransport().sendMail(mailOptions);
   }
 
   const client = SibApiV3Sdk.ApiClient.instance;

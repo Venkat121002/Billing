@@ -7,8 +7,8 @@ const handle = (fn) => async (req, res) => {
         res.json(await fn(req.body || {}));
     } catch (err) {
         if (err instanceof otp.OtpError) return res.status(err.status).json({ msg: err.message });
-        console.error('OTP error:', err.message);
-        res.status(500).json({ msg: 'Could not process the request. Please try again.' });
+        console.error('OTP error:', err);
+        res.status(500).json({ msg: err.message || 'Could not process the request. Please try again.' });
     }
 };
 

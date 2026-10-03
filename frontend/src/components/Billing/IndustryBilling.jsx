@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useLocation } from "react-router-dom";
 import axios from "axios";
 import API_URL from "../../config/api";
@@ -38,6 +38,7 @@ import { resolveIndustryProfile } from "../../config/industryProfiles";
 import _ from "lodash";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
+import Fuse from "fuse.js";
 
 // Complete literal Tailwind strings per named slot — Tailwind's JIT scanner
 // only picks up classes it can see verbatim, so these must never be built
@@ -301,9 +302,22 @@ const IndustryBilling = () => {
   const [cashEdited, setCashEdited] = useState(() => localStorage.getItem("pos-cash-edited") === "true");
   const [discount, setDiscount] = useState(0);
   const [change, setChange] = useState(0);
+  const dateFormat = (date) => new Intl.DateTimeFormat("en-IN", { year: "numeric", month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: true }).format(date);
+
+  const generateNextReceiptNo = () => {
+    const receiptPrefix = userData?.invoiceSettings?.prefix || userData?.businessName?.substring(0, 3).toUpperCase() || "INV";
+    let receiptSequence = userData?.invoiceSettings?.sequence;
+    if (!receiptSequence) receiptSequence = Date.now().toString().slice(-6);
+    return `${receiptPrefix}-${receiptSequence}`;
+  };
+
   const [isShowModalReceipt, setIsShowModalReceipt] = useState(false);
-  const [receiptNo, setReceiptNo] = useState(null);
-  const [receiptDate, setReceiptDate] = useState(null);
+  const [receiptNo, setReceiptNo] = useState(() => {
+    const prefix = currentUser?.invoiceSettings?.prefix || currentUser?.businessName?.substring(0, 3).toUpperCase() || "INV";
+    const seq = currentUser?.invoiceSettings?.sequence || Date.now().toString().slice(-6);
+    return `${prefix}-${seq}`;
+  });
+  const [receiptDate, setReceiptDate] = useState(() => dateFormat(new Date()));
   const [filterCategory, setFilterCategory] = useState("All");
   const [paymentMethod, setPaymentMethod] = useState("cash");
   const [categories, setCategories] = useState([]);
@@ -311,6 +325,17 @@ const IndustryBilling = () => {
   const [printerFormat, setPrinterFormat] = useState(currentUser?.Tenant?.printer_format || "A4");
   const [redeemPoints, setRedeemPoints] = useState(false);
   const [creditPaymentData, setCreditPaymentData] = useState(null);
+
+  useEffect(() => {
+    if (userData) {
+      const prefix = userData?.invoiceSettings?.prefix || userData?.businessName?.substring(0, 3).toUpperCase() || "INV";
+      const seq = userData?.invoiceSettings?.sequence;
+      if (seq) {
+        setReceiptNo(`${prefix}-${seq}`);
+      }
+      setReceiptDate(dateFormat(new Date()));
+    }
+  }, [userData]);
 
 
   const receiptContentRef = useRef(null);
@@ -388,13 +413,61 @@ const IndustryBilling = () => {
 
   const productsToDisplay = products || [];
 
+  const fuse = useMemo(() => {
+    try {
+      const FuseClass = (typeof Fuse === "function" ? Fuse : Fuse?.default);
+      if (FuseClass && Array.isArray(productsToDisplay) && productsToDisplay.length > 0) {
+        return new FuseClass(productsToDisplay, {
+          keys: [
+            { name: "name", weight: 0.5 },
+            { name: "sku", weight: 0.2 },
+            { name: "barcode", weight: 0.2 },
+            { name: "brandName", weight: 0.1 },
+            { name: "category", weight: 0.1 }
+          ],
+          threshold: 0.38,
+          ignoreLocation: true,
+          minMatchCharLength: 2
+        });
+      }
+    } catch (e) {
+      console.warn("Fuse init warning:", e);
+    }
+    return null;
+  }, [productsToDisplay]);
+
   const filteredProducts = () => {
-    const lowerKeyword = keyword.toLowerCase();
-    return productsToDisplay.filter((p) => {
-      const matchesKeyword = !keyword || p.name.toLowerCase().includes(lowerKeyword);
-      const matchesCategory = filterCategory === "All" || p.category === filterCategory;
-      return matchesKeyword && matchesCategory;
-    });
+    let result = productsToDisplay || [];
+    const trimmed = (keyword || "").trim();
+    if (trimmed) {
+      const lower = trimmed.toLowerCase();
+      // 1. Direct match (name, barcode, sku, brand)
+      const directMatches = result.filter(p =>
+        (p?.name && String(p.name).toLowerCase().includes(lower)) ||
+        (p?.barcode && String(p.barcode).toLowerCase().includes(lower)) ||
+        (p?.sku && String(p.sku).toLowerCase().includes(lower)) ||
+        (p?.brandName && String(p.brandName).toLowerCase().includes(lower))
+      );
+
+      if (directMatches.length > 0) {
+        result = directMatches;
+      } else if (fuse && typeof fuse.search === "function") {
+        // 2. Intelligent fuzzy search fallback
+        try {
+          const fuseResults = fuse.search(trimmed);
+          result = fuseResults.map(r => r.item);
+        } catch (e) {
+          result = directMatches;
+        }
+      } else {
+        result = directMatches;
+      }
+    }
+
+    if (filterCategory !== "All") {
+      result = result.filter(p => p?.category === filterCategory);
+    }
+    return result;
   };
 
   const beep = () => playSound("/sound/beep-29.mp3");
@@ -551,7 +624,6 @@ const IndustryBilling = () => {
 
   const closeModalReceipt = () => { setIsShowModalReceipt(false); setIsDueBill(false); };
 
-  const dateFormat = (date) => new Intl.DateTimeFormat("en-IN", { year: "numeric", month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: true }).format(date);
   const numberFormat = (number) => (number || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const priceFormat = (number) => `₹${numberFormat(number)}`;
 
@@ -1144,9 +1216,30 @@ const IndustryBilling = () => {
                               #{product.barcode}
                             </p>
                           )}
-                          <span className="text-[10px] text-blue-600 font-bold bg-blue-50 px-1.5 py-0.5 rounded mt-1 inline-block">
-                            Stock: {(Number(product.quantity) * (Number(product.unit) || 1)) || 0}
-                          </span>
+                          {(() => {
+                            const unitMultiplier = Number(product.unit) || 1;
+                            const stock = (Number(product.quantity || 0) * unitMultiplier);
+                            const threshold = Number(product.minStockThreshold !== undefined ? product.minStockThreshold : (product.reorderLevel || 5));
+                            if (stock <= 0) {
+                              return (
+                                <span className="text-[10px] text-red-700 font-bold bg-red-100 border border-red-200 px-1.5 py-0.5 rounded mt-1 inline-block">
+                                  Out of Stock (0)
+                                </span>
+                              );
+                            }
+                            if (stock <= threshold) {
+                              return (
+                                <span className="text-[10px] text-amber-800 font-bold bg-amber-100 border border-amber-300 px-1.5 py-0.5 rounded mt-1 inline-block animate-pulse">
+                                  ⚠️ Low Stock ({stock})
+                                </span>
+                              );
+                            }
+                            return (
+                              <span className="text-[10px] text-blue-600 font-bold bg-blue-50 px-1.5 py-0.5 rounded mt-1 inline-block">
+                                Stock: {stock}
+                              </span>
+                            );
+                          })()}
                         </div>
 
                         <span className={`text-sm font-bold ${theme.productPriceBadge} px-2 py-1 rounded-md flex-shrink-0`}>
@@ -1625,6 +1718,7 @@ const IndustryBilling = () => {
           </div>
         </div>
       )}
+
 
       <div ref={printAreaRef} id="print-area" className="hidden"></div>
 
