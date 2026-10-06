@@ -26,6 +26,9 @@ exports.createSubUser = async (req, res) => {
             return res.status(500).json({ msg: "Server Configuration Error: TENANT_ID not set" });
         }
 
+        if (typeof email !== 'string' || typeof password !== 'string') {
+            return res.status(400).json({ msg: "Please enter all required fields" });
+        }
         if (!firstName || !lastName || !email || !password) {
             return res.status(400).json({ msg: "Please enter all required fields" });
         }
@@ -58,7 +61,8 @@ exports.createSubUser = async (req, res) => {
                 });
             }
 
-            const existing = await SubUserModel.findOne({ email, tenantId });
+            // Unique across owners and staff (login looks up owners first).
+            const existing = (await SubUserModel.findOne({ email, tenantId })) || (await OwnerModel.findOne({ email, tenantId }));
             if (existing) {
                 return res.status(400).json({ msg: "User with this email already exists" });
             }
@@ -276,7 +280,8 @@ exports.updateSubUser = async (req, res) => {
             }
 
             if (email && email !== subUser.email) {
-                const existing = await SubUserModel.findOne({ email, tenantId, userId: { $ne: subUserId } });
+                if (typeof email !== 'string') return res.status(400).json({ msg: "Invalid email" });
+                const existing = (await SubUserModel.findOne({ email, tenantId, userId: { $ne: subUserId } })) || (await OwnerModel.findOne({ email, tenantId }));
                 if (existing) {
                     return res.status(400).json({ msg: "Email already in use" });
                 }

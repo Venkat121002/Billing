@@ -13,6 +13,7 @@ const { analyzeCustomerSegments } = require('../utils/customerSegmentation');
 const { categorizeExpense } = require('../utils/expenseCategorization');
 const { generateGstReturnsSummary, buildGstExcelWorkbook } = require('../utils/gstReturnGenerator');
 const wa = require('../utils/whatsappService');
+const { listStoreRecords } = require('../utils/storeRecords');
 
 // Phase 3 Feature 11 Utilities (Receipt & Invoice Scanner OCR)
 const multer = require('multer');
@@ -110,8 +111,25 @@ router.get('/customer-segments', async (req, res) => {
 router.post('/send-segment-campaign', async (req, res) => {
     try {
         const { mobile, message, customerName } = req.body;
-        if (!mobile || !message) {
+        if (!mobile || !message || typeof message !== 'string') {
             return res.status(400).json({ msg: 'Mobile and message are required' });
+        }
+
+        // Only this store's own customers (directory or bills) can be messaged,
+        // so the platform's WhatsApp number can't be used to text arbitrary numbers.
+        const to = wa.normalizePhone(mobile);
+        const ownerId = req.user.ownerId || req.user.userId;
+        const [customers, bills] = await Promise.all([
+            listStoreRecords(ownerId, 'customers'),
+            listStoreRecords(ownerId, 'bills')
+        ]);
+        const known = new Set(
+            [...customers.map((c) => c.mobile || c.phone), ...bills.map((b) => b.customerPhone || b.customerMobile)]
+                .map((p) => wa.normalizePhone(p))
+                .filter(Boolean)
+        );
+        if (!to || !known.has(to)) {
+            return res.status(403).json({ msg: 'Campaign messages can only be sent to your own customers.' });
         }
 
         const personalized = message.replace('{customerName}', customerName || 'Customer');

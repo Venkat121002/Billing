@@ -34,6 +34,9 @@ exports.register = async (req, res) => {
         gstin, pan, plan
     } = req.body;
 
+    if (typeof email !== 'string' || typeof password !== 'string') {
+        return res.status(400).json({ msg: "Please enter required fields" });
+    }
     if (!businessName || !email || !firstName || !password) {
         return res.status(400).json({ msg: "Please enter required fields" });
     }
@@ -54,7 +57,9 @@ exports.register = async (req, res) => {
 
         // === MONGODB MODE ===
         if (DB_TYPE === 'mongodb') {
-            const existingUser = await OwnerModel.findOne({ email, tenantId });
+            // Emails are unique across owners and staff: login looks up owners first,
+            // so a duplicate would lock the other account out.
+            const existingUser = (await OwnerModel.findOne({ email, tenantId })) || (await SubUserModel.findOne({ email, tenantId }));
             if (existingUser) {
                 return res.status(400).json({ msg: "User already exists" });
             }
@@ -194,7 +199,7 @@ exports.register = async (req, res) => {
 exports.login = async (req, res) => {
     const { email, password, loginType, remember } = req.body;
 
-    if (!email || !password) {
+    if (typeof email !== 'string' || typeof password !== 'string' || !email || !password) {
         return res.status(400).json({ msg: "Please enter email and password" });
     }
 
@@ -319,7 +324,9 @@ exports.login = async (req, res) => {
                         const subuserDoc = subSnap.docs[0];
                         userData = subuserDoc.data();
                         isSubUser = true;
-                        ownerId = userData.ownerId;
+                        // The store is the owner this staff doc is stored under, never the
+                        // doc's own ownerId field (a stored value is not proof of membership).
+                        ownerId = owner.id;
                         userDocRef = subuserDoc.ref;
                         found = true;
                         break;
@@ -710,7 +717,7 @@ exports.getMe = async (req, res) => {
                         const subuserDoc = subSnap.docs[0];
                         userData = subuserDoc.data();
                         isSubUser = true;
-                        ownerId = userData.ownerId;
+                        ownerId = owner.id; // the owner it is stored under (see login)
                         found = true;
                         break;
                     }
@@ -844,7 +851,8 @@ exports.deleteAccount = async (req, res) => {
                 mongoModels.GstBill, mongoModels.Bill, mongoModels.Transaction,
                 mongoModels.Credit, mongoModels.Supplier, mongoModels.Trainer,
                 mongoModels.Client, mongoModels.Salesman, mongoModels.InventoryReturn,
-                mongoModels.SubscriptionDetail
+                mongoModels.SubscriptionDetail, mongoModels.RepairTicket, mongoModels.Pet,
+                mongoModels.Milestone, mongoModels.Payment, mongoModels.SupportRequest
             ];
             await Promise.all(
                 ownedModels.map(M => M.deleteMany({ tenantId, ownerId: userId }))
@@ -878,7 +886,7 @@ exports.forgotPassword = async (req, res) => {
     const genericMsg = { msg: "If that email exists, a reset link has been sent." };
 
     try {
-        if (!email) return res.status(400).json({ msg: "Email is required" });
+        if (typeof email !== 'string' || !email) return res.status(400).json({ msg: "Email is required" });
 
         const exists = DB_TYPE === 'mongodb'
             ? !!((await OwnerModel.findOne({ email, tenantId })) || (await SubUserModel.findOne({ email, tenantId })))

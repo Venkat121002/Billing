@@ -262,7 +262,9 @@ function Pricing() {
               const Icon = style.icon;
               const current = isCurrent(plan);
               const trialCard = plan.key === "trial";
-              const disabled = !!processingPlan || trialCard;
+              // A paid plan the super admin hasn't priced yet (₹0) can't be bought.
+              const unpriced = !trialCard && !(Number(priceFor(plan)) > 0);
+              const disabled = !!processingPlan || trialCard || unpriced;
               const monthlyEquivalent = !trialCard && plan.yearly > 0 ? Math.round(plan.yearly / 12) : null;
 
               return (
@@ -284,6 +286,8 @@ function Pricing() {
                     <p className="text-gray-500 text-sm mb-4">{plan.tagline}</p>
                     {trialCard ? (
                       <span className="text-3xl font-bold text-gray-900">Free</span>
+                    ) : unpriced ? (
+                      <span className="text-xl font-semibold text-gray-500">Price coming soon</span>
                     ) : (
                       <>
                         <div className="flex items-baseline">
@@ -317,7 +321,7 @@ function Pricing() {
                         ? "bg-gray-100 text-gray-500 cursor-not-allowed"
                         : "bg-green-600 hover:bg-green-700 text-white"}`}
                     >
-                      {buttonLabel(plan)}
+                      {unpriced ? "Not available yet" : buttonLabel(plan)}
                     </button>
                   </div>
                 </div>
