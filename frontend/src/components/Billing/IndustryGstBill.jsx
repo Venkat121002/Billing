@@ -11,10 +11,11 @@ import {
   PlusCircle, Trash2, Printer, Download, Eye, Save,
   Loader2, CircleX, FileText, Search, Building2, User,
   Truck, Receipt, Package, Calculator, StickyNote, RefreshCw,
-  ChevronDown, Info, Copy, X,
+  ChevronDown, Info, Copy, X, FileSpreadsheet, Sparkles
 } from "lucide-react";
 import _ from "lodash";
 import BillingLayout from "../../Layout/BillingLayout/AdminLayout";
+import GstReturnModal from "../AI/GstReturnModal";
 
 // Per-industry visual theme. Every value here is a complete, literal
 // Tailwind class string (never built via template-literal concatenation of
@@ -244,6 +245,7 @@ function IndustryGstBill() {
       .slice(0, 10),
   });
 
+  const [showGstReturnModal, setShowGstReturnModal] = useState(false);
   const [productsList, setProductsList] = useState([]);
   const [productsLoading, setProductsLoading] = useState(false);
   const isMobileIndustry = profile.key === "mobile_shop";
@@ -1052,6 +1054,13 @@ function IndustryGstBill() {
                   className={`inline-flex items-center px-4 py-2.5 text-sm font-medium rounded-xl ${theme.btnOutline} disabled:opacity-40 transition-all duration-200 hover:shadow-sm`}
                 >
                   <Printer size={16} className="mr-1.5" /> Print
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowGstReturnModal(true)}
+                  className="inline-flex items-center px-4 py-2.5 text-sm font-bold rounded-xl text-white bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 shadow-sm transition-all duration-200"
+                >
+                  <FileSpreadsheet size={16} className="mr-1.5" /> GST Return (GSTR-1 & 3B)
                 </button>
               </div>
             </div>
@@ -1884,6 +1893,12 @@ function IndustryGstBill() {
           </form>
         </div>
       </div>
+
+      {/* GST Return Preparation & CA Excel Export Modal (Phase 2 AI) */}
+      <GstReturnModal
+        isOpen={showGstReturnModal}
+        onClose={() => setShowGstReturnModal(false)}
+      />
     </BillingLayout>
   );
 }

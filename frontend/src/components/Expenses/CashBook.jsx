@@ -22,8 +22,12 @@ import {
   List,
   Search,
   X,
-  SlidersHorizontal
+  SlidersHorizontal,
+  Sparkles,
+  Camera
 } from "lucide-react";
+import ReceiptScannerModal from "../AI/ReceiptScannerModal";
+
 import {
   BarChart as RechartsBarChart,
   Bar,
@@ -71,6 +75,8 @@ const CashBook = () => {
 
   const [activeTab, setActiveTab] = useState("list"); // 'list' or 'analytics'
   const [showFilters, setShowFilters] = useState(false);
+  const [showScannerModal, setShowScannerModal] = useState(false);
+
 
   // Fetch Logic
   useEffect(() => {
@@ -156,6 +162,9 @@ const CashBook = () => {
     if (name === "type") setFormData((prev) => ({ ...prev, category: "" }));
   };
 
+  const [isAiCategorizing, setIsAiCategorizing] = useState(false);
+  const [aiSuggestion, setAiSuggestion] = useState(null);
+
   const resetForm = () => {
     setFormData({
       date: new Date().toISOString().split("T")[0],
@@ -165,6 +174,32 @@ const CashBook = () => {
       category: "",
     });
     setModalError(null);
+    setAiSuggestion(null);
+  };
+
+  const handleAiCategorize = async () => {
+    if (!formData.description) return;
+    setIsAiCategorizing(true);
+    try {
+      const token = sessionStorage.getItem("token");
+      const res = await axios.post(
+        `${API_URL}/automation/categorize-expense`,
+        {
+          description: formData.description,
+          amount: parseFloat(formData.amount) || 0,
+          businessType: currentUser?.industry || currentUser?.businessType || "Retail"
+        },
+        { headers: { "x-auth-token": token } }
+      );
+      if (res.data && res.data.category) {
+        setAiSuggestion(res.data);
+        setFormData((prev) => ({ ...prev, category: res.data.category }));
+      }
+    } catch (err) {
+      console.warn("AI categorization warning:", err);
+    } finally {
+      setIsAiCategorizing(false);
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -389,6 +424,12 @@ const CashBook = () => {
           <div className="flex items-center gap-3">
             <Tabs />
             <button
+              onClick={() => setShowScannerModal(true)}
+              className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-lg font-semibold text-sm hover:from-purple-700 hover:to-indigo-700 shadow-sm shadow-purple-200 transition-all"
+            >
+              <Camera size={18} /> 📸 Scan Receipt
+            </button>
+            <button
               onClick={() => openModal()}
               className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white rounded-lg font-semibold text-sm hover:bg-blue-700 shadow-sm transition-colors"
             >
@@ -396,6 +437,7 @@ const CashBook = () => {
             </button>
           </div>
         </div>
+
 
         {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -684,7 +726,23 @@ const CashBook = () => {
                   </div>
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold text-slate-600 mb-1.5">Category</label>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-sm font-semibold text-slate-600">Category</label>
+                    <button
+                      type="button"
+                      onClick={handleAiCategorize}
+                      disabled={isAiCategorizing || !formData.description}
+                      className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 disabled:opacity-40 flex items-center gap-1 transition-colors"
+                      title="Auto-detect category with AI"
+                    >
+                      {isAiCategorizing ? (
+                        <Loader2 size={11} className="animate-spin" />
+                      ) : (
+                        <Sparkles size={11} className="text-amber-500" />
+                      )}
+                      <span>AI Suggest</span>
+                    </button>
+                  </div>
                   <select
                     name="category"
                     value={formData.category}
@@ -695,6 +753,11 @@ const CashBook = () => {
                     <option value="" disabled>Select...</option>
                     {categoriesForForm.map((cat) => <option key={cat} value={cat}>{cat}</option>)}
                   </select>
+                  {aiSuggestion && (
+                    <div className="mt-1.5 text-[11px] text-emerald-600 font-medium flex items-center gap-1">
+                      <Sparkles size={10} /> Suggested: <strong>{aiSuggestion.category}</strong> ({Math.round((aiSuggestion.confidence || 0.9) * 100)}% match)
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -718,8 +781,19 @@ const CashBook = () => {
           </div>
         </div>
       )}
+
+      {/* Phase 3 Feature 11: AI Receipt & Invoice Scanner Modal */}
+      <ReceiptScannerModal
+        isOpen={showScannerModal}
+        onClose={() => setShowScannerModal(false)}
+        onExpenseSaved={() => {
+          fetchTransactions();
+          setShowScannerModal(false);
+        }}
+      />
     </BillingLayout>
   );
 };
+
 
 export default CashBook;

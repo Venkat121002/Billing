@@ -1,9 +1,11 @@
+const path = require('path');
+const fs = require('fs');
 const PDFDocument = require('pdfkit');
 
 const generateInvoicePDF = (data) => {
     return new Promise((resolve, reject) => {
         try {
-            const doc = new PDFDocument({ margin: 50 });
+            const doc = new PDFDocument({ margin: 50, size: 'A4', bufferPages: true });
             let buffers = [];
 
             doc.on('data', buffers.push.bind(buffers));
@@ -132,7 +134,60 @@ const generateInvoicePDF = (data) => {
                     { align: "center", width: 500 }
                 );
 
+            // Apply copyright notice & pagination on every page
+            const pageRange = doc.bufferedPageRange();
+            const logoPath = path.resolve(__dirname, '../assets/company-logo.png');
+            const hasLogo = fs.existsSync(logoPath);
+
+            for (let i = pageRange.start; i < pageRange.start + pageRange.count; i++) {
+                doc.switchToPage(i);
+                doc.page.margins.bottom = 0;
+                const bottomY = doc.page.height - 28;
+                const pageWidth = doc.page.width;
+
+                // Subtle hairline divider rule
+                doc
+                    .strokeColor("#E2E8F0")
+                    .lineWidth(0.5)
+                    .moveTo(50, bottomY - 8)
+                    .lineTo(pageWidth - 50, bottomY - 8)
+                    .stroke();
+
+                // Copyright Notice with small logo on every page
+                const companyText = "© SwordNex Technologies Pvt. Ltd.";
+                doc.fontSize(8.5).font("Helvetica").fillColor("#64748B");
+                const textWidth = doc.widthOfString(companyText);
+                const logoSize = 13;
+                const gap = 5;
+
+                if (hasLogo) {
+                    const totalWidth = logoSize + gap + textWidth;
+                    const startX = (pageWidth - totalWidth) / 2;
+                    doc.image(logoPath, startX, bottomY - 2.5, { width: logoSize, height: logoSize });
+                    doc.text(companyText, startX + logoSize + gap, bottomY, { lineBreak: false });
+                } else {
+                    doc.text(companyText, 50, bottomY, {
+                        align: "center",
+                        width: pageWidth - 100,
+                        lineBreak: false
+                    });
+                }
+
+                if (pageRange.count > 1) {
+                    doc
+                        .fontSize(8)
+                        .font("Helvetica")
+                        .fillColor("#94A3B8")
+                        .text(`Page ${i + 1} of ${pageRange.count}`, 50, bottomY, {
+                            align: "right",
+                            width: pageWidth - 100,
+                            lineBreak: false
+                        });
+                }
+            }
+
             doc.end();
+
 
         } catch (err) {
             reject(err);

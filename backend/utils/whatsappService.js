@@ -74,12 +74,57 @@ async function sendTemplate({ to, type, data }) {
     const body = await response.json().catch(() => ({}));
 
     if (!response.ok) {
+        // If template is not found in Meta account (#132001), fallback to direct text message
+        if (body.error?.code === 132001 && textFallback) {
+            console.log(`[whatsapp] Template "${metaTemplate.name}" not in Meta translation; falling back to direct WhatsApp text...`);
+            return sendDirectText({ to: phone, text: textFallback });
+        }
         const msg = body.error?.message || `HTTP ${response.status}`;
         throw new Error(`Meta WhatsApp API (${metaTemplate.name}): ${msg}`);
     }
 
     const messageId = body.messages?.[0]?.id || null;
     console.log(`[whatsapp] ${type} sent to ${phone} (${messageId})`);
+    return { success: true, mode: 'production', messageId };
+}
+
+/**
+ * Send a direct WhatsApp text message (useful for alerts, summaries, or when template is not yet registered).
+ */
+async function sendDirectText({ to, text }) {
+    const phone = normalizePhone(to);
+    if (!phone) throw new Error(`Invalid WhatsApp number: "${to}"`);
+
+    if (!isConfigured()) {
+        console.log(`[whatsapp] DEV MODE text -> ${phone}: ${text}`);
+        return { success: true, mode: 'local-fallback', messageId: null };
+    }
+
+    const payload = {
+        messaging_product: 'whatsapp',
+        recipient_type: 'individual',
+        to: phone,
+        type: 'text',
+        text: { body: text }
+    };
+
+    const url = `https://graph.facebook.com/${GRAPH_VERSION}/${env('WHATSAPP_META_PHONE_NUMBER_ID')}/messages`;
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+            Authorization: `Bearer ${env('WHATSAPP_META_ACCESS_TOKEN')}`,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(SEND_TIMEOUT_MS)
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) {
+        const msg = body.error?.message || `HTTP ${response.status}`;
+        throw new Error(`Meta WhatsApp API text: ${msg}`);
+    }
+    const messageId = body.messages?.[0]?.id || null;
+    console.log(`[whatsapp] Direct text sent to ${phone} (${messageId})`);
     return { success: true, mode: 'production', messageId };
 }
 
@@ -129,5 +174,6 @@ module.exports = {
     normalizePhone,
     uploadMedia,
     sendTemplate,
-    trySendTemplate
+    trySendTemplate,
+    sendDirectText
 };
