@@ -66,6 +66,15 @@ app.use(
 app.use(helmet());
 app.use(morgan('dev'));
 
+// API responses depend on who is signed in, but the Firebase Hosting CDN in front
+// of this function caches by URL only, and without an explicit header it caches
+// error responses (e.g. 404s) for 10 minutes: one store's "not found" would then
+// be served to every store asking for that URL. Never let a cache store them.
+app.use((req, res, next) => {
+    res.set('Cache-Control', 'no-store');
+    next();
+});
+
 // Keep the raw body: Razorpay webhook signatures are computed over the exact bytes.
 app.use(express.json({ verify: (req, _res, buf) => { req.rawBody = buf; } }));
 app.use(express.urlencoded({ extended: true }));
