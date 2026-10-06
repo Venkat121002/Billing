@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from "react";
-import { EyeOffIcon, EyeIcon, Loader2 } from "lucide-react";
+import React, { useRef, useState } from "react";
+import { EyeOffIcon, EyeIcon, Loader2, Mail, Lock, AlertCircle } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext";
 import toast from "react-hot-toast";
-import icon1 from "../../assets/images/BILLING LOGO .png";
+import AuthShell, { AuthField, authInputClass, authInputErrorClass, authButtonClass } from "./AuthShell";
 
 const Login = () => {
   const { employerLogin } = useAuth();
@@ -14,54 +14,60 @@ const Login = () => {
   // This page is owner/admin login only — team members use /team-login.
   const loginType = "admin";
 
-  // Typing animation
-  const fullText = "Secure • Smart • Automated Billing";
-  const [typedText, setTypedText] = useState("");
+  const [remember, setRemember] = useState(false);
 
-  useEffect(() => {
-    let index = 0;
-    const interval = setInterval(() => {
-      setTypedText(fullText.slice(0, index));
-      index++;
-      if (index > fullText.length) clearInterval(interval);
-    }, 60);
-    return () => clearInterval(interval);
-  }, []);
+  // Validation / sign-in errors shown on the page instead of toasts:
+  // { email, password } under the fields, `form` above the Sign in button.
+  const [errors, setErrors] = useState({});
+  const formRef = useRef(null);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
+    if (errors[name] || errors.form) setErrors(({ [name]: _removed, form: _form, ...rest }) => rest);
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
   const handleLogin = async (e) => {
     e.preventDefault();
 
-    if (!formData.email || !formData.password) {
-      toast.error("Please enter both email and password.");
+    const found = {};
+    if (!formData.email.trim()) found.email = "Please enter your email address.";
+    if (!formData.password) found.password = "Please enter your password.";
+    setErrors(found);
+    if (Object.keys(found).length) {
+      formRef.current?.elements?.namedItem(Object.keys(found)[0])?.focus();
       return;
     }
 
     setIsLoading(true);
     try {
-      await employerLogin(formData.email, formData.password, loginType);
+      await employerLogin(formData.email, formData.password, loginType, remember);
       toast.success("Successfully logged in!");
     } catch (error) {
       console.error("Login component error:", error);
 
       const serverMsg = error?.msg || error?.message || "";
-      let friendlyMsg = "Login failed";
 
       if (serverMsg.includes("EMAIL_NOT_FOUND")) {
-        friendlyMsg = "Email is wrong";
-      } else if (serverMsg.includes("INVALID_PASSWORD")) {
-        friendlyMsg = "Password is wrong";
-      } else if (serverMsg.includes("USER_DISABLED")) {
+        setErrors({ email: "No account found with this email." });
+        formRef.current?.elements?.namedItem("email")?.focus();
+        return;
+      }
+      if (serverMsg.includes("INVALID_PASSWORD")) {
+        setErrors({ password: "Incorrect password. Try again or reset it." });
+        formRef.current?.elements?.namedItem("password")?.focus();
+        return;
+      }
+
+      let friendlyMsg = "Login failed. Please try again.";
+
+      if (serverMsg.includes("USER_DISABLED")) {
         friendlyMsg = "This account has been disabled";
       } else if (serverMsg) {
         friendlyMsg = serverMsg;
       }
 
-      toast.error(friendlyMsg);
+      setErrors({ form: friendlyMsg });
     } finally {
       setIsLoading(false);
     }
@@ -72,147 +78,94 @@ const Login = () => {
   // Firebase project is configured.
 
   return (
-    <div className="h-screen flex overflow-hidden">
-
-      {/* ================= LEFT SIDE ================= */}
-      <div className="w-full lg:w-1/2 flex flex-col justify-center px-8 lg:px-20 bg-white">
-
-        <div className="max-w-md w-full mx-auto">
-
-          {/* Centered Logo */}
-          <div className="flex justify-center  mb-8">
-            <img src={icon1} alt="SwordNex" className="h-10 center" />
-          </div>
-
-          {/* Heading */}
-          <div className="text-center mb-6">
-            <h1 className="text-2xl font-bold text-gray-900">
-              Welcome back
-            </h1>
-            <p className="text-sm text-gray-500 mt-1">
-              Sign in to manage your dashboard
-            </p>
-          </div>
-
-          {/* Form */}
-          <form onSubmit={handleLogin} className="space-y-4">
-
-            {/* Email */}
-            <div>
-              <label className="block text-sm mb-1 text-gray-700">Email Address</label>
-              <input
-                type="text"
-                name="email"
-                value={formData.email}
-                onChange={handleChange}
-                placeholder="name@company.com"
-                className="w-full h-11 px-4 rounded-lg border border-gray-300 
-                focus:ring-2 focus:ring-green-300 focus:border-green-600 
-                outline-none text-black"
-                required
-              />
-            </div>
-
-            {/* Password */}
-            <div>
-              <div className="flex justify-between mb-1">
-                <label className="text-sm text-gray-700">Password</label>
-                <Link
-                  to="/forgot"
-                  className="text-xs text-green-600 hover:underline"
-                >
-                  Forgot?
-                </Link>
-              </div>
-
-              <div className="relative">
-                <input
-                  type={showPassword ? "text" : "password"}
-                  name="password"
-                  value={formData.password}
-                  onChange={handleChange}
-                  placeholder="Enter password"
-                  className="w-full h-11 px-4 rounded-lg border border-gray-300 
-                  focus:ring-2 focus:ring-green-300 focus:border-green-600 
-                  outline-none pr-12 text-black"
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-green-600"
-                >
-                  {showPassword ? (
-                    <EyeOffIcon size={16} />
-                  ) : (
-                    <EyeIcon size={16} />
-                  )}
-                </button>
-              </div>
-            </div>
-
-            {/* Submit */}
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="w-full h-11 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg flex items-center justify-center transition"
-            >
-              {isLoading && (
-                <Loader2 className="animate-spin mr-2 h-4 w-4" />
-              )}
-              Sign In
-            </button>
-          </form>
-
-          {/* Google sign-in removed with Firebase — restore when reconfigured. */}
-
-          <p className="text-center text-xs text-gray-500 mt-4">
+    <AuthShell
+      title="Welcome back"
+      subtitle="Sign in to manage your billing dashboard."
+      footer={
+        <>
+          <p>
             Don’t have an account?{" "}
-            <Link to="/signup" className="text-green-600 font-medium">
-              Register
+            <Link to="/signup" className="font-semibold text-green-700 hover:underline">
+              Create one
             </Link>
           </p>
-
-          <p className="text-center text-xs text-gray-500 mt-2">
+          <p>
             Team member?{" "}
-            <Link to="/team-login" className="text-green-600 font-medium">
+            <Link to="/team-login" className="font-semibold text-green-700 hover:underline">
               Sign in here
             </Link>
           </p>
-
-        </div>
-      </div>
-
-      {/* ================= RIGHT SIDE ================= */}
-      <div className="hidden lg:flex w-1/2 items-center justify-center relative bg-gradient-to-br from-green-100 via-white to-green-50 overflow-hidden">
-
-        <div className="absolute top-[-80px] right-[-80px] w-60 h-60 bg-green-300/20 rounded-full blur-3xl"></div>
-        <div className="absolute bottom-[-100px] left-[-100px] w-72 h-72 bg-green-200/20 rounded-full blur-3xl"></div>
-
-        <div className="relative z-10 text-center px-12 max-w-md">
-
-          {/* Image via URL */}
-          <img
-            src="https://exclusive-harlequin-tuwmcrrggt.edgeone.app/3d-hand-with-safe-payment-confirmation-bill.jpg"
-            alt="Billing Illustration"
-            className="w-full max-w-md mb-8 object-contain drop-shadow-xl"
+        </>
+      }
+    >
+      <form ref={formRef} onSubmit={handleLogin} className="space-y-5" noValidate>
+        <AuthField label="Email address" icon={Mail} error={errors.email}>
+          <input
+            type="text"
+            name="email"
+            autoComplete="username"
+            autoFocus
+            value={formData.email}
+            onChange={handleChange}
+            placeholder="name@company.com"
+            className={`${authInputClass} ${errors.email ? authInputErrorClass : ""}`}
+            required
           />
+        </AuthField>
 
-          {/* Typing Text */}
-          <h2 className="text-2xl font-bold text-green-800 min-h-[32px]">
-            {typedText}
-            <span className="animate-pulse">|</span>
-          </h2>
+        <AuthField
+          label="Password"
+          icon={Lock}
+          error={errors.password}
+          right={
+            <Link to="/forgot" className="text-sm font-medium text-green-700 hover:text-green-800 hover:underline">
+              Forgot password?
+            </Link>
+          }
+        >
+          <input
+            type={showPassword ? "text" : "password"}
+            name="password"
+            autoComplete="current-password"
+            value={formData.password}
+            onChange={handleChange}
+            placeholder="Enter your password"
+            className={`${authInputClass} pr-12 ${errors.password ? authInputErrorClass : ""}`}
+            required
+          />
+          <button
+            type="button"
+            onClick={() => setShowPassword(!showPassword)}
+            aria-label={showPassword ? "Hide password" : "Show password"}
+            className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-1 text-gray-400 hover:text-green-700"
+          >
+            {showPassword ? <EyeOffIcon size={18} /> : <EyeIcon size={18} />}
+          </button>
+        </AuthField>
 
-          <p className="text-green-700 text-sm mt-4 leading-relaxed">
-            Manage invoices, track payments in real-time, and grow your business
-            with our automated billing platform.
+        <label className="flex cursor-pointer select-none items-center gap-2.5 text-sm text-gray-600">
+          <input
+            type="checkbox"
+            checked={remember}
+            onChange={(e) => setRemember(e.target.checked)}
+            className="h-4 w-4 rounded border-gray-300 accent-green-600"
+          />
+          Remember me for 30 days
+        </label>
+
+        {errors.form && (
+          <p role="alert" className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-3.5 py-3 text-sm text-red-700">
+            <AlertCircle size={16} className="mt-0.5 shrink-0" />
+            {errors.form}
           </p>
+        )}
 
-        </div>
-      </div>
-
-    </div>
+        <button type="submit" disabled={isLoading} className={authButtonClass}>
+          {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+          {isLoading ? "Signing in..." : "Sign in"}
+        </button>
+      </form>
+    </AuthShell>
   );
 };
 

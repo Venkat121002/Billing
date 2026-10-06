@@ -37,6 +37,58 @@
         "--strictPort"
       ],
       "port": 5174
+    },
+    {
+      "name": "payroll-backend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "D:/Swordnex/payroll project/Payroll/backend/functions",
+        "run",
+        "start"
+      ],
+      "port": 3000
+    },
+    {
+      "name": "payroll-frontend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "D:/Swordnex/payroll project/Payroll/frontend",
+        "run",
+        "dev",
+        "--",
+        "--port",
+        "5175",
+        "--strictPort"
+      ],
+      "port": 5175
+    },
+    {
+      "name": "matrimony-backend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "D:/Swordnex/Matrimony/backend",
+        "run",
+        "dev"
+      ],
+      "port": 5000
+    },
+    {
+      "name": "matrimony-frontend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "D:/Swordnex/Matrimony/frontend",
+        "run",
+        "dev",
+        "--",
+        "--port",
+        "5176",
+        "--strictPort"
+      ],
+      "port": 5176
     }
   ]
 }

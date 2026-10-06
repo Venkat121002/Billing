@@ -27,6 +27,7 @@ const SubUserSchema = new mongoose.Schema({
     sales_tax_type: { type: String },
     printer_configs: { type: Array },
     printer_auto_print: { type: Boolean },
+    print_on_finalize: { type: Boolean },
     createdAt: { type: String, default: () => new Date().toISOString() }
 }, {
     timestamps: true,

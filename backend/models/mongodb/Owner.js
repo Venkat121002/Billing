@@ -43,13 +43,15 @@ const OwnerSchema = new mongoose.Schema({
     sales_gst: { type: Number, default: 0 },
     sales_tax_type: { type: String, default: 'exclusive' },
     printer_configs: { type: Array, default: [] },
-    printer_auto_print: { type: Boolean, default: false },
+    printer_auto_print: { type: Boolean, default: false }, // legacy, no longer used
+    print_on_finalize: { type: Boolean }, // unset = on
     invoiceSettings: {
         prefix: { type: String, default: 'INV-' },
         sequence: { type: Number, default: 1 }
     },
     invoice_prefix: { type: String, default: 'INV-' },
     next_invoice_number: { type: Number, default: 1 },
+    invoice_terms: { type: String }, // unset = default terms
     lastLogin: { type: String, default: null },
     createdAt: { type: String, default: () => new Date().toISOString() }
 }, {
