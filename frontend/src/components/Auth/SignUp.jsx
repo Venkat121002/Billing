@@ -1,19 +1,66 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext";
 import toast from "react-hot-toast";
-import { EyeIcon, EyeOffIcon } from "lucide-react";
-import logo from "../../assets/images/BILLING LOGO .png";
-import billingDashboardImage from "../../assets/images/billing-dashboard.jpg";
+import {
+  EyeIcon,
+  EyeOffIcon,
+  Loader2,
+  Mail,
+  Lock,
+  Phone,
+  Building2,
+  User,
+  Check,
+  X,
+  ShieldCheck,
+  CheckCircle2,
+} from "lucide-react";
+import AuthShell, { AuthField, authInputClass, authPlainInputClass, authInputErrorClass, authButtonClass } from "./AuthShell";
+
+const BUSINESS_TYPES = [
+  "Sole Proprietorship",
+  "Partnership",
+  "LLP",
+  "Private Limited",
+  "Public Limited",
+  "OPC",
+  "NGO",
+  "Trust",
+];
+
+const PASSWORD_RULES = [
+  { label: "8+ characters", test: (p) => p.length >= 8 },
+  { label: "Uppercase letter", test: (p) => /[A-Z]/.test(p) },
+  { label: "Lowercase letter", test: (p) => /[a-z]/.test(p) },
+  { label: "Number", test: (p) => /\d/.test(p) },
+  { label: "Special (@$!%*?&)", test: (p) => /[@$!%*?&]/.test(p) },
+];
+
+const strongPasswordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&]).{8,}$/;
+
+function Section({ title, hint, children }) {
+  return (
+    <section>
+      <div className="mb-4 flex items-baseline justify-between border-b border-gray-100 pb-2">
+        <h2 className="text-sm font-semibold uppercase tracking-wider text-gray-800">{title}</h2>
+        {hint && <span className="text-xs text-gray-400">{hint}</span>}
+      </div>
+      <div className="space-y-4">{children}</div>
+    </section>
+  );
+}
+
+const Required = () => <span className="text-red-500">*</span>;
 
 const Signup = () => {
-  // Changed max steps to 3
-  const [currentStep, setCurrentStep] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
+  const [done, setDone] = useState(false);
   const { employerSignup, sendSignupOtp, verifySignupOtp } = useAuth();
 
-  // Email + WhatsApp verification (runs inside step 2, before moving on to step 3).
-  // Two separate codes; both must be entered.
-  const [otpStage, setOtpStage] = useState(false);
+  // Email + WhatsApp verification: the whole form is filled first, then
+  // "Create account" opens a popup for the two codes. Both must be entered.
+  const [otpOpen, setOtpOpen] = useState(false);
   const [codes, setCodes] = useState({ email: "", whatsapp: "" });
   const [verified, setVerified] = useState({ email: "", mobile: "", token: "" });
   const [resendIn, setResendIn] = useState({ email: 0, whatsapp: 0 });
@@ -30,12 +77,8 @@ const Signup = () => {
     return () => clearTimeout(t);
   }, [resendIn]);
 
-  const strongPasswordRegex =
-    /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&]).{8,}$/;
-
-  // Industry is no longer chosen at signup — it's a one-time selection made
-  // later in Settings > Company Profile (see config/industryProfiles.js and
-  // UNIFICATION_PLAN.md). Registration only collects business basics.
+  // Industry is not chosen at signup — it's a one-time selection made later
+  // in Settings > Company Profile. Registration only collects business basics.
   const [formData, setFormData] = useState({
     businessName: "",
     businessType: "",
@@ -50,19 +93,68 @@ const Signup = () => {
     city: "",
     state: "",
     pincode: "",
-    country: "",
+    country: "India",
     gstin: "",
     pan: "",
   });
 
+  // Validation messages are shown under each field ({ fieldName: message }),
+  // not as toasts. A field's message clears as soon as it is edited.
+  const [errors, setErrors] = useState({});
+  const formRef = useRef(null);
+  const err = (name) => (errors[name] ? authInputErrorClass : "");
+
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData({ ...formData, [name]: value });
+    if (errors[name]) setErrors(({ [name]: _removed, ...rest }) => rest);
+    setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
   const normalizedEmail = () => formData.email.trim().toLowerCase();
-
   const mobileDigits = () => formData.mobile.replace(/\D/g, "");
+
+  // Returns every problem at once, in form order.
+  const validate = () => {
+    const e = {};
+    if (!formData.businessName.trim()) e.businessName = "Please enter your business name.";
+    if (!formData.businessType) e.businessType = "Please choose your business type.";
+    if (!formData.firstName.trim()) e.firstName = "Please enter your first name.";
+    if (!formData.email.trim()) e.email = "Please enter your email address.";
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail())) e.email = "Please enter a valid email address.";
+    if (!mobileDigits()) e.mobile = "Please enter your WhatsApp number.";
+    else if (!/^\d{10,15}$/.test(mobileDigits())) e.mobile = "Enter a valid number (10 to 15 digits).";
+    if (!formData.password) e.password = "Please create a password.";
+    else if (!strongPasswordRegex.test(formData.password)) e.password = "Password doesn't meet all the rules below.";
+    if (!formData.confirmPassword) e.confirmPassword = "Please re-enter your password.";
+    else if (formData.password !== formData.confirmPassword) e.confirmPassword = "Passwords do not match.";
+    return e;
+  };
+
+  const focusField = (name) => {
+    const input = formRef.current?.elements?.namedItem(name);
+    input?.scrollIntoView({ behavior: "smooth", block: "center" });
+    input?.focus({ preventScroll: true });
+  };
+
+  const createAccount = async (verificationToken) => {
+    setIsLoading(true);
+    try {
+      await employerSignup({ ...formData, verificationToken });
+      setOtpOpen(false);
+      setDone(true);
+    } catch (e) {
+      const msg = e?.msg || e?.message || "Signup failed";
+      if (/already exists/i.test(msg)) {
+        setOtpOpen(false);
+        setErrors({ email: "An account with this email already exists. Sign in instead." });
+        focusField("email");
+      } else {
+        toast.error(msg);
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   // channel: "email" | "whatsapp" resends one code; omitted sends both.
   const requestOtp = async (channel) => {
@@ -76,13 +168,32 @@ const Signup = () => {
       } else {
         setCodes({ email: "", whatsapp: "" });
         setResendIn({ email: 30, whatsapp: 30 });
-        setOtpStage(true);
+        setOtpOpen(true);
         toast.success("Codes sent to your email and WhatsApp");
       }
     } catch (e) {
       toast.error(e?.msg || e?.message || "Could not send the code");
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (isLoading) return;
+    const found = validate();
+    setErrors(found);
+    const first = Object.keys(found)[0];
+    if (first) {
+      focusField(first);
+      return;
+    }
+    // Already verified this exact email + number (e.g. the first create
+    // attempt failed)? Skip straight to creating the account.
+    if (verified.token && verified.email === normalizedEmail() && verified.mobile === mobileDigits()) {
+      createAccount(verified.token);
+    } else {
+      requestOtp();
     }
   };
 
@@ -95,171 +206,286 @@ const Signup = () => {
       return;
     }
     setIsLoading(true);
+    let token;
     try {
-      const { verificationToken } = await verifySignupOtp({
+      ({ verificationToken: token } = await verifySignupOtp({
         email: normalizedEmail(),
         mobile: mobileDigits(),
         emailOtp: codes.email,
         mobileOtp: codes.whatsapp,
-      });
-      setVerified({ email: normalizedEmail(), mobile: mobileDigits(), token: verificationToken });
-      setOtpStage(false);
-      toast.success("Email and WhatsApp number verified");
-      setCurrentStep(3);
+      }));
+      setVerified({ email: normalizedEmail(), mobile: mobileDigits(), token });
     } catch (e) {
       toast.error(e?.msg || e?.message || "Verification failed");
-    } finally {
       setIsLoading(false);
-    }
-  };
-
-  const nextStep = () => {
-    // Validation for Step 2 (Password)
-    if (currentStep === 2) {
-      if (!strongPasswordRegex.test(formData.password)) {
-        toast.error("Password must contain uppercase, lowercase, number, special char & 8+ chars");
-        return;
-      }
-      if (formData.password !== formData.confirmPassword) {
-        toast.error("Passwords do not match");
-        return;
-      }
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail())) {
-        toast.error("Please enter a valid email address");
-        return;
-      }
-      if (!/^\d{10,15}$/.test(mobileDigits())) {
-        toast.error("Please enter a valid WhatsApp mobile number");
-        return;
-      }
-      // Email and mobile must both be verified by OTP before continuing.
-      if (verified.token && verified.email === normalizedEmail() && verified.mobile === mobileDigits()) {
-        setCurrentStep(3);
-      } else {
-        requestOtp();
-      }
       return;
     }
-
-    setCurrentStep((prev) => prev + 1);
+    await createAccount(token);
   };
 
-  const prevStep = () => setCurrentStep((prev) => prev - 1);
+  if (done) {
+    return (
+      <AuthShell title="You're all set" subtitle="Your account has been created.">
+        <div className="flex items-center gap-3 rounded-xl border border-green-200 bg-green-50 p-4 text-sm text-green-800">
+          <CheckCircle2 className="h-5 w-5 shrink-0" />
+          Redirecting to your dashboard...
+        </div>
+      </AuthShell>
+    );
+  }
 
-  const handleSubmit = async () => {
-    setIsLoading(true);
-    try {
-      await employerSignup({ ...formData, verificationToken: verified.token });
-
-      // Move to success step (Step 4 internally, but shows as completion)
-      setCurrentStep(4);
-    } catch (e) {
-      toast.error(e?.msg || e?.message || "Signup failed");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-
-
-  // Updated progress calculation for 3 steps
-  const totalSteps = 3;
-  const progress = ((currentStep - 1) / totalSteps) * 100;
+  const password = formData.password;
+  const passwordsMismatch = formData.confirmPassword && formData.confirmPassword !== password;
 
   return (
-    <div className="min-h-screen flex bg-gray-50 text-gray-900">
-
-      {/* ================= LEFT SIDE – SIGNUP FORM ================= */}
-      <div className="w-full lg:w-1/2 flex items-center justify-center p-6">
-        <div className="w-full max-w-xl bg-white p-8 rounded-xl shadow-lg">
-          <div className="flex justify-center mb-6">
-            <img
-              src={logo}
-              alt="Logo"
-              className="h-14 object-contain"
+    <AuthShell
+      wide
+      title="Create your account"
+      subtitle="Start your 14-day free trial. It takes about a minute."
+      footer={
+        <p>
+          Already have an account?{" "}
+          <Link to="/login" className="font-semibold text-green-700 hover:underline">
+            Sign in
+          </Link>
+        </p>
+      }
+    >
+      <form ref={formRef} onSubmit={handleSubmit} className="space-y-8" noValidate>
+        {/* ---------- Business ---------- */}
+        <Section title="Business details">
+          <AuthField label={<>Business name <Required /></>} error={errors.businessName} icon={Building2}>
+            <input
+              name="businessName"
+              autoComplete="organization"
+              autoFocus
+              value={formData.businessName}
+              onChange={handleChange}
+              placeholder="Company Name "
+              className={`${authInputClass} ${err("businessName")}`}
             />
-          </div>
+          </AuthField>
 
-          {/* Progress - Only show if not completed */}
-          {currentStep <= 3 && (
-            <div className="mb-6">
-              <div className="flex justify-between text-sm mb-1">
-                <span>Step {currentStep} of {totalSteps}</span>
-                <span>{Math.round(progress)}%</span>
-              </div>
-              <div className="w-full bg-gray-200 h-2 rounded-full">
-                <div
-                  className="bg-green-600 h-2 rounded-full transition-all"
-                  style={{ width: `${progress}%` }}
-                />
-              </div>
-            </div>
-          )}
-
-          {/* STEP 1: Business Info */}
-          {currentStep === 1 && (
-            <>
-              <h2 className="text-xl font-bold mb-4">Business Information</h2>
-
-              <input
-                name="businessName"
-                placeholder="Business Name"
-                value={formData.businessName}
-                onChange={handleChange}
-                className="input"
-              />
-
+          <div className="grid gap-4 sm:grid-cols-2">
+            <AuthField label={<>Business type <Required /></>} error={errors.businessType}>
               <select
                 name="businessType"
                 value={formData.businessType}
                 onChange={handleChange}
-                className="input">
-                <option value="">Business Type</option>
-                <option>Sole Proprietorship</option>
-                <option>Partnership</option>
-                <option>LLP</option>
-                <option>Private Limited</option>
-                <option>Public Limited</option>
-                <option>OPC</option>
-                <option>NGO</option>
-                <option>Trust</option>
+                className={`${authPlainInputClass} ${formData.businessType ? "" : "text-gray-400"} ${err("businessType")}`}
+              >
+                <option value="">Select type</option>
+                {BUSINESS_TYPES.map((t) => (
+                  <option key={t} value={t} className="text-gray-900">
+                    {t}
+                  </option>
+                ))}
               </select>
-
+            </AuthField>
+            <AuthField label="Number of employees">
               <input
                 name="employees"
-                placeholder="Number of Employees"
                 type="number"
+                min="0"
                 value={formData.employees}
                 onChange={handleChange}
-                className="input"
+                placeholder="e.g. 5"
+                className={authPlainInputClass}
               />
+            </AuthField>
+          </div>
+        </Section>
 
-              <button onClick={nextStep} className="btn w-full mt-4">Next</button>
-            </>
-          )}
+        {/* ---------- Account ---------- */}
+        <Section title="Your account" hint="We'll verify your email & WhatsApp">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <AuthField label={<>First name <Required /></>} error={errors.firstName} icon={User}>
+              <input
+                name="firstName"
+                autoComplete="given-name"
+                value={formData.firstName}
+                onChange={handleChange}
+                placeholder="First name"
+                className={`${authInputClass} ${err("firstName")}`}
+              />
+            </AuthField>
+            <AuthField label="Last name">
+              <input
+                name="lastName"
+                autoComplete="family-name"
+                value={formData.lastName}
+                onChange={handleChange}
+                placeholder="Last name"
+                className={authPlainInputClass}
+              />
+            </AuthField>
+          </div>
 
-          {/* STEP 2: Personal Info */}
-          {currentStep === 2 && otpStage && (
-            <>
-              <h2 className="text-xl font-bold mb-2">Verify your email and WhatsApp</h2>
-              <p className="text-sm text-gray-600 mb-4">
-                We sent two different 6-digit codes. Both expire in 5 minutes.
-              </p>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <AuthField label={<>Email address <Required /></>} error={errors.email} icon={Mail}>
+              <input
+                name="email"
+                type="email"
+                autoComplete="email"
+                value={formData.email}
+                onChange={handleChange}
+                placeholder="name@company.com"
+                className={`${authInputClass} ${err("email")}`}
+              />
+            </AuthField>
+            <AuthField label={<>WhatsApp number <Required /></>} error={errors.mobile} icon={Phone}>
+              <input
+                name="mobile"
+                type="tel"
+                autoComplete="tel"
+                value={formData.mobile}
+                onChange={handleChange}
+                placeholder="10-digit mobile number"
+                className={`${authInputClass} ${err("mobile")}`}
+              />
+            </AuthField>
+          </div>
 
+          <div className="grid gap-4 sm:grid-cols-2">
+            <AuthField label={<>Password <Required /></>} error={errors.password} icon={Lock}>
+              <input
+                type={showPassword ? "text" : "password"}
+                name="password"
+                autoComplete="new-password"
+                value={formData.password}
+                onChange={handleChange}
+                placeholder="Create a password"
+                className={`${authInputClass} pr-12 ${err("password")}`}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((v) => !v)}
+                tabIndex={-1}
+                aria-label={showPassword ? "Hide password" : "Show password"}
+                className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-1 text-gray-400 hover:text-green-700"
+              >
+                {showPassword ? <EyeOffIcon size={18} /> : <EyeIcon size={18} />}
+              </button>
+            </AuthField>
+            <AuthField label={<>Confirm password <Required /></>} error={errors.confirmPassword} icon={Lock}>
+              <input
+                type={showConfirmPassword ? "text" : "password"}
+                name="confirmPassword"
+                autoComplete="new-password"
+                value={formData.confirmPassword}
+                onChange={handleChange}
+                placeholder="Re-enter password"
+                className={`${authInputClass} pr-12 ${err("confirmPassword") || (passwordsMismatch ? authInputErrorClass : "")}`}
+              />
+              <button
+                type="button"
+                onClick={() => setShowConfirmPassword((v) => !v)}
+                tabIndex={-1}
+                aria-label={showConfirmPassword ? "Hide password" : "Show password"}
+                className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-1 text-gray-400 hover:text-green-700"
+              >
+                {showConfirmPassword ? <EyeOffIcon size={18} /> : <EyeIcon size={18} />}
+              </button>
+            </AuthField>
+          </div>
+
+          {/* Live password checklist */}
+          <ul className="flex flex-wrap gap-x-4 gap-y-1.5 text-xs">
+            {PASSWORD_RULES.map(({ label, test }) => {
+              const ok = test(password);
+              return (
+                <li key={label} className={`flex items-center gap-1 ${ok ? "text-green-700" : errors.password ? "text-red-500" : "text-gray-400"}`}>
+                  {ok ? <Check size={13} /> : <span className="inline-block h-1.5 w-1.5 rounded-full bg-gray-300 mx-[3.5px]" />}
+                  {label}
+                </li>
+              );
+            })}
+            {passwordsMismatch && !errors.confirmPassword && <li className="text-red-500">Passwords don't match</li>}
+          </ul>
+        </Section>
+
+        {/* ---------- Address & tax ---------- */}
+        <Section title="Address & tax" hint="Optional · you can add this later in Settings">
+          <AuthField label="Street address">
+            <input
+              name="street"
+              autoComplete="street-address"
+              value={formData.street}
+              onChange={handleChange}
+              placeholder="Door no, street, area"
+              className={authPlainInputClass}
+            />
+          </AuthField>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <AuthField label="City">
+              <input name="city" autoComplete="address-level2" value={formData.city} onChange={handleChange} placeholder="City" className={authPlainInputClass} />
+            </AuthField>
+            <AuthField label="State">
+              <input name="state" autoComplete="address-level1" value={formData.state} onChange={handleChange} placeholder="State" className={authPlainInputClass} />
+            </AuthField>
+            <AuthField label="Pincode">
+              <input name="pincode" autoComplete="postal-code" inputMode="numeric" value={formData.pincode} onChange={handleChange} placeholder="Pincode" className={authPlainInputClass} />
+            </AuthField>
+            <AuthField label="Country">
+              <input name="country" autoComplete="country-name" value={formData.country} onChange={handleChange} placeholder="Country" className={authPlainInputClass} />
+            </AuthField>
+            <AuthField label="GSTIN">
+              <input name="gstin" value={formData.gstin} onChange={handleChange} placeholder="e.g. 33ABCDE1234F1Z5" className={`${authPlainInputClass} uppercase placeholder:normal-case`} />
+            </AuthField>
+            <AuthField label="PAN">
+              <input name="pan" value={formData.pan} onChange={handleChange} placeholder="e.g. ABCDE1234F" className={`${authPlainInputClass} uppercase placeholder:normal-case`} />
+            </AuthField>
+          </div>
+        </Section>
+
+        <div className="space-y-3">
+          <button type="submit" disabled={isLoading} className={authButtonClass}>
+            {isLoading && !otpOpen && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            {isLoading && !otpOpen ? "Sending verification codes..." : "Create account"}
+          </button>
+          <p className="text-center text-xs text-gray-400">
+            We'll send a 6-digit code to your email and WhatsApp to confirm they're yours.
+          </p>
+        </div>
+      </form>
+
+      {/* ---------- OTP popup ---------- */}
+      {otpOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="relative w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl sm:p-8">
+            <button
+              type="button"
+              onClick={() => !isLoading && setOtpOpen(false)}
+              aria-label="Close"
+              className="absolute right-4 top-4 rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+            >
+              <X size={18} />
+            </button>
+
+            <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-xl bg-green-100 text-green-700">
+              <ShieldCheck size={24} />
+            </div>
+            <h2 className="text-xl font-bold text-gray-900">Verify your email and WhatsApp</h2>
+            <p className="mt-1 text-sm text-gray-500">
+              We sent two different 6-digit codes. Both expire in 5 minutes.
+            </p>
+
+            <div className="mt-6 space-y-4">
               {[
                 { channel: "email", label: "Email code", sentTo: formData.email },
                 { channel: "whatsapp", label: "WhatsApp code", sentTo: formData.mobile },
               ].map(({ channel, label, sentTo }, i) => (
-                <div key={channel} className="mb-3">
-                  <div className="flex justify-between items-baseline text-sm mb-1">
-                    <label htmlFor={`otp-${channel}`} className="font-semibold text-gray-700">
-                      {label} <span className="font-normal text-gray-500">sent to {sentTo}</span>
+                <div key={channel}>
+                  <div className="mb-1.5 flex items-baseline justify-between gap-2 text-sm">
+                    <label htmlFor={`otp-${channel}`} className="font-medium text-gray-700">
+                      {label} <span className="font-normal text-gray-400">· {sentTo}</span>
                     </label>
                     <button
                       type="button"
                       onClick={() => requestOtp(channel)}
                       disabled={resendIn[channel] > 0 || isLoading}
-                      className="text-green-700 font-semibold disabled:text-gray-400"
+                      className="shrink-0 font-medium text-green-700 hover:underline disabled:text-gray-400 disabled:no-underline"
                     >
                       {resendIn[channel] > 0 ? `Resend in ${resendIn[channel]}s` : "Resend"}
                     </button>
@@ -269,261 +495,34 @@ const Signup = () => {
                     inputMode="numeric"
                     autoComplete={channel === "email" ? "one-time-code" : "off"}
                     maxLength={6}
-                    placeholder="Enter 6-digit code"
+                    placeholder="••••••"
                     value={codes[channel]}
                     onChange={setCode(channel)}
                     onKeyDown={(e) => e.key === "Enter" && confirmOtp()}
-                    className="input text-center tracking-widest text-lg"
+                    className={`${authPlainInputClass} text-center text-lg font-semibold tracking-[0.5em]`}
                     autoFocus={i === 0}
                   />
                 </div>
               ))}
-
-              <button onClick={confirmOtp} disabled={isLoading} className="btn w-full">
-                {isLoading ? "Verifying..." : "Verify & Continue"}
-              </button>
-
-              <div className="flex justify-start items-center mt-4 text-sm">
-                <button onClick={() => setOtpStage(false)} className="btn-gray">
-                  Change email or number
-                </button>
-              </div>
-            </>
-          )}
-
-          {currentStep === 2 && !otpStage && (
-            <>
-              <h2 className="text-xl font-bold mb-4">Personal Information</h2>
-
-              <div className="grid grid-cols-2 gap-4">
-                <input
-                  name="firstName"
-                  placeholder="First Name"
-                  value={formData.firstName}
-                  onChange={handleChange}
-                  className="input"
-                />
-                <input
-                  name="lastName"
-                  placeholder="Last Name"
-                  value={formData.lastName}
-                  onChange={handleChange}
-                  className="input"
-                />
-              </div>
-
-              <input
-                name="email"
-                placeholder="Email"
-                type="email"
-                value={formData.email}
-                onChange={handleChange}
-                className="input"
-              />
-
-              <input
-                name="mobile"
-                placeholder="WhatsApp mobile number"
-                type="tel"
-                value={formData.mobile}
-                onChange={handleChange}
-                className="input"
-              />
-
-              <div className="relative">
-                <input
-                  type={showPassword ? "text" : "password"}
-                  name="password"
-                  placeholder="Password"
-                  value={formData.password}
-                  onChange={handleChange}
-                  className="input pr-11"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword((v) => !v)}
-                  tabIndex={-1}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 -mt-1.5 text-gray-400 hover:text-green-600"
-                >
-                  {showPassword ? <EyeOffIcon size={16} /> : <EyeIcon size={16} />}
-                </button>
-              </div>
-
-              <div className="relative">
-                <input
-                  type={showConfirmPassword ? "text" : "password"}
-                  name="confirmPassword"
-                  placeholder="Confirm Password"
-                  value={formData.confirmPassword}
-                  onChange={handleChange}
-                  className="input pr-11"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowConfirmPassword((v) => !v)}
-                  tabIndex={-1}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 -mt-1.5 text-gray-400 hover:text-green-600"
-                >
-                  {showConfirmPassword ? <EyeOffIcon size={16} /> : <EyeIcon size={16} />}
-                </button>
-              </div>
-
-              <div className="flex justify-between mt-4">
-                <button onClick={prevStep} className="btn-gray">Back</button>
-                <button onClick={nextStep} disabled={isLoading} className="btn">
-                  {isLoading ? "Sending code..." : "Next"}
-                </button>
-              </div>
-            </>
-          )}
-
-          {/* STEP 3: Address & Tax + Submit */}
-          {currentStep === 3 && (
-            <>
-              <h2 className="text-xl font-bold mb-4">Address & Tax Details</h2>
-
-              <input
-                name="street"
-                placeholder="Street Address"
-                value={formData.street}
-                onChange={handleChange}
-                className="input"
-              />
-
-              <div className="grid grid-cols-2 gap-4">
-                <input
-                  name="city"
-                  placeholder="City"
-                  value={formData.city}
-                  onChange={handleChange}
-                  className="input"
-                />
-                <input
-                  name="state"
-                  placeholder="State"
-                  value={formData.state}
-                  onChange={handleChange}
-                  className="input"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <input
-                  name="pincode"
-                  placeholder="Pincode"
-                  value={formData.pincode}
-                  onChange={handleChange}
-                  className="input"
-                />
-                <input
-                  name="country"
-                  placeholder="Country"
-                  value={formData.country}
-                  onChange={handleChange}
-                  className="input"
-                />
-              </div>
-
-              <div className="border-t my-4 pt-4">
-                <p className="text-sm text-gray-600 mb-2">Tax Information (Optional)</p>
-                <input
-                  name="gstin"
-                  placeholder="GSTIN (e.g., 22A... )"
-                  value={formData.gstin}
-                  onChange={handleChange}
-                  className="input"
-                />
-                <input
-                  name="pan"
-                  placeholder="PAN"
-                  value={formData.pan}
-                  onChange={handleChange}
-                  className="input"
-                />
-              </div>
-
-              <div className="flex justify-between mt-4">
-                <button onClick={prevStep} className="btn-gray">Back</button>
-                <button onClick={handleSubmit} className="btn">
-                  {isLoading ? "Creating Account..." : "Create Account"}
-                </button>
-              </div>
-            </>
-          )}
-
-          {/* STEP 4: Success Message */}
-          {currentStep === 4 && (
-            <div className="text-center py-10">
-              <div className="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-4">
-                <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path></svg>
-              </div>
-              <h2 className="text-2xl font-bold text-gray-800">
-                Account Created Successfully!
-              </h2>
-              <p className="mt-2 text-gray-600">
-                Redirecting to your dashboard...
-              </p>
             </div>
-          )}
 
-        </div>
-      </div>
+            <button type="button" onClick={confirmOtp} disabled={isLoading} className={`${authButtonClass} mt-6`}>
+              {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {isLoading ? "Creating your account..." : "Verify & create account"}
+            </button>
 
-      {/* ================= RIGHT SIDE – BILLING IMAGE ================= */}
-      <div className="hidden lg:flex w-1/2 relative">
-        <img
-          src={billingDashboardImage}
-          alt="Billing Dashboard"
-          className="absolute inset-0 w-full h-full object-cover"
-        />
-        <div className="absolute inset-0 bg-green-700/70 flex items-center justify-center p-12">
-          <div className="text-white text-center max-w-lg">
-            <h2 className="text-3xl font-bold mb-4">
-              Smart Billing. Powerful Growth.
-            </h2>
-            <p className="text-lg">
-              Manage GST invoices, inventory, reports and payments with a
-              secure and scalable billing platform.
-            </p>
+            <button
+              type="button"
+              onClick={() => setOtpOpen(false)}
+              disabled={isLoading}
+              className="mt-3 w-full text-center text-sm font-medium text-gray-500 hover:text-gray-700"
+            >
+              Change email or number
+            </button>
           </div>
         </div>
-      </div>
-
-      {/* Styles */}
-      <style>{`
-        .input {
-          width:100%;
-          border:1px solid #d1d5db;
-          padding:10px;
-          border-radius:8px;
-          margin-bottom:12px;
-          outline:none;
-        }
-        .input:focus {
-          border-color: #16a34a;
-        }
-        .btn {
-          background:#16a34a;
-          color:white;
-          padding:10px 20px;
-          border-radius:8px;
-          font-weight:600;
-        }
-        .btn:hover {
-          background:#15803d;
-        }
-        .btn-gray {
-          background:#f3f4f6;
-          color:#374151;
-          padding:10px 20px;
-          border-radius:8px;
-          font-weight:600;
-        }
-        .btn-gray:hover {
-          background:#e5e7eb;
-        }
-      `}</style>
-    </div>
+      )}
+    </AuthShell>
   );
 };
 

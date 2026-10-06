@@ -428,9 +428,15 @@ exports.getBills = async (req, res) => {
 exports.createBill = async (req, res) => {
     try {
         const { userId, role, ownerId } = req.user;
+        const billOwnerId = role === 'owner' ? userId : ownerId;
+        // The invoice number is always assigned here (never trusted from the
+        // client), so every bill in the business gets the next unique number.
+        const { number: invoiceNumber, receiptNo } = await platformStore.takeNextInvoiceNumber(billOwnerId);
         const billData = {
             ...req.body,
-            ownerId: role === 'owner' ? userId : ownerId,
+            receiptNo,
+            invoiceNumber,
+            ownerId: billOwnerId,
             createdBy: userId,
             createdAt: new Date().toISOString()
         };
@@ -471,7 +477,7 @@ exports.sendBillWhatsapp = async (req, res) => {
 
         const result = mode === 'text'
             ? await sendInvoiceText(bill, owner?.companyDetails?.name)
-            : await sendInvoicePdf(bill, pdf);
+            : await sendInvoicePdf(bill, pdf, { businessName: owner?.companyDetails?.name, ownerGstin: owner?.companyDetails?.gstin || owner?.gstin });
         await billRef.update({
             whatsappSentAt: new Date().toISOString(),
             whatsappMessageId: result.messageId || null,

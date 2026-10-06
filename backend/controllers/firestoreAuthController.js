@@ -192,7 +192,7 @@ exports.register = async (req, res) => {
 // @desc    Login User
 // @route   POST /api/v2/auth/login
 exports.login = async (req, res) => {
-    const { email, password, loginType } = req.body;
+    const { email, password, loginType, remember } = req.body;
 
     if (!email || !password) {
         return res.status(400).json({ msg: "Please enter email and password" });
@@ -386,7 +386,8 @@ exports.login = async (req, res) => {
             }
         };
 
-        const jwtToken = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '24h' });
+        // "Remember me" keeps the user signed in across browser restarts for 30 days.
+        const jwtToken = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: remember === true ? '30d' : '24h' });
 
         res.json({
             token: jwtToken,
@@ -414,8 +415,14 @@ exports.login = async (req, res) => {
                     purchase_tax_type: userData.purchase_tax_type !== undefined ? userData.purchase_tax_type : (bossData.purchase_tax_type || 'exclusive'),
                     sales_gst: userData.sales_gst !== undefined ? userData.sales_gst : (bossData.sales_gst || 0),
                     sales_tax_type: userData.sales_tax_type !== undefined ? userData.sales_tax_type : (bossData.sales_tax_type || 'exclusive'),
+                    // Invoice numbering is business-wide (the owner's counter), see platformStore.takeNextInvoiceNumber.
+                    invoice_prefix: bossData.invoice_prefix ?? bossData.invoiceSettings?.prefix ?? 'INV-',
+                    next_invoice_number: bossData.next_invoice_number ?? bossData.invoiceSettings?.sequence ?? 1,
+                    invoice_terms: bossData.invoice_terms ?? null, // null = default terms on the GST invoice
                     printer_configs: userData.printer_configs !== undefined ? userData.printer_configs : (bossData.printer_configs || []),
                     printer_auto_print: userData.printer_auto_print !== undefined ? userData.printer_auto_print : (bossData.printer_auto_print || false),
+                    // Finalize opens the print dialog unless the store turned it off (default on).
+                    print_on_finalize: userData.print_on_finalize ?? bossData.print_on_finalize ?? true,
                     // Default receipt format picked in Settings -> Printer (older accounts
                     // fall back to the format of their first per-category printer rule).
                     printer_format: userData.printer_format || bossData.printer_format
@@ -460,7 +467,8 @@ exports.updateProfile = async (req, res) => {
             street, city, state, pincode,
             invoice_prefix, next_invoice_number,
             purchase_gst, purchase_tax_type, sales_gst, sales_tax_type,
-            printer_configs, printer_auto_print, printer_format
+            printer_configs, printer_auto_print, printer_format, print_on_finalize,
+            invoice_terms
         } = req.body;
 
         // === MONGODB MODE ===
@@ -484,6 +492,7 @@ exports.updateProfile = async (req, res) => {
             if (sales_tax_type !== undefined) subuserSettings.sales_tax_type = sales_tax_type;
             if (printer_configs !== undefined) subuserSettings.printer_configs = printer_configs;
             if (printer_auto_print !== undefined) subuserSettings.printer_auto_print = printer_auto_print;
+            if (typeof print_on_finalize === 'boolean') subuserSettings.print_on_finalize = print_on_finalize;
             if (PRINTER_FORMATS.includes(printer_format)) subuserSettings.printer_format = printer_format;
 
             if (businessName || businessType || gstin || pan) {
@@ -514,6 +523,7 @@ exports.updateProfile = async (req, res) => {
                 };
                 if (invoice_prefix !== undefined) businessUpdates.invoice_prefix = invoice_prefix;
                 if (next_invoice_number !== undefined) businessUpdates.next_invoice_number = next_invoice_number;
+                if (typeof invoice_terms === 'string') businessUpdates.invoice_terms = invoice_terms.slice(0, 1000);
             }
 
             if (role === 'owner') {
@@ -523,6 +533,7 @@ exports.updateProfile = async (req, res) => {
                 if (sales_tax_type !== undefined) businessUpdates.sales_tax_type = sales_tax_type;
                 if (printer_configs !== undefined) businessUpdates.printer_configs = printer_configs;
                 if (printer_auto_print !== undefined) businessUpdates.printer_auto_print = printer_auto_print;
+                if (typeof print_on_finalize === 'boolean') businessUpdates.print_on_finalize = print_on_finalize;
                 if (PRINTER_FORMATS.includes(printer_format)) businessUpdates.printer_format = printer_format;
 
                 await OwnerModel.updateOne(
@@ -567,6 +578,7 @@ exports.updateProfile = async (req, res) => {
         if (sales_tax_type !== undefined) subuserSettings.sales_tax_type = sales_tax_type;
         if (printer_configs !== undefined) subuserSettings.printer_configs = printer_configs;
         if (printer_auto_print !== undefined) subuserSettings.printer_auto_print = printer_auto_print;
+        if (typeof print_on_finalize === 'boolean') subuserSettings.print_on_finalize = print_on_finalize;
             if (PRINTER_FORMATS.includes(printer_format)) subuserSettings.printer_format = printer_format;
 
         if (businessName || businessType || gstin || pan) {
@@ -597,6 +609,7 @@ exports.updateProfile = async (req, res) => {
             };
             if (invoice_prefix !== undefined) businessUpdates.invoice_prefix = invoice_prefix;
             if (next_invoice_number !== undefined) businessUpdates.next_invoice_number = next_invoice_number;
+            if (typeof invoice_terms === 'string') businessUpdates.invoice_terms = invoice_terms.slice(0, 1000);
         }
 
         if (role === 'owner') {
@@ -606,6 +619,7 @@ exports.updateProfile = async (req, res) => {
             if (sales_tax_type !== undefined) businessUpdates.sales_tax_type = sales_tax_type;
             if (printer_configs !== undefined) businessUpdates.printer_configs = printer_configs;
             if (printer_auto_print !== undefined) businessUpdates.printer_auto_print = printer_auto_print;
+            if (typeof print_on_finalize === 'boolean') businessUpdates.print_on_finalize = print_on_finalize;
             if (PRINTER_FORMATS.includes(printer_format)) businessUpdates.printer_format = printer_format;
         }
 
@@ -736,8 +750,14 @@ exports.getMe = async (req, res) => {
                 purchase_tax_type: userData.purchase_tax_type !== undefined ? userData.purchase_tax_type : (bossData.purchase_tax_type || 'exclusive'),
                 sales_gst: userData.sales_gst !== undefined ? userData.sales_gst : (bossData.sales_gst || 0),
                 sales_tax_type: userData.sales_tax_type !== undefined ? userData.sales_tax_type : (bossData.sales_tax_type || 'exclusive'),
+                // Invoice numbering is business-wide (the owner's counter), see platformStore.takeNextInvoiceNumber.
+                invoice_prefix: bossData.invoice_prefix ?? bossData.invoiceSettings?.prefix ?? 'INV-',
+                next_invoice_number: bossData.next_invoice_number ?? bossData.invoiceSettings?.sequence ?? 1,
+                invoice_terms: bossData.invoice_terms ?? null, // null = default terms on the GST invoice
                 printer_configs: userData.printer_configs !== undefined ? userData.printer_configs : (bossData.printer_configs || []),
                 printer_auto_print: userData.printer_auto_print !== undefined ? userData.printer_auto_print : (bossData.printer_auto_print || false),
+                // Finalize opens the print dialog unless the store turned it off (default on).
+                print_on_finalize: userData.print_on_finalize ?? bossData.print_on_finalize ?? true,
                     // Default receipt format picked in Settings -> Printer (older accounts
                     // fall back to the format of their first per-category printer rule).
                     printer_format: userData.printer_format || bossData.printer_format

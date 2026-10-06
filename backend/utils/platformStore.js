@@ -207,3 +207,44 @@ exports.updatePlatformSettings = async (patch) => {
     }
     return exports.getPlatformSettings();
 };
+
+// ---------- Invoice numbering ----------
+// Bills get their number here, when they are saved, so two tills can never
+// hand out the same number and the counter always moves forward. The owner
+// record keeps it twice (next_invoice_number and invoiceSettings.sequence,
+// both editable in Settings → Billing & tax); they are kept equal.
+const formatInvoiceNumber = (prefix, number) => {
+    const p = String(prefix ?? 'INV-').trim();
+    if (!p) return String(number);
+    return /[-/_]$/.test(p) ? `${p}${number}` : `${p}-${number}`;
+};
+exports.formatInvoiceNumber = formatInvoiceNumber;
+
+// Returns { number, receiptNo } and moves the owner's counter on by one.
+exports.takeNextInvoiceNumber = async (ownerId) => {
+    if (isMongo()) {
+        const current = { $ifNull: ['$next_invoice_number', { $ifNull: ['$invoiceSettings.sequence', 1] }] };
+        const before = await models.Owner.collection.findOneAndUpdate(
+            { userId: ownerId },
+            [
+                { $set: { next_invoice_number: { $add: [current, 1] } } },
+                { $set: { 'invoiceSettings.sequence': '$next_invoice_number' } },
+            ],
+            { returnDocument: 'before' }
+        );
+        if (!before) throw new Error('Owner not found for invoice numbering');
+        const number = Number(before.next_invoice_number ?? before.invoiceSettings?.sequence ?? 1);
+        const prefix = before.invoice_prefix ?? before.invoiceSettings?.prefix;
+        return { number, receiptNo: formatInvoiceNumber(prefix, number) };
+    }
+    const ref = ownersCol().doc(ownerId);
+    return db.runTransaction(async (tx) => {
+        const doc = await tx.get(ref);
+        if (!doc.exists) throw new Error('Owner not found for invoice numbering');
+        const data = doc.data();
+        const number = Number(data.next_invoice_number ?? data.invoiceSettings?.sequence ?? 1);
+        tx.update(ref, { next_invoice_number: number + 1, 'invoiceSettings.sequence': number + 1 });
+        const prefix = data.invoice_prefix ?? data.invoiceSettings?.prefix;
+        return { number, receiptNo: formatInvoiceNumber(prefix, number) };
+    });
+};

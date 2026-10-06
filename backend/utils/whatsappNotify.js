@@ -10,31 +10,61 @@ const formatDate = (value) => {
     return Number.isNaN(d.getTime()) ? String(value) : d.toLocaleDateString('en-GB', { timeZone: 'Asia/Kolkata' });
 };
 
+// Meta rejects template params containing newlines, tabs or 4+ spaces in a row.
+const oneLine = (text) => String(text).replace(/[\r\n\t]+/g, ' ').replace(/ {4,}/g, '   ').trim();
+
+// The PDF is named after what was printed: the GST formats are a tax invoice
+// (or a bill of supply when the shop has no GSTIN); everything else (thermal,
+// plain A4/A5) is a bill. bill.printFormat is saved by the billing screen.
+const documentKind = (bill, ownerGstin) => {
+    if (!/gst/i.test(String(bill.printFormat || ''))) return 'Bill';
+    return /^\d{2}[A-Z0-9]{13}$/i.test(String(ownerGstin || '').trim()) ? 'Tax_Invoice' : 'Bill_of_Supply';
+};
+exports.documentKind = documentKind;
+
+// bill_created (names the shop, says "bill") replaces invoice_created once Meta
+// approves it. See WHATSAPP_BILL_CREATED_ENABLED and utils/whatsappTemplates.js.
+const useBillCreated = () => process.env.WHATSAPP_BILL_CREATED_ENABLED === 'true';
+
 /**
- * Send a saved POS bill to the customer's WhatsApp with its PDF attached
- * (invoice_created template). The PDF is the receipt the browser renders, so the
- * customer gets exactly what was printed. Throws so the caller can show why it failed.
+ * Send a saved POS bill to the customer's WhatsApp with its PDF attached.
+ * The PDF is the receipt the browser renders, so the customer gets exactly
+ * what was printed. Throws so the caller can show why it failed.
  */
-exports.sendInvoicePdf = async (bill, pdfBuffer) => {
+exports.sendInvoicePdf = async (bill, pdfBuffer, { businessName, ownerGstin } = {}) => {
     const invoiceNumber = bill.receiptNo && bill.receiptNo !== 'N/A' ? String(bill.receiptNo) : '';
     const safeName = (invoiceNumber || 'receipt').replace(/[^\w.-]+/g, '_');
-    const documentId = await wa.uploadMedia(pdfBuffer, { filename: `Invoice_${safeName}.pdf` });
+    const filename = `${documentKind(bill, ownerGstin)}_${safeName}.pdf`;
+    const documentId = await wa.uploadMedia(pdfBuffer, { filename });
 
+    const common = {
+        customer_name: oneLine(bill.customerName || 'Customer'),
+        amount: money(bill.totals?.grandTotal ?? 0),
+        document_id: documentId,
+        document_filename: filename
+    };
+    if (useBillCreated()) {
+        return wa.sendTemplate({
+            to: bill.customerPhone,
+            type: 'BILL_CREATED',
+            data: {
+                ...common,
+                business_name: oneLine(businessName || 'our store'),
+                bill_number: invoiceNumber || '-',
+                bill_date: formatDate(bill.receiptDate || bill.createdAt)
+            }
+        });
+    }
     return wa.sendTemplate({
         to: bill.customerPhone,
         type: 'INVOICE_CREATED',
         data: {
-            customer_name: bill.customerName || 'Customer',
+            ...common,
             invoice_number: invoiceNumber || '-',
-            invoice_date: formatDate(bill.receiptDate || bill.createdAt),
-            amount: money(bill.totals?.grandTotal ?? 0),
-            document_id: documentId
+            invoice_date: formatDate(bill.receiptDate || bill.createdAt)
         }
     });
 };
-
-// Meta rejects template params containing newlines, tabs or 4+ spaces in a row.
-const oneLine = (text) => String(text).replace(/[\r\n\t]+/g, ' ').replace(/ {4,}/g, '   ').trim();
 
 // "Milk x2 (₹100.00), Curd x1 (₹40.00) +3 more", kept under ~600 characters.
 const summarizeItems = (items = []) => {

@@ -1,6 +1,10 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useLocation } from "react-router-dom";
 import axios from "axios";
+import { previewInvoiceNumber } from "../../utils/invoiceNumber";
+import { printReceipt } from "../../utils/printReceipt";
+import GstInvoice from "./GstInvoice";
+import ThermalReceipt from "./ThermalReceipt";
 import API_URL from "../../config/api";
 import {
   Search,
@@ -491,7 +495,7 @@ const IndustryBilling = () => {
     }
 
     if (!existingItem) {
-      setCart([...cart, { productId: product.id, productSku: validSku, image: product.imageUrl || product.image, name: product.name, price: itemRate, category: product.category, qty: 1, gstRate: validGst }]);
+      setCart([...cart, { productId: product.id, productSku: validSku, image: product.imageUrl || product.image, name: product.name, price: itemRate, category: product.category, qty: 1, gstRate: validGst, hsn: product.hsnSac || product.hsn || "", batch: product.batchNumber || product.batchNo || "", expiryDate: product.expiryDate || "" }]);
     } else {
       setCart(_.map(cart, (item) => item.productSku === validSku ? { ...item, qty: (Number(item.qty) || 0) + 1 } : item));
     }
@@ -613,10 +617,8 @@ const IndustryBilling = () => {
   const submit = async (dueBill = false) => {
     if (!currentUser) { alert("Error: Not logged in."); return; }
     const time = new Date();
-    const receiptPrefix = userData?.invoiceSettings?.prefix || userData?.businessName?.substring(0, 3).toUpperCase() || "INV";
-    let receiptSequence = userData?.invoiceSettings?.sequence;
-    if (!receiptSequence) receiptSequence = Date.now().toString().slice(-6);
-    setReceiptNo(`${receiptPrefix}-${receiptSequence}`);
+    // Likely number; the server assigns the real one when the bill is saved.
+    setReceiptNo(previewInvoiceNumber(userData));
     setReceiptDate(dateFormat(time));
     setIsDueBill(dueBill);
     setIsShowModalReceipt(true);
@@ -663,12 +665,16 @@ const IndustryBilling = () => {
         const pdfWidth = format.width;
         pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: [pdfWidth, pdfWidth * ratio] });
         pdf.addImage(imgData, imgType, 0, 0, pdfWidth, pdfWidth * ratio);
-      } else if (formatStr.includes('a5')) {
-        pdf = new jsPDF('p', 'mm', 'a5');
-        pdf.addImage(imgData, imgType, 0, 0, 148, 148 * ratio);
       } else {
-        pdf = new jsPDF('p', 'mm', 'a4');
-        pdf.addImage(imgData, imgType, 0, 0, 210, 210 * ratio);
+        const isA5Pdf = formatStr.includes('a5');
+        const [pageW, pageH] = isA5Pdf ? [148, 210] : [210, 297];
+        pdf = new jsPDF('p', 'mm', isA5Pdf ? 'a5' : 'a4');
+        const imgH = pageW * ratio;
+        // Long bills continue on extra pages: the same image, shifted up one page at a time.
+        for (let offset = 0; offset < imgH - 1; offset += pageH) {
+          if (offset > 0) pdf.addPage();
+          pdf.addImage(imgData, imgType, 0, -offset, pageW, imgH);
+        }
       }
       return pdf;
     } finally { document.body.removeChild(container); }
@@ -698,13 +704,7 @@ const IndustryBilling = () => {
   };
 
   const handlePrint = () => {
-    if (!receiptContentRef.current || !printAreaRef.current) return;
-    printAreaRef.current.innerHTML = receiptContentRef.current.innerHTML;
-    const titleBefore = document.title;
-    document.title = receiptNo || "Receipt";
-    window.print();
-    document.title = titleBefore;
-    setTimeout(() => { printAreaRef.current.innerHTML = ""; }, 1000);
+    printReceipt({ format: printerFormat, contentEl: receiptContentRef.current, printAreaEl: printAreaRef.current, title: receiptNo || "Receipt" });
   };
 
   const storeBillingCustomer = async (customer) => {
@@ -802,9 +802,10 @@ const IndustryBilling = () => {
       const saleData = {
         receiptNo: receiptNo || "N/A", receiptDate: receiptDate || new Date().toISOString(), customerId: customerId || null,
         customerName: customerForm.name || "", customerPhone: customerForm.phone || "",
-        items: cart.map(item => ({ sku: item.productSku || "NA", name: item.name || "Unknown", price: Number(item.price || 0), qty: Number(item.qty || 1), category: item.category || "Uncategorized", gstRate: Number(item.gstRate || 0) })),
+        items: cart.map(item => ({ sku: item.productSku || "NA", name: item.name || "Unknown", price: Number(item.price || 0), qty: Number(item.qty || 1), category: item.category || "Uncategorized", gstRate: Number(item.gstRate || 0), hsn: item.hsn || "" })),
         totals: getTotals(),
         paymentMethod: paymentMethod,
+        printFormat: printerFormat, // names the WhatsApp PDF (Bill / Tax_Invoice)
         discount: Number(discount || 0), soldBy: currentUser.email || currentUser.uid, createdAt: new Date().toISOString(),
         dueBill: isDueSale, dueAmount: isDueSale ? dueAmount : 0
       };
@@ -812,12 +813,19 @@ const IndustryBilling = () => {
       const config = { headers: { 'x-auth-token': token } };
 
       let savedBillId = null;
+      let finalReceiptNo = receiptNo;
       try {
         const billRes = await axios.post(`${API_URL}/billing/bills`, saleData, config);
         savedBillId = billRes.data?.id || null;
+        finalReceiptNo = billRes.data?.receiptNo || receiptNo;
       } catch (err) {
         console.error("Error creating bill via API:", err);
+        alert(`The bill was not saved, so stock and records were not changed. Please try again.\n${err.response?.data?.msg || err.message}`);
+        return;
       }
+      // Re-render the receipt with the real number before it is printed or
+      // turned into the WhatsApp PDF (both copy the rendered receipt).
+      flushSync(() => setReceiptNo(finalReceiptNo));
 
       if (savedBillId && canWhatsappBill && sendWhatsappBill && customerForm.phone) {
         await sendBillOnWhatsapp(savedBillId, token);
@@ -888,25 +896,13 @@ const IndustryBilling = () => {
 
       if (customerId) await processCustomerUpdates(customerId, grandTotal);
 
-      printAreaRef.current.innerHTML = receiptContentRef.current.innerHTML;
-      const titleBefore = document.title;
-      document.title = receiptNo;
-      window.print();
+      // Settings → Printing → "Print automatically on Finalize" (on unless turned off).
+      if (userData?.Tenant?.print_on_finalize !== false) {
+        printReceipt({ format: printerFormat, contentEl: receiptContentRef.current, printAreaEl: printAreaRef.current, title: finalReceiptNo });
+      }
 
       setIsShowModalReceipt(false);
       setIsDueBill(false);
-      printAreaRef.current.innerHTML = "";
-      document.title = titleBefore;
-
-      if (userData?.Tenant?.printer_auto_print) {
-        setTimeout(() => {
-          handlePrint();
-        }, 500);
-      }
-
-      if (userData?.invoiceSettings?.sequence) {
-        try { await updateProfile({ invoiceSettings: { ...userData.invoiceSettings, sequence: Number(userData.invoiceSettings.sequence) + 1 } }); } catch (e) { }
-      }
       clear();
 
       window.location.reload();
@@ -972,78 +968,61 @@ const IndustryBilling = () => {
     const businessEmail = currentUser?.email || userData?.email || "";
 
     const formatStr = (printerFormat || "A4").toLowerCase();
-    const isThermal = formatStr.includes("thermal") || formatStr.includes("80mm") || formatStr.includes("58mm") || formatStr === "a4" || formatStr === "a5";
-    const isA5 = formatStr.includes("a5");
+    const isThermalFormat = formatStr.includes("thermal") || formatStr.includes("80mm") || formatStr.includes("58mm");
+    const totals = getTotals();
+    const manualDiscount = Number(discount) || 0;
+    const business = { name: businessName, ...businessAddress, phone: businessPhone, email: businessEmail, gstin: businessGstin };
+    const inclusive = userData?.Tenant?.sales_tax_type === "inclusive";
 
-    if (isThermal) {
-      let thermalClass = "receipt-thermal-80";
-      if (formatStr.includes("58mm")) thermalClass = "receipt-thermal-58";
-      else if (formatStr === "a5") thermalClass = "receipt-a5";
-      else if (formatStr === "a4") thermalClass = "receipt-a4";
-
+    // "Thermal 80mm" / "Thermal 58mm"
+    if (isThermalFormat) {
       return (
-        <div className={`${thermalClass} text-gray-800 bg-white`}>
-          <div className="text-center mb-6">
-            <h2 className="text-lg font-bold">{businessName}</h2>
-            <p className="text-xs">
-              {[businessAddress.street, businessAddress.city, businessAddress.state, businessAddress.pincode].filter(Boolean).join(", ") || [userData.street, userData.city, userData.state, userData.pincode].filter(Boolean).join(", ")}
-            </p>
-            {businessPhone && <p className="text-xs">Phone: {businessPhone}</p>}
-            {businessGstin && <p className="text-xs">GSTIN: {businessGstin}</p>}
-          </div>
-          <div className="flex justify-between text-xs mb-2"><span>Receipt #: {receiptNo}</span><span>Date: {receiptDate}</span></div>
-          <div className="text-xs mb-2">
-            <span>Customer: {customerForm.name}</span><br /><span>Phone: {customerForm.phone}</span><br /><span>Location: {customerForm.location}</span>
-            {customerForm.gstin && <><br /><span>GSTIN: {customerForm.gstin}</span></>}
-          </div>
-          <table className="w-full text-xs mb-4">
-            <thead><tr className="border-b-2 border-t-2 border-dashed border-gray-400"><th className="text-left py-1.5 font-semibold">Item</th><th className="text-center py-1.5 font-semibold">Qty</th><th className="text-right py-1.5 font-semibold">Price</th><th className="text-right py-1.5 font-semibold">Total</th></tr></thead>
-            <tbody>{cart.map((item, i) => (<tr key={i} className="border-b border-dashed border-gray-300"><td className="py-1.5 text-left">{item.name}</td><td className="py-1.5 text-center">{item.qty}</td><td className="py-1.5 text-right">{numberFormat(item.price)}</td><td className="py-1.5 text-right">{numberFormat(item.qty * item.price)}</td></tr>))}</tbody>
-          </table>
-          <div className="text-xs">
-            <div className="flex justify-between mb-0.5"><span>Subtotal (Excl. GST):</span><span>{priceFormat(currentSubtotal)}</span></div>
-            <div className="flex justify-between mb-0.5"><span>Total GST:</span><span>{priceFormat(currentTotalGst)}</span></div>
-            {discount > 0 && <div className="flex justify-between mb-0.5 text-red-500 font-medium"><span>Discount:</span><span>-{priceFormat(discount)}</span></div>}
-            <div className="flex justify-between font-bold text-sm border-t border-gray-400 pt-1 mt-1"><span>Grand Total:</span><span>{priceFormat(currentGrandTotal)}</span></div>
-          </div>
-          <div className="text-xs mt-3">
-            <div className="flex justify-between"><span>Payment:</span><span className="capitalize">{paymentMethod}</span></div>
-            {paymentMethod === "cash" && (<><div className="flex justify-between"><span>Cash Received:</span><span>{priceFormat(cash)}</span></div>{isDueBill ? <div className="flex justify-between"><span>Due:</span><span>{priceFormat(currentGrandTotal - cash)}</span></div> : <div className="flex justify-between"><span>Change:</span><span>{priceFormat(change)}</span></div>}</>)}
-          </div>
-          <div className="text-center mt-6 text-xs"><p>Thank you for your purchase!</p></div>
-        </div>
+        <ThermalReceipt
+          width={formatStr.includes("58mm") ? "58" : "80"}
+          title={undefined}
+          business={business}
+          customer={customerForm}
+          customerLabel={"Customer"}
+          items={cart}
+          receiptNo={receiptNo}
+          receiptDate={receiptDate}
+          inclusive={inclusive}
+          subtotal={currentSubtotal}
+          totalGst={currentTotalGst}
+          discount={manualDiscount}
+          loyaltyDiscount={Math.max((totals.discount || 0) - manualDiscount, 0)}
+          grandTotal={currentGrandTotal}
+          paymentMethod={paymentMethod}
+          cash={cash}
+          change={change}
+          isDue={isDueBill}
+        />
       );
     }
-    const isDotMatrix = formatStr.includes("dotmatrix");
-    const containerClass = isDotMatrix ? "receipt-dotmatrix font-mono" : (isA5 ? "receipt-a5 font-arial" : "receipt-a4 font-arial");
+
+    // "A4" / "A5" → full-page receipt; "A4 GST Invoice" / "A5 GST Invoice" → GST invoice
+    const isGstFormat = formatStr.includes("gst");
     return (
-      <div className={`${containerClass} w-full bg-white text-black text-sm`}>
-        <div className="flex justify-between border-b-2 border-black pb-4 mb-4">
-          <div className="w-[60%]">
-            <h1 className="text-2xl font-bold uppercase mb-1">{businessName}</h1>
-            <p>{businessAddress.street || "Street Address"}</p>
-            <p>{[businessAddress.city, businessAddress.state].filter(Boolean).join(", ")} {businessAddress.pincode ? `- ${businessAddress.pincode}` : ""}</p>
-            {businessPhone && <p>Phone: {businessPhone}</p>}
-            {businessEmail && <p>Email: {businessEmail}</p>}
-            {businessGstin && <p className="font-semibold mt-1">GSTIN: {businessGstin}</p>}
-            {businessAddress.state && <p>State / POS: {businessAddress.state}</p>}
-          </div>
-          <div className="w-[40%] text-right"><h2 className="text-xl font-bold uppercase mb-2">{formatStr.includes("gst") ? "TAX INVOICE" : "RECEIPT"}</h2><div className="space-y-1"><div className="flex justify-end gap-4"><span className="font-semibold">{formatStr.includes("gst") ? "Invoice No" : "Receipt No"}:</span><span>{receiptNo}</span></div><div className="flex justify-end gap-4"><span className="font-semibold">{formatStr.includes("gst") ? "Invoice Date" : "Receipt Date"}:</span><span>{receiptDate}</span></div></div></div>
-        </div>
-        <div className="border border-black mb-4 flex">
-          <div className="w-1/2 p-2 border-r border-black"><p className="font-bold border-b border-black w-full mb-2 pb-1">Issued To:</p><p className="font-semibold">{customerForm.name || "Cash Sale"}</p>{customerForm.gstin && <p>GSTIN: {customerForm.gstin}</p>}<p>POS: {customerForm.location || businessAddress.state || "State"}</p></div>
-          <div className="w-1/2 p-2"><p className="font-bold border-b border-black w-full mb-2 pb-1">Billing & Shipping Address:</p><p>{customerForm.location || "N/A"}</p><p>Mobile: {customerForm.phone}</p></div>
-        </div>
-        <table className="w-full border-collapse border border-black mb-4 text-[11px]">
-          <thead className="bg-gray-100"><tr><th className="border border-black px-1 py-2 text-center w-[5%]">S.No</th><th className="border border-black px-1 py-2 text-center w-[10%]">Batch</th><th className="border border-black px-1 py-2 text-left w-[25%]">Item Description</th><th className="border border-black px-1 py-2 text-center w-[10%]">Mfg Date</th><th className="border border-black px-1 py-2 text-center w-[10%]">Exp Date</th><th className="border border-black px-1 py-2 text-center w-[5%]">Qty</th><th className="border border-black px-1 py-2 text-right w-[10%]">Rate</th><th className="border border-black px-1 py-2 text-right w-[10%]">Tax</th><th className="border border-black px-1 py-2 text-right w-[15%]">Amount</th></tr></thead>
-          <tbody>{cart.map((item, i) => (<tr key={i}><td className="border border-black px-1 py-1 text-center">{i + 1}</td><td className="border border-black px-1 py-1 text-center">-</td><td className="border border-black px-1 py-1 text-left">{item.name}</td><td className="border border-black px-1 py-1 text-center">-</td><td className="border border-black px-1 py-1 text-center">-</td><td className="border border-black px-1 py-1 text-center font-bold">{item.qty}</td><td className="border border-black px-1 py-1 text-right">{numberFormat(item.price)}</td><td className="border border-black px-1 py-1 text-right">{item.gstRate}%</td><td className="border border-black px-1 py-1 text-right font-bold">{numberFormat(item.qty * item.price)}</td></tr>))}</tbody>
-        </table>
-        <div className="flex border border-black min-h-[150px]">
-          <div className="w-[60%] border-r border-black flex flex-col justify-between p-2"><div><p className="font-bold mb-1">Amount (in words):</p><p className="italic mb-4">{numberToWord(currentGrandTotal)}</p></div><div className="text-xs"><p className="font-bold">Terms & Conditions:</p><ol className="list-decimal list-inside pl-1"><li>Goods once sold will not be taken back.</li><li>Subject to local jurisdiction.</li><li>Interest @18% pa charged if not paid on due date.</li></ol><p className="border-t border-black mt-2 pt-1 font-bold">Thanks for your Business</p></div></div>
-          <div className="w-[40%] flex flex-col"><div className="flex-grow p-2 space-y-1 text-sm"><div className="flex justify-between"><span>Sub Total:</span><span>{priceFormat(currentSubtotal)}</span></div><div className="flex justify-between"><span>CGST:</span><span>{priceFormat(currentTotalGst / 2)}</span></div><div className="flex justify-between"><span>SGST:</span><span>{priceFormat(currentTotalGst / 2)}</span></div>{discount > 0 && <div className="flex justify-between text-red-600 font-bold"><span>Discount:</span><span>-{priceFormat(discount)}</span></div>}<div className="flex justify-between text-gray-400"><span>IGST:</span><span>-</span></div><div className="flex justify-between"><span>Round Off:</span><span>0.00</span></div></div><div className="border-t-2 border-black p-2 bg-gray-100 flex justify-between items-center"><span className="font-bold text-lg">Grand Total:</span><span className="font-bold text-lg">{priceFormat(currentGrandTotal)}</span></div><div className="pt-8 pb-2 px-2 text-center border-t border-black"><p className="mb-8"></p><p className="font-bold text-xs">For {businessName}</p><p className="text-[10px]">Authorized Signature</p></div></div>
-        </div>
-        <div className="text-center text-[10px] mt-2">This is a computer generated document</div>
-      </div>
+      <GstInvoice
+        variant={isGstFormat ? "gst" : "receipt"}
+        title={isGstFormat ? undefined : undefined}
+        customerLabel={"Customer"}
+        size={formatStr.includes("a5") ? "a5" : "a4"}
+        business={business}
+        customer={customerForm}
+        items={cart}
+        invoiceNo={receiptNo}
+        invoiceDate={new Date()}
+        inclusive={inclusive}
+        discount={totals.discount || 0}
+        grandTotal={currentGrandTotal}
+        paymentLabel={paymentMethod ? paymentMethod.charAt(0).toUpperCase() + paymentMethod.slice(1) : ""}
+        paid={cash}
+        isDue={isDueBill || (paymentMethod === "cash" && Number(cash) < currentGrandTotal)}
+        terms={userData?.Tenant?.invoice_terms}
+        showBatch={profile.key === "pharmacy"}
+        amountInWords={numberToWord}
+      />
     );
   };
 
@@ -1730,11 +1709,11 @@ const IndustryBilling = () => {
     .animate-modal-in { animation: modal-in 0.25s ease-out; }
 
     .receipt-thermal-80 {
-      width: 80mm; padding: 4mm;
+      width: 72mm; margin: 0 auto; padding: 3mm 0;
       font-family: inherit; font-size: 10pt;
     }
     .receipt-thermal-58 {
-      width: 58mm; padding: 2mm;
+      width: 48mm; margin: 0 auto; padding: 2mm 0;
       font-family: inherit; font-size: 8pt;
     }
     .receipt-a4 {
