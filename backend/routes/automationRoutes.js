@@ -6,7 +6,6 @@ const { runDailyLowStockSummary } = require('../utils/inventoryAlerts');
 const { runDuePaymentReminders } = require('../utils/dueReminders');
 const { generateDailySalesSummary, runAllOwnersDailySalesSummary } = require('../utils/salesSummary');
 const { isGeminiConfigured } = require('../config/gemini');
-const { Product } = require('../models/mongodb');
 
 // Phase 2 Utilities
 const { generateDemandForecast } = require('../utils/demandForecasting');

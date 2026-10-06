@@ -2,12 +2,11 @@
  * Low Stock Inventory Alerts & Summaries
  * Feature 3 of Phase 1 Automation.
  */
-const { Product, Owner } = require('../models/mongodb');
 const platformStore = require('./platformStore');
 const wa = require('./whatsappService');
 const { sendEmail } = require('./emailService');
 const emailTemplates = require('./emailTemplates');
-const { storeFilter } = require('./dbUtils');
+const { listStoreRecords } = require('./storeRecords');
 
 /**
  * Check if a product has dropped below its minimum stock threshold after a sale,
@@ -25,7 +24,6 @@ async function checkAndAlertLowStock({ productDoc, updatedQuantity, ownerId, pro
             : (productDoc.reorderLevel || 5));
 
         const qty = Number(updatedQuantity);
-        const docId = productDoc.id || productDoc._id;
 
         // If restocked above threshold, re-arm the alert
         if (qty > threshold) {
@@ -37,9 +35,6 @@ async function checkAndAlertLowStock({ productDoc, updatedQuantity, ownerId, pro
                     await productDoc.save();
                 } else if (productDoc.update) {
                     await productDoc.update({ lowStockAlertSent: false });
-                }
-                if (docId) {
-                    await Product.findByIdAndUpdate(docId, { lowStockAlertSent: false }).catch(() => {});
                 }
             }
             return;
@@ -81,9 +76,6 @@ async function checkAndAlertLowStock({ productDoc, updatedQuantity, ownerId, pro
             } else if (productDoc.update) {
                 await productDoc.update({ lowStockAlertSent: true });
             }
-            if (docId) {
-                await Product.findByIdAndUpdate(docId, { lowStockAlertSent: true }).catch(() => {});
-            }
         }
     } catch (err) {
         console.error('[inventoryAlerts] Error in checkAndAlertLowStock:', err.message);
@@ -113,7 +105,7 @@ async function runDailyLowStockSummary(now = new Date(), { ownerId: onlyOwnerId 
             const ownerName = owner.firstName || owner.name || 'Owner';
 
             // Query low-stock products for this owner
-            const products = await Product.find(storeFilter(ownerId, owner.tenantId || undefined)).lean();
+            const products = await listStoreRecords(ownerId, 'products');
 
             const lowStockItems = (products || []).filter((p) => {
                 const threshold = Number(p.minStockThreshold !== undefined ? p.minStockThreshold : (p.reorderLevel || 5));

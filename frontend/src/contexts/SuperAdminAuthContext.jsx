@@ -27,6 +27,7 @@ superAdminApi.interceptors.response.use(
   (err) => {
     if (err.response?.status === 401) {
       sessionStorage.removeItem(TOKEN_KEY);
+      sessionStorage.removeItem("superadmin_store"); // console workspace (components/SuperAdmin)
       if (!window.location.pathname.endsWith("/superadmin/login")) {
         window.location.href = "/superadmin/login";
       }
@@ -56,7 +57,7 @@ export function SuperAdminAuthProvider({ children }) {
       sessionStorage.setItem(TOKEN_KEY, token);
       sessionStorage.setItem("superadmin_email", returnedEmail);
       setEmail(returnedEmail);
-      navigate("/superadmin/dashboard");
+      navigate("/superadmin");
       return true;
     } catch (err) {
       throw err.response ? err.response.data : { msg: err.message };

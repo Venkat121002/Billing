@@ -5,10 +5,9 @@
  * Compiles and generates official GSTR-1 and GSTR-3B monthly/quarterly summaries
  * directly from GstBill invoices, with ready-to-file multi-sheet Excel export.
  */
-const { GstBill } = require('../models/mongodb');
 const XLSX = require('xlsx');
 const platformStore = require('./platformStore');
-const { storeFilter } = require('./dbUtils');
+const { listStoreRecords } = require('./storeRecords');
 
 /**
  * Parses date filter bounds from month/year or explicit range
@@ -47,12 +46,8 @@ async function generateGstReturnsSummary({ ownerId, tenantId, month, year, start
     const storeGstin = owner?.companyDetails?.gstNumber || owner?.gstin || '';
     const state = owner?.companyDetails?.state || 'Tamil Nadu';
 
-    const query = {
-        ...storeFilter(ownerId, tenantId),
-        createdAt: { $gte: start, $lte: end }
-    };
-
-    const bills = await GstBill.find(query).sort({ createdAt: 1 }).lean();
+    const bills = (await listStoreRecords(ownerId, 'gstBills', { since: start, until: end }))
+        .sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
 
     const b2bInvoices = [];
     const b2cSmallMap = {}; // key: `${pos}_${rate}`

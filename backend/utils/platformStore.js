@@ -17,24 +17,6 @@ const models = require('../models/mongodb');
 const DB_TYPE = process.env.DB_TYPE || 'mongodb';
 const isMongo = () => DB_TYPE === 'mongodb';
 
-// Label shown on the tenant drill-down page -> [Mongo model, Firestore sub-collection]
-const TENANT_DATA = {
-    bills: [models.Bill, 'bills'],
-    products: [models.Product, 'products'],
-    customers: [models.Customer, 'customers'],
-    clients: [models.Client, 'clients'],
-    gstBills: [models.GstBill, 'gstBills'],
-    credits: [models.Credit, 'credit_customers'],
-    suppliers: [models.Supplier, 'suppliers'],
-    trainers: [models.Trainer, 'trainers'],
-    repairTickets: [models.RepairTicket, 'repairtickets'],
-    pets: [models.Pet, 'pets'],
-    milestones: [models.Milestone, 'milestones'],
-    salesmen: [models.Salesman, 'salesmen'],
-    inventoryReturns: [models.InventoryReturn, 'inventory_returns'],
-    transactions: [models.Transaction, 'transactions']
-};
-
 // ---------- Firestore helpers ----------
 const root = () => db.collection('SwordNexBillingSoftware').doc(process.env.TENANT_ID);
 const ownersCol = () => root().collection('owner');
@@ -114,29 +96,6 @@ exports.deleteSubUsers = async (ownerId) => {
         return;
     }
     await Promise.all((await fsSubUserDocs(ownerId)).map((d) => d.ref.delete()));
-};
-
-// ---------- Tenant drill-down ----------
-exports.tenantData = async (ownerId) => {
-    const entries = Object.entries(TENANT_DATA);
-
-    const results = await Promise.all(entries.map(async ([, [Model, collection]]) => {
-        if (isMongo()) {
-            const [count, recent] = await Promise.all([
-                Model.countDocuments({ ownerId }),
-                Model.find({ ownerId }).sort({ createdAt: -1 }).limit(10).lean()
-            ]);
-            return { count, recent };
-        }
-        const ref = ownersCol().doc(ownerId).collection(collection);
-        const [count, recentSnap] = await Promise.all([
-            ref.count().get(),
-            ref.orderBy('createdAt', 'desc').limit(10).get()
-        ]);
-        return { count: count.data().count, recent: recentSnap.docs.map(shape) };
-    }));
-
-    return Object.fromEntries(entries.map(([key], i) => [key, results[i]]));
 };
 
 // ---------- Support requests ----------

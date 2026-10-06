@@ -2,14 +2,13 @@
  * Daily Sales Summary Generator & Dispatcher
  * Feature 5 of Phase 1 Automation.
  */
-const { Bill, Credit, Product } = require('../models/mongodb');
 const platformStore = require('./platformStore');
 const wa = require('./whatsappService');
 const { sendEmail } = require('./emailService');
 const emailTemplates = require('./emailTemplates');
 const { money } = require('./paymentService');
 const { generateDailyReportPDF } = require('./reportPdfGenerator');
-const { storeFilter } = require('./dbUtils');
+const { listStoreRecords } = require('./storeRecords');
 
 /**
  * Returns Start & End of day in IST (Asia/Kolkata)
@@ -32,17 +31,14 @@ async function generateDailySalesSummary({ ownerId, date = new Date() }) {
         if (!owner) return { skipped: true, reason: 'Owner not found' };
 
         const { start, end, displayDate } = getDayBoundsIST(date);
-        const scope = storeFilter(ownerId, owner.tenantId || undefined);
+        const today = { since: start, until: end };
         const storeName = owner.companyDetails?.name || owner.businessName || 'Your Store';
         const ownerName = owner.firstName || owner.name || 'Store Owner';
         const ownerMobile = owner.mobile || owner.phone;
         const ownerEmail = owner.email;
 
         // Fetch all bills generated today
-        const bills = await Bill.find({
-            ...scope,
-            createdAt: { $gte: start, $lte: end }
-        }).lean();
+        const bills = await listStoreRecords(ownerId, 'bills', today);
 
         let totalRevenue = 0;
         let cashTotal = 0;
@@ -82,15 +78,12 @@ async function generateDailySalesSummary({ ownerId, date = new Date() }) {
             .slice(0, 5);
 
         // Fetch dues created today
-        const todayCredits = await Credit.find({
-            ...scope,
-            createdAt: { $gte: start, $lte: end }
-        }).lean();
+        const todayCredits = await listStoreRecords(ownerId, 'credit_customers', today);
 
         const duesIncurred = todayCredits.reduce((sum, c) => sum + Number(c.balance || c.amount || 0), 0);
 
         // Fetch low-stock products for this owner
-        const products = await Product.find(scope).lean();
+        const products = await listStoreRecords(ownerId, 'products');
 
         const lowStockItems = (products || []).filter((p) => {
             const threshold = Number(p.minStockThreshold !== undefined ? p.minStockThreshold : (p.reorderLevel || 5));

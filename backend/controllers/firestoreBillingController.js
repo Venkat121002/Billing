@@ -5,7 +5,8 @@ const crypto = require('crypto');
 const { TRIAL_DAYS, addDays } = require('../utils/subscription');
 
 // MongoDB models
-const { Owner: OwnerModel, SubscriptionDetail: SubscriptionDetailModel, Plan: PlanModel } = require('../models/mongodb');
+const { Owner: OwnerModel, SubscriptionDetail: SubscriptionDetailModel } = require('../models/mongodb');
+const planStore = require('../utils/planStore');
 
 // Determine which database to use
 const DB_TYPE = process.env.DB_TYPE || 'mongodb';
@@ -37,7 +38,7 @@ exports.createSubscriptionOrder = async (req, res) => {
                 return res.status(400).json({ msg: "Invalid billing cycle" });
             }
 
-            const planDoc = await PlanModel.findOne({ key: plan }).lean();
+            const planDoc = await planStore.getPlan(plan);
             amount = planDoc ? (billingCycle === 'monthly' ? planDoc.monthly : planDoc.yearly) : 0;
 
             if (!(amount > 0)) {
@@ -118,8 +119,8 @@ exports.verifySubscriptionPayment = async (req, res) => {
         const startDate = new Date();
         // Unused days (trial or current plan) carry over: the new period is appended after them.
         let periodBase = startDate;
-        if (plan !== 'additional_users' && DB_TYPE === 'mongodb') {
-            const current = await OwnerModel.findOne({ userId: req.user.userId, tenantId }).lean();
+        if (plan !== 'additional_users') {
+            const current = await platformStore.getOwner(req.user.userId);
             const currentEnd = current?.subscription?.endDate ? new Date(current.subscription.endDate) : null;
             if (currentEnd && currentEnd > startDate) periodBase = currentEnd;
         }
