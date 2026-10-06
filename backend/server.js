@@ -215,17 +215,6 @@ app.use(
     require('./routes/firestoreTrainerRoutes')
 );
 
-// Import
-app.use(
-    '/api/v2/import',
-    require('./routes/importRoutes')
-);
-
-app.use(
-    '/v2/import',
-    require('./routes/importRoutes')
-);
-
 // Returns
 app.use(
     '/api/v2/returns',

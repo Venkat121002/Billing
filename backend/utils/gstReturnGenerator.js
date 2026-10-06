@@ -8,6 +8,7 @@
 const { GstBill } = require('../models/mongodb');
 const XLSX = require('xlsx');
 const platformStore = require('./platformStore');
+const { storeFilter } = require('./dbUtils');
 
 /**
  * Parses date filter bounds from month/year or explicit range
@@ -47,16 +48,9 @@ async function generateGstReturnsSummary({ ownerId, tenantId, month, year, start
     const state = owner?.companyDetails?.state || 'Tamil Nadu';
 
     const query = {
+        ...storeFilter(ownerId, tenantId),
         createdAt: { $gte: start, $lte: end }
     };
-
-    if (ownerId && tenantId) {
-        query.$or = [{ ownerId }, { tenantId }];
-    } else if (ownerId) {
-        query.ownerId = ownerId;
-    } else if (tenantId) {
-        query.tenantId = tenantId;
-    }
 
     const bills = await GstBill.find(query).sort({ createdAt: 1 }).lean();
 

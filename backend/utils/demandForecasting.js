@@ -7,6 +7,7 @@
  */
 const { Bill, GstBill, Product } = require('../models/mongodb');
 const { getGeminiModel, isGeminiConfigured } = require('../config/gemini');
+const { storeFilter } = require('./dbUtils');
 
 /**
  * Calculates demand forecast and restock suggestions for a store
@@ -18,14 +19,7 @@ async function generateDemandForecast({ ownerId, tenantId, lookbackDays = 30, fo
         const sinceIso = sinceDate.toISOString();
 
         // 1. Fetch current inventory products
-        const productQuery = {};
-        if (ownerId && tenantId) {
-            productQuery.$or = [{ ownerId }, { tenantId }];
-        } else if (ownerId) {
-            productQuery.ownerId = ownerId;
-        } else if (tenantId) {
-            productQuery.tenantId = tenantId;
-        }
+        const productQuery = storeFilter(ownerId, tenantId);
 
         const products = await Product.find(productQuery).lean();
 

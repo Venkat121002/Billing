@@ -9,6 +9,7 @@ const { sendEmail } = require('./emailService');
 const emailTemplates = require('./emailTemplates');
 const { money } = require('./paymentService');
 const { generateDailyReportPDF } = require('./reportPdfGenerator');
+const { storeFilter } = require('./dbUtils');
 
 /**
  * Returns Start & End of day in IST (Asia/Kolkata)
@@ -31,6 +32,7 @@ async function generateDailySalesSummary({ ownerId, date = new Date() }) {
         if (!owner) return { skipped: true, reason: 'Owner not found' };
 
         const { start, end, displayDate } = getDayBoundsIST(date);
+        const scope = storeFilter(ownerId, owner.tenantId || undefined);
         const storeName = owner.companyDetails?.name || owner.businessName || 'Your Store';
         const ownerName = owner.firstName || owner.name || 'Store Owner';
         const ownerMobile = owner.mobile || owner.phone;
@@ -38,7 +40,7 @@ async function generateDailySalesSummary({ ownerId, date = new Date() }) {
 
         // Fetch all bills generated today
         const bills = await Bill.find({
-            $or: [{ ownerId }, { tenantId: owner.tenantId || ownerId }],
+            ...scope,
             createdAt: { $gte: start, $lte: end }
         }).lean();
 
@@ -81,16 +83,14 @@ async function generateDailySalesSummary({ ownerId, date = new Date() }) {
 
         // Fetch dues created today
         const todayCredits = await Credit.find({
-            $or: [{ ownerId }, { tenantId: owner.tenantId || ownerId }],
+            ...scope,
             createdAt: { $gte: start, $lte: end }
         }).lean();
 
         const duesIncurred = todayCredits.reduce((sum, c) => sum + Number(c.balance || c.amount || 0), 0);
 
         // Fetch low-stock products for this owner
-        const products = await Product.find({
-            $or: [{ ownerId }, { tenantId: owner.tenantId || ownerId }]
-        }).lean();
+        const products = await Product.find(scope).lean();
 
         const lowStockItems = (products || []).filter((p) => {
             const threshold = Number(p.minStockThreshold !== undefined ? p.minStockThreshold : (p.reorderLevel || 5));
@@ -190,7 +190,8 @@ async function runAllOwnersDailySalesSummary(date = new Date()) {
     try {
         const owners = await platformStore.listOwners();
         for (const owner of owners) {
-            const ownerId = owner.id || owner.uid || owner._id?.toString();
+            // Business records carry the owner's userId, not the Mongo _id.
+            const ownerId = owner.userId || owner._id?.toString();
             const res = await generateDailySalesSummary({ ownerId, date });
             summary.processed += 1;
             if (res.whatsappSent) summary.whatsappSent += 1;

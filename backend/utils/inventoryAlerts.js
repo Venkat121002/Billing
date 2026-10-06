@@ -7,6 +7,7 @@ const platformStore = require('./platformStore');
 const wa = require('./whatsappService');
 const { sendEmail } = require('./emailService');
 const emailTemplates = require('./emailTemplates');
+const { storeFilter } = require('./dbUtils');
 
 /**
  * Check if a product has dropped below its minimum stock threshold after a sale,
@@ -90,26 +91,29 @@ async function checkAndAlertLowStock({ productDoc, updatedQuantity, ownerId, pro
 }
 
 /**
- * Runs a daily scan of low-stock products across owners and emails them a summary.
+ * Runs a daily scan of low-stock products and emails each owner a summary of
+ * their own store. `ownerId` limits the run to that one store (the owner's
+ * manual trigger); without it every store is processed (the scheduled job).
  */
-async function runDailyLowStockSummary(now = new Date()) {
+async function runDailyLowStockSummary(now = new Date(), { ownerId: onlyOwnerId } = {}) {
     const summary = { ownersChecked: 0, emailsSent: 0, skippedNoEmail: 0, lowStockTotal: 0 };
     const dateStr = now.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' });
 
     try {
-        const owners = await platformStore.listOwners();
+        const owners = onlyOwnerId
+            ? [await platformStore.getOwner(onlyOwnerId)].filter(Boolean)
+            : await platformStore.listOwners();
 
         for (const owner of owners) {
             summary.ownersChecked += 1;
-            const ownerId = owner.id || owner.uid || owner._id?.toString();
+            // Business records carry the owner's userId, not the Mongo _id.
+            const ownerId = owner.userId || owner._id?.toString();
             const email = owner.email;
             const storeName = owner.companyDetails?.name || owner.businessName || 'Your Store';
             const ownerName = owner.firstName || owner.name || 'Owner';
 
             // Query low-stock products for this owner
-            const products = await Product.find({
-                $or: [{ ownerId }, { tenantId: owner.tenantId || ownerId }]
-            }).lean();
+            const products = await Product.find(storeFilter(ownerId, owner.tenantId || undefined)).lean();
 
             const lowStockItems = (products || []).filter((p) => {
                 const threshold = Number(p.minStockThreshold !== undefined ? p.minStockThreshold : (p.reorderLevel || 5));

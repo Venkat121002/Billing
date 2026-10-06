@@ -344,7 +344,8 @@ router.post('/sales-summary', roleAuth(['owner', 'TenantAdmin', 'superadmin']), 
 
 router.post('/low-stock-summary', roleAuth(['owner', 'TenantAdmin', 'superadmin']), async (req, res) => {
     try {
-        const result = await runDailyLowStockSummary();
+        // Only the caller's own store; the all-stores run is the scheduled job.
+        const result = await runDailyLowStockSummary(new Date(), { ownerId: req.user.ownerId || req.user.userId });
         res.json({ msg: 'Low-stock summary scan completed', result });
     } catch (err) {
         console.error('Trigger low stock error:', err);
@@ -354,7 +355,8 @@ router.post('/low-stock-summary', roleAuth(['owner', 'TenantAdmin', 'superadmin'
 
 router.post('/due-reminders', roleAuth(['owner', 'TenantAdmin', 'superadmin']), async (req, res) => {
     try {
-        const result = await runDuePaymentReminders();
+        // Only the caller's own store; the all-stores run is the scheduled job.
+        const result = await runDuePaymentReminders(new Date(), { ownerId: req.user.ownerId || req.user.userId });
         res.json({ msg: 'Due payment reminders scan completed', result });
     } catch (err) {
         console.error('Trigger dues reminder error:', err);

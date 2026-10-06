@@ -7,20 +7,14 @@
  */
 const { Customer, Bill, GstBill } = require('../models/mongodb');
 const platformStore = require('./platformStore');
+const { storeFilter } = require('./dbUtils');
 
 /**
  * Perform RFM Customer Segmentation
  */
 async function analyzeCustomerSegments({ ownerId, tenantId }) {
     try {
-        const query = {};
-        if (ownerId && tenantId) {
-            query.$or = [{ ownerId }, { tenantId }];
-        } else if (ownerId) {
-            query.ownerId = ownerId;
-        } else if (tenantId) {
-            query.tenantId = tenantId;
-        }
+        const query = storeFilter(ownerId, tenantId);
 
         // 1. Fetch store owner details for branding in promo messages
         const owner = ownerId ? await platformStore.getOwner(ownerId) : null;

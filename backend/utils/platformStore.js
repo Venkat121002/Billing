@@ -63,6 +63,9 @@ exports.listOwners = async () => {
 };
 
 exports.getOwner = async (ownerId) => {
+    // Mongoose drops `undefined` filter values, so without this guard
+    // findOne({ userId: undefined }) would return the first owner on the platform.
+    if (!ownerId) return null;
     if (isMongo()) return models.Owner.findOne({ userId: ownerId }).lean();
     const doc = await ownersCol().doc(ownerId).get();
     return doc.exists ? shape(doc) : null;
@@ -97,12 +100,15 @@ exports.listSubUsers = async (ownerId) => {
 };
 
 exports.getSubUser = async (ownerId, userId) => {
-    if (isMongo()) return models.SubUser.findOne({ userId }).lean();
+    if (!ownerId || !userId) return null;
+    if (isMongo()) return models.SubUser.findOne({ userId, ownerId }).lean();
     const doc = await ownersCol().doc(ownerId).collection('subuser').doc(userId).get();
     return doc.exists ? shapeSubUser(doc) : null;
 };
 
 exports.deleteSubUsers = async (ownerId) => {
+    // Without an owner the Mongo filter would be {} — every sub-user on the platform.
+    if (!ownerId) throw new Error('deleteSubUsers: ownerId is required');
     if (isMongo()) {
         await models.SubUser.deleteMany({ ownerId });
         return;

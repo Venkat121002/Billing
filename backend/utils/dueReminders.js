@@ -9,18 +9,22 @@ const { sendEmail } = require('./emailService');
 const emailTemplates = require('./emailTemplates');
 const { newPayToken, money } = require('./paymentService');
 const store = require('./paymentStore');
+const { storeFilter } = require('./dbUtils');
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
  * Scan all unpaid credits and send WhatsApp & Email payment reminders
  * at 3 days, 7 days, and 15 days overdue.
+ * `ownerId` limits the run to that one store (the owner's manual trigger);
+ * without it every store's dues are processed (the scheduled job).
  */
-async function runDuePaymentReminders(now = new Date()) {
+async function runDuePaymentReminders(now = new Date(), { ownerId } = {}) {
     const summary = { checked: 0, remindersSent: 0, skipped: 0, errors: 0 };
 
     try {
         const credits = await Credit.find({
+            ...(ownerId ? storeFilter(ownerId) : {}),
             balance: { $gt: 0 },
             status: { $nin: ['Paid', 'Settled', 'Cancelled'] }
         });
