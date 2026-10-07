@@ -26,6 +26,7 @@ const ProductSchema = new mongoose.Schema({
     minStockThreshold: { type: Number, default: 5 },
     reorderLevel: { type: Number, default: 5 },
     lowStockAlertSent: { type: Boolean, default: false },
+    industry: { type: String, default: '', index: true },
     createdAt: { type: String, default: () => new Date().toISOString() }
 }, {
     timestamps: true,
@@ -34,6 +35,7 @@ const ProductSchema = new mongoose.Schema({
 
 // Compound indexes for fast tenant-scoped queries
 ProductSchema.index({ tenantId: 1, ownerId: 1 });
+ProductSchema.index({ tenantId: 1, ownerId: 1, industry: 1 });
 ProductSchema.index({ tenantId: 1, ownerId: 1, imei1: 1 });
 ProductSchema.index({ tenantId: 1, ownerId: 1, barcode: 1 });
 

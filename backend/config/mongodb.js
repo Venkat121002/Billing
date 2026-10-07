@@ -11,7 +11,12 @@ const connectMongoDB = async () => {
     const mongoURI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/swordnex_billing_dev';
 
     try {
-        await mongoose.connect(mongoURI);
+        await mongoose.connect(mongoURI, {
+            maxPoolSize: 500,
+            minPoolSize: 10,
+            serverSelectionTimeoutMS: 5000,
+            socketTimeoutMS: 45000,
+        });
 
         isConnected = true;
         console.log(`🚀 Connected to Local MongoDB: ${mongoose.connection.db.databaseName}`);

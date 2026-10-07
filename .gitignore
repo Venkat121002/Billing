@@ -33,5 +33,6 @@ temp/
 # Generated Vite files
 *.timestamp-*.mjs
 
-# IDE
+# IDE and tooling
 .vscode/
+.kilo/

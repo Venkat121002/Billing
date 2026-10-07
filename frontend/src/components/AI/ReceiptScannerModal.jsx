@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from "react";
 import axios from "axios";
 import API_URL from "../../config/api";
 import toast from "react-hot-toast";
+import { useAuth } from "../../contexts/AuthContext";
 import {
   Camera,
   UploadCloud,
@@ -32,7 +33,9 @@ import {
   Zap,
   ArrowRight,
   FileSpreadsheet,
-  ScanLine
+  ScanLine,
+  Pill,
+  Smartphone
 } from "lucide-react";
 
 const STANDARD_CATEGORIES = [
@@ -55,11 +58,13 @@ const SCAN_STEPS = [
   "Detecting document geometry, angle, and layout...",
   "Executing Multimodal OCR to extract text, tables, and numeric data...",
   "Resolving vendor entity and verifying 15-character GSTIN...",
-  "Structuring line items, HSN/SAC codes, and tax rates...",
+  "Structuring line items, batch numbers, expiry dates, and MRP...",
   "Reconciling totals and classifying ledger expense category..."
 ];
 
-const ReceiptScannerModal = ({ isOpen, onClose, onExpenseSaved, onInventorySaved }) => {
+const ReceiptScannerModal = ({ isOpen, onClose, onExpenseSaved, onInventorySaved, businessType: propBusinessType }) => {
+  const { currentUser } = useAuth();
+  const businessType = propBusinessType || currentUser?.businessType || currentUser?.industry || "Pharmacy";
   const [file, setFile] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
   const [isScanning, setIsScanning] = useState(false);
@@ -214,6 +219,9 @@ const compressImageForOcr = async (file) => {
       const token = sessionStorage.getItem("token");
       const formData = new FormData();
       formData.append("sampleId", sampleId);
+      if (businessType) {
+        formData.append("businessType", businessType);
+      }
 
       const res = await axios.post(
         `${API_URL}/automation/scan-receipt`,
@@ -248,6 +256,9 @@ const compressImageForOcr = async (file) => {
 
       const formData = new FormData();
       formData.append("receipt", optimizedFile);
+      if (businessType) {
+        formData.append("businessType", businessType);
+      }
 
       const token = sessionStorage.getItem("token");
       const res = await axios.post(`${API_URL}/automation/scan-receipt`, formData, {
@@ -316,12 +327,18 @@ const compressImageForOcr = async (file) => {
         ...prev.items,
         {
           id: `item-${prev.items.length + 1}`,
-          description: "New Item / Service",
-          hsnCode: "",
+          description: "New Medicine / Item",
+          salt: "",
+          batchNumber: "",
+          expiryDate: "",
+          mfgDate: "",
+          pack: "10 Tabs",
+          hsnCode: "3004",
           quantity: 1,
-          unit: "pcs",
+          unit: "strips",
           unitPrice: 0,
-          taxRate: 18,
+          mrp: 0,
+          taxRate: 12,
           discount: 0,
           amount: 0
         }
@@ -401,7 +418,7 @@ const compressImageForOcr = async (file) => {
   const handleDownloadReport = () => {
     if (!receiptData) return;
     const textReport = `======================================================
-SWORDNEX MULTIMODAL OCR ENGINE - AUDIT SHEET
+SWORDNEX OCR GOODS INWARD & PHARMACY BATCH AUDIT SHEET
 ======================================================
 Document Type: ${receiptData.documentType?.toUpperCase()}
 Invoice / Bill Number: ${receiptData.invoiceNumber}
@@ -415,8 +432,10 @@ GSTIN: ${receiptData.vendor?.gstin || "N/A"}
 Phone: ${receiptData.vendor?.phone || "N/A"}
 Address: ${receiptData.vendor?.address || "N/A"}
 
-EXTRACTED LINE ITEMS:
-${receiptData.items?.map((it, idx) => `${idx + 1}. ${it.description} | Qty: ${it.quantity} ${it.unit} @ ₹${it.unitPrice} | Tax: ${it.taxRate}% = ₹${it.amount}`).join("\n")}
+EXTRACTED LINE ITEMS & BATCH REGISTER:
+${receiptData.items?.map((it, idx) => `${idx + 1}. ${it.description}${it.salt ? ` [Salt: ${it.salt}]` : ''}
+   Batch: ${it.batchNumber || 'N/A'} | Exp: ${it.expiryDate || 'N/A'} | Pack: ${it.pack || it.unit || 'pcs'}
+   Qty: ${it.quantity} @ PTR: ₹${it.unitPrice} | MRP: ₹${it.mrp || 'N/A'} | Tax: ${it.taxRate}% = ₹${it.amount}`).join("\n")}
 
 TAX RECONCILIATION & FINANCIALS:
 Subtotal: ₹${receiptData.financials?.subtotal}
@@ -442,6 +461,14 @@ Transaction Ref: ${receiptData.payment?.reference || "N/A"}
     toast.success("Audit report downloaded!");
   };
 
+  const hasPharmaFields =
+    receiptData?.items?.some((it) => it.batchNumber || it.expiryDate || it.mrp || it.salt) ||
+    String(businessType).toLowerCase().includes("pharm");
+
+  const isMobileMode =
+    receiptData?.items?.some((it) => it.imei1 || it.imei2 || it.ram || it.storage) ||
+    String(businessType).toLowerCase().includes("mobile");
+
   if (!isOpen) return null;
 
   return (
@@ -466,6 +493,18 @@ Transaction Ref: ${receiptData.payment?.reference || "N/A"}
                   <Zap size={10} className="text-indigo-600 fill-indigo-600" />
                   Enterprise Edition
                 </span>
+                {hasPharmaFields && (
+                  <span className="flex items-center gap-1 px-2.5 py-0.5 text-xs font-bold bg-teal-50 text-teal-700 rounded-full border border-teal-200">
+                    <Pill size={12} className="text-teal-600" />
+                    Pharma Wholesale Mode
+                  </span>
+                )}
+                {isMobileMode && !hasPharmaFields && (
+                  <span className="flex items-center gap-1 px-2.5 py-0.5 text-xs font-bold bg-blue-50 text-blue-700 rounded-full border border-blue-200">
+                    <Smartphone size={12} className="text-blue-600" />
+                    Mobile Wholesale Mode
+                  </span>
+                )}
                 {receiptData && (
                   <span className="flex items-center gap-1 px-2.5 py-0.5 text-xs font-bold bg-emerald-50 text-emerald-700 rounded-full border border-emerald-200">
                     <ShieldCheck size={13} className="text-emerald-600" />
@@ -474,7 +513,7 @@ Transaction Ref: ${receiptData.payment?.reference || "N/A"}
                 )}
               </div>
               <p className="text-xs text-slate-500 font-medium mt-1">
-                Autonomous invoice & receipt ingestion • GSTIN verification • Line-item table synthesis • Ledger posting
+                Autonomous invoice & receipt ingestion • Batch numbers & expiry dates • GSTIN verification • 1-click restock
               </p>
             </div>
           </div>
@@ -842,9 +881,44 @@ Transaction Ref: ${receiptData.payment?.reference || "N/A"}
                 {/* TAB 1: Enterprise Line Items Table */}
                 {activeTab === "items" && (
                   <div className="space-y-3 bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+                    {/* Pharmacy Mode Notification Banner */}
+                    {hasPharmaFields && (
+                      <div className="flex items-center justify-between p-3 bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-900 font-semibold shadow-xs">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-7 h-7 rounded-lg bg-emerald-600 text-white flex items-center justify-center shadow-sm shrink-0">
+                            <Pill size={16} />
+                          </div>
+                          <div>
+                            <span className="font-extrabold text-emerald-950">Pharma Wholesale Inward Engine:</span>{" "}
+                            <span className="text-emerald-800">Batch numbers, expiry dates, and PTR/MRP extracted for automated FEFO stock registers.</span>
+                          </div>
+                        </div>
+                        <span className="px-2.5 py-1 bg-emerald-600 text-white text-[10px] font-black uppercase tracking-wider rounded-md shrink-0">
+                          FEFO Enabled
+                        </span>
+                      </div>
+                    )}
+
+                    {isMobileMode && !hasPharmaFields && (
+                      <div className="flex items-center justify-between p-3 bg-gradient-to-r from-blue-50 via-indigo-50 to-blue-50 border border-blue-200 rounded-xl text-xs text-blue-900 font-semibold shadow-xs">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-7 h-7 rounded-lg bg-blue-600 text-white flex items-center justify-center shadow-sm shrink-0">
+                            <Smartphone size={16} />
+                          </div>
+                          <div>
+                            <span className="font-extrabold text-blue-950">Mobile Wholesale Inward Engine:</span>{" "}
+                            <span className="text-blue-800">Phone models, 15-digit IMEIs, RAM/ROM specs, and purchase rates extracted.</span>
+                          </div>
+                        </div>
+                        <span className="px-2.5 py-1 bg-blue-600 text-white text-[10px] font-black uppercase tracking-wider rounded-md shrink-0">
+                          IMEI Enabled
+                        </span>
+                      </div>
+                    )}
+
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-black uppercase tracking-wider text-slate-500">
-                        Extracted Item Catalog
+                        {hasPharmaFields ? "Extracted Medicine & Batch Register" : isMobileMode ? "Extracted Devices & IMEI Register" : "Extracted Item Catalog"}
                       </span>
                       <button
                         type="button"
@@ -856,40 +930,79 @@ Transaction Ref: ${receiptData.payment?.reference || "N/A"}
                       </button>
                     </div>
 
-                    <div className="overflow-x-auto border border-slate-100 rounded-xl max-h-[300px]">
+                    <div className="overflow-x-auto border border-slate-100 rounded-xl max-h-[340px]">
                       <table className="w-full text-left text-xs">
                         <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-extrabold sticky top-0 uppercase tracking-wider text-[10px]">
                           <tr>
-                            <th className="p-3">Description</th>
-                            <th className="p-3 w-20">HSN</th>
+                            <th className="p-3">{isMobileMode ? "Phone Model / Item" : "Medicine / Description"}</th>
+                            <th className="p-3 w-32">{isMobileMode ? "IMEI / Serial" : "Batch No."}</th>
+                            <th className="p-3 w-28">{isMobileMode ? "Specs (RAM/ROM)" : "Expiry"}</th>
                             <th className="p-3 w-16 text-center">Qty</th>
-                            <th className="p-3 w-24 text-right">Rate (₹)</th>
+                            <th className="p-3 w-20 text-right">{isMobileMode ? "Cost (₹)" : "PTR (₹)"}</th>
+                            <th className="p-3 w-20 text-right">MRP (₹)</th>
                             <th className="p-3 w-16 text-center">GST %</th>
-                            <th className="p-3 w-28 text-right">Amount (₹)</th>
-                            <th className="p-3 w-10 text-center"></th>
+                            <th className="p-3 w-24 text-right">Amount (₹)</th>
+                            <th className="p-3 w-8 text-center"></th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
                           {receiptData.items?.map((item, idx) => (
                             <tr key={item.id || idx} className="hover:bg-indigo-50/20 transition-colors">
-                              <td className="p-2.5">
+                              <td className="p-2">
                                 <input
                                   type="text"
-                                  value={item.description}
+                                  value={item.description || (item.brand && item.model ? `${item.brand} ${item.model}` : "") || ""}
                                   onChange={(e) => handleItemChange(idx, "description", e.target.value)}
+                                  placeholder={isMobileMode ? "Phone Brand & Model" : "Medicine Brand Name"}
                                   className="w-full px-2 py-1 bg-transparent border border-transparent hover:border-slate-200 focus:border-indigo-500 rounded-lg focus:bg-white text-slate-800 font-semibold outline-none"
                                 />
+                                {item.brand && item.model && (
+                                  <div className="text-[10px] text-blue-700 font-medium px-2 truncate">
+                                    📱 {item.brand} • {item.model}
+                                  </div>
+                                )}
+                                {item.salt && (
+                                  <div className="text-[10px] text-emerald-700 font-medium px-2 truncate" title={item.salt}>
+                                    🧪 {item.salt}
+                                  </div>
+                                )}
                               </td>
-                              <td className="p-2.5">
+                              <td className="p-2">
                                 <input
                                   type="text"
-                                  value={item.hsnCode || ""}
-                                  onChange={(e) => handleItemChange(idx, "hsnCode", e.target.value)}
-                                  placeholder="HSN"
-                                  className="w-full px-2 py-1 bg-transparent border border-transparent hover:border-slate-200 focus:border-indigo-500 rounded-lg focus:bg-white text-slate-600 font-mono outline-none"
+                                  value={
+                                    isMobileMode
+                                      ? (item.imei1 || item.batchNumber || item.batchNo || "")
+                                      : (item.batchNumber || item.batchNo || "")
+                                  }
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    handleItemChange(idx, isMobileMode ? "imei1" : "batchNumber", val);
+                                    if (isMobileMode) handleItemChange(idx, "batchNumber", val);
+                                  }}
+                                  placeholder={isMobileMode ? "IMEI 1 / Serial" : "Batch #"}
+                                  className="w-full px-2 py-1 bg-transparent border border-transparent hover:border-slate-200 focus:border-indigo-500 rounded-lg focus:bg-white text-indigo-700 font-mono font-bold outline-none"
+                                />
+                                {isMobileMode && item.imei2 && (
+                                  <div className="text-[10px] text-blue-600 font-mono px-2 truncate" title={`IMEI 2: ${item.imei2}`}>
+                                    2: {item.imei2}
+                                  </div>
+                                )}
+                              </td>
+                              <td className="p-2">
+                                <input
+                                  type="text"
+                                  value={
+                                    isMobileMode
+                                      ? (item.storage || (item.ram && item.storage ? `${item.ram}/${item.storage}` : "") || item.expiryDate || "")
+                                      : (item.expiryDate || "")
+                                  }
+                                  onChange={(e) => handleItemChange(idx, isMobileMode ? "storage" : "expiryDate", e.target.value)}
+                                  placeholder={isMobileMode ? "RAM / Storage" : "YYYY-MM-DD"}
+                                  className="w-full px-2 py-1 bg-transparent border border-transparent hover:border-slate-200 focus:border-indigo-500 rounded-lg focus:bg-white text-slate-700 font-mono text-[11px] outline-none"
                                 />
                               </td>
-                              <td className="p-2.5">
+                              <td className="p-2">
                                 <input
                                   type="number"
                                   step="any"
@@ -898,7 +1011,7 @@ Transaction Ref: ${receiptData.payment?.reference || "N/A"}
                                   className="w-full text-center px-1 py-1 bg-transparent border border-transparent hover:border-slate-200 focus:border-indigo-500 rounded-lg focus:bg-white font-bold outline-none"
                                 />
                               </td>
-                              <td className="p-2.5">
+                              <td className="p-2">
                                 <input
                                   type="number"
                                   step="any"
@@ -907,7 +1020,17 @@ Transaction Ref: ${receiptData.payment?.reference || "N/A"}
                                   className="w-full text-right px-2 py-1 bg-transparent border border-transparent hover:border-slate-200 focus:border-indigo-500 rounded-lg focus:bg-white font-bold outline-none"
                                 />
                               </td>
-                              <td className="p-2.5">
+                              <td className="p-2">
+                                <input
+                                  type="number"
+                                  step="any"
+                                  value={item.mrp || ""}
+                                  onChange={(e) => handleItemChange(idx, "mrp", e.target.value)}
+                                  placeholder="MRP"
+                                  className="w-full text-right px-2 py-1 bg-transparent border border-transparent hover:border-slate-200 focus:border-indigo-500 rounded-lg focus:bg-white font-semibold text-slate-700 outline-none"
+                                />
+                              </td>
+                              <td className="p-2">
                                 <input
                                   type="number"
                                   value={item.taxRate || 0}
@@ -915,14 +1038,14 @@ Transaction Ref: ${receiptData.payment?.reference || "N/A"}
                                   className="w-full text-center px-1 py-1 bg-transparent border border-transparent hover:border-slate-200 focus:border-indigo-500 rounded-lg focus:bg-white font-semibold outline-none"
                                 />
                               </td>
-                              <td className="p-2.5 text-right font-black text-slate-900">
+                              <td className="p-2 text-right font-black text-slate-900">
                                 ₹{(item.amount || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
                               </td>
-                              <td className="p-2.5 text-center">
+                              <td className="p-2 text-center">
                                 <button
                                   type="button"
                                   onClick={() => handleDeleteItem(idx)}
-                                  className="text-slate-300 hover:text-red-500 p-1.5 rounded-lg transition-colors"
+                                  className="text-slate-300 hover:text-red-500 p-1 rounded-lg transition-colors"
                                 >
                                   <Trash2 size={14} />
                                 </button>
@@ -1143,7 +1266,13 @@ Transaction Ref: ${receiptData.payment?.reference || "N/A"}
                       ) : (
                         <Package size={16} />
                       )}
-                      <span>Auto-Stock Inventory</span>
+                      <span>
+                        {hasPharmaFields
+                          ? "1-Click Restock & Batches"
+                          : isMobileMode
+                          ? "1-Click Stock Phones & IMEIs"
+                          : "Auto-Stock Inventory"}
+                      </span>
                     </button>
 
                     <button

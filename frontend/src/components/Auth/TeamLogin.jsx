@@ -42,7 +42,7 @@ const TeamLogin = () => {
 
     setIsLoading(true);
     try {
-      await employerLogin(formData.email, formData.password, "team");
+      await employerLogin(formData.email.trim(), formData.password, "team");
       toast.success("Successfully logged in!");
     } catch (error) {
       console.error("Team login error:", error);

@@ -10,6 +10,7 @@ router.use(auth);
 router.get('/', repairTicketController.getRepairTickets);
 router.get('/:id', repairTicketController.getRepairTicketById);
 router.post("/", repairTicketController.createRepairTicket);
+router.post("/:id/send-whatsapp", repairTicketController.sendWhatsAppUpdate);
 router.put("/:id", repairTicketController.updateRepairTicket);
 router.delete("/:id", repairTicketController.deleteRepairTicket);
 

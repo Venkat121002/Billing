@@ -428,8 +428,13 @@ exports.getBills = async (req, res) => {
 exports.createBill = async (req, res) => {
     try {
         const { userId, role, ownerId } = req.user;
+        const now = new Date();
+        const istDate = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+
         const billData = {
             ...req.body,
+            date: req.body.date || istDate,
+            industry: req.body.industry || req.user?.industry || '',
             ownerId: role === 'owner' ? userId : ownerId,
             createdBy: userId,
             createdAt: new Date().toISOString()
@@ -502,8 +507,13 @@ exports.getGSTBills = async (req, res) => {
 exports.createGSTBill = async (req, res) => {
     try {
         const { userId, role, ownerId } = req.user;
+        const now = new Date();
+        const istDate = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+
         const billData = {
             ...req.body,
+            date: req.body.date || istDate,
+            industry: req.body.industry || req.user?.industry || '',
             ownerId: role === 'owner' ? userId : ownerId,
             createdBy: userId,
             createdAt: new Date().toISOString(),

@@ -30,6 +30,7 @@ import logo1 from "../../assets/images/BILLING_LOGO_LARGE2.png"
 import { getSidebarItems } from "../../config/industryModules";
 import { resolveIndustryProfile } from "../../config/industryProfiles";
 import { SubscriptionBadge } from "../../components/Auth/SubscriptionStatus";
+import SwordNexi from "../../components/Chatbot/SwordNexi";
 
 
 
@@ -341,6 +342,9 @@ const BillingLayout = ({ children, hideHeader = false, hideSidebar = false }) =>
           </div>
         </div>
       )}
+
+      {/* Floating Chatbot Assistant */}
+      <SwordNexi />
     </div>
   );
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, Link } from "react-router-dom";
 import axios from "axios";
 import API_URL from "../../config/api";
 import {
@@ -24,6 +24,7 @@ import {
   Receipt,
   IndianRupee,
   ScanBarcode,
+  Camera,
   ArrowRight,
   Banknote,
   Wallet,
@@ -31,10 +32,15 @@ import {
   Hash,
   RotateCcw,
   ChevronRight,
+  Sparkles,
+  Scissors,
 } from "lucide-react";
+import toast from "react-hot-toast";
 import BillingLayout from "../../Layout/BillingLayout/AdminLayout";
 import { useAuth } from "../../contexts/AuthContext";
 import { resolveIndustryProfile } from "../../config/industryProfiles";
+import BarcodeScanner from "../Auth/BarcodeScanner";
+
 import _ from "lodash";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
@@ -205,27 +211,128 @@ const IndustryBilling = () => {
   const profile = resolveIndustryProfile(currentUser);
   const theme = THEMES[profile.theme] || THEMES.green;
   const flags = profile.featureFlags;
+  const isWeightBased = profile.key === "grocery" || (profile.aliases && profile.aliases.includes("grocery"));
   const paymentMethods = PAYMENT_METHODS.filter(
     (m) => profile.paymentMethods.includes(m.key) && (m.key !== "wallet" || flags.wallet)
   );
 
+
   const [barcodeInput, setBarcodeInput] = useState("");
+  const [showCameraBillingScanner, setShowCameraBillingScanner] = useState(false);
+  const [salesmenList, setSalesmenList] = useState([]);
+  const [selectedSalesman, setSelectedSalesman] = useState("");
+
+  // Synthesized Web Audio chime on barcode scan (guaranteed POS feedback)
+  const playScanChime = () => {
+    try {
+      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(880, audioCtx.currentTime);
+      gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.12);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.12);
+    } catch (e) {
+      // AudioContext unavailable or blocked
+    }
+  };
+  const beep = () => playScanChime();
+
+  useEffect(() => {
+    const fetchSalesmen = async () => {
+      try {
+        const token = localStorage.getItem("token") || sessionStorage.getItem("token");
+        if (!token) return;
+        const res = await axios.get(`${API_URL}/salesman`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        setSalesmenList(Array.isArray(res.data) ? res.data : []);
+      } catch (e) {
+        // non-fatal
+      }
+    };
+    fetchSalesmen();
+  }, []);
+
+  const applyPromoDeal = (promoType) => {
+    if (cart.length === 0) {
+      toast.error("Please add items to cart first to apply promotional discounts.");
+      return;
+    }
+    const totals = getTotals();
+    const currentSubtotal = totals.subtotal;
+
+    if (promoType === "BOGO") {
+      const totalQty = _.sumBy(cart, i => Number(i.qty) || 0);
+      if (totalQty < 3) {
+        toast.error("Buy 2 Get 1 Free requires at least 3 items in cart!");
+        return;
+      }
+      const lowestPricedItem = _.minBy(cart, i => Number(i.price) || 0);
+      if (lowestPricedItem) {
+        const discVal = Number(lowestPricedItem.price) || 0;
+        setDiscount(discVal);
+        toast.success(`BOGO Applied! Free item: ${lowestPricedItem.name} (-₹${discVal})`);
+      }
+    } else if (promoType === "FLAT10") {
+      const discVal = Math.round(currentSubtotal * 0.10);
+      setDiscount(discVal);
+      toast.success(`Flat 10% Off Applied! (-₹${discVal})`);
+    } else if (promoType === "FLAT20") {
+      const discVal = Math.round(currentSubtotal * 0.20);
+      setDiscount(discVal);
+      toast.success(`Flat 20% Off Applied! (-₹${discVal})`);
+    } else if (promoType === "FLAT30") {
+      const discVal = Math.round(currentSubtotal * 0.30);
+      setDiscount(discVal);
+      toast.success(`Flat 30% Off Applied! (-₹${discVal})`);
+    } else if (promoType === "FESTIVE500") {
+      if (currentSubtotal < 2999) {
+        toast.error("Festive ₹500 off requires minimum subtotal of ₹2,999!");
+        return;
+      }
+      setDiscount(500);
+      toast.success("Festive ₹500 Off Applied!");
+    } else if (promoType === "CLEAR") {
+      setDiscount(0);
+      toast.success("Promo discount cleared");
+    }
+  };
+
+  const processScannedCode = (scannedCode) => {
+    const scanned = String(scannedCode || "").trim();
+    if (!scanned) return;
+    const product = productsToDisplay?.find(
+      (p) =>
+        (p.barcode && String(p.barcode).toLowerCase() === scanned.toLowerCase()) ||
+        (p.sku && String(p.sku).toLowerCase() === scanned.toLowerCase()) ||
+        (p.imei1 && String(p.imei1).trim() === scanned) ||
+        (p.imei2 && String(p.imei2).trim() === scanned)
+    );
+    if (product) {
+      addToCart(product);
+      beep();
+    } else {
+      alert(`Product or IMEI "${scanned}" not found!`);
+    }
+  };
+
   const handleBarcodeScan = (e) => {
     if (e.key === "Enter") {
       e.preventDefault();
-      const scanned = barcodeInput.trim();
-      if (!scanned) return;
-      const product = productsToDisplay?.find(
-        (p) => (p.barcode && p.barcode === scanned) || (p.sku && p.sku === scanned)
-      );
-      if (product) {
-        addToCart(product);
-        beep();
-      } else {
-        alert("Product not found!");
-      }
+      processScannedCode(barcodeInput);
       setBarcodeInput("");
     }
+  };
+
+
+  const handleCameraScanSuccess = (decoded) => {
+    processScannedCode(decoded);
+    setShowCameraBillingScanner(false);
   };
 
   const location = useLocation();
@@ -366,6 +473,23 @@ const IndustryBilling = () => {
     }
   }, [location.state]);
 
+  // Handle Pharmacy Chronic Patient Refill prefill
+  useEffect(() => {
+    if (location.state?.pharmacyRefill) {
+      const { patientName, patientPhone, medicineName } = location.state.pharmacyRefill;
+      if (patientPhone || patientName) {
+        setCustomerForm(prev => ({
+          ...prev,
+          name: patientName || prev.name,
+          phone: patientPhone || prev.phone
+        }));
+      }
+      if (medicineName) {
+        setKeyword(medicineName);
+      }
+    }
+  }, [location.state]);
+
   const [customerForm, setCustomerForm] = useState({ name: "", phone: "", location: "", gstin: "" });
   const [showCustomerForm, setShowCustomerForm] = useState(false);
 
@@ -470,30 +594,84 @@ const IndustryBilling = () => {
     return result;
   };
 
-  const beep = () => playSound("/sound/beep-29.mp3");
+  const addToCart = (product, customQty = null) => {
 
-  const addToCart = (product) => {
-    const validSku = product.sku || product.id;
+    // 1. FEFO (First Expiring, First Out) Logic for Pharmacy & Batch-tracked industries
+    let targetProduct = product;
+    if (profile?.itemFieldGroups?.batchExpiry) {
+      // Find all batches for this product name with stock > 0
+      const matchingBatches = (products || []).filter(p =>
+        p.name && product.name &&
+        p.name.trim().toLowerCase() === product.name.trim().toLowerCase() &&
+        (Number(p.quantity || 0) * (Number(p.unit) || 1)) > 0
+      );
 
-    const unitPrice = product.salePrice || product.salesPrice || product.price || 0;
-    const qtyPerUnit = Number(product.unit) || 1;
+      if (matchingBatches.length > 0) {
+        // Sort by expiryDate ascending (FEFO)
+        const sortedBatches = [...matchingBatches].sort((a, b) => {
+          const timeA = a.expiryDate ? new Date(a.expiryDate).getTime() : Infinity;
+          const timeB = b.expiryDate ? new Date(b.expiryDate).getTime() : Infinity;
+          return timeA - timeB;
+        });
+
+        // Filter out expired batches
+        const startOfToday = new Date().setHours(0, 0, 0, 0);
+        const nonExpired = sortedBatches.filter(b => !b.expiryDate || new Date(b.expiryDate).getTime() >= startOfToday);
+
+        if (nonExpired.length > 0) {
+          targetProduct = nonExpired[0];
+        } else {
+          alert(`⛔ FEFO Expiry Shield: All stock for "${product.name}" has EXPIRED! Regulatory compliance strictly blocks sale of expired medication.`);
+          return;
+        }
+      } else if (product.expiryDate && new Date(product.expiryDate).getTime() < new Date().setHours(0, 0, 0, 0)) {
+        alert(`⛔ FEFO Expiry Shield: Batch "${product.batchNumber || product.batchNo || 'N/A'}" expired on ${product.expiryDate} and cannot be sold.`);
+        return;
+      }
+    }
+
+    const validSku = targetProduct.sku || targetProduct.id;
+
+    const unitPrice = targetProduct.salePrice || targetProduct.salesPrice || targetProduct.price || 0;
+    const qtyPerUnit = Number(targetProduct.unit) || 1;
     const itemRate = unitPrice / qtyPerUnit;
 
-    const validGst = product.salesGst || product.gstRate || product.gst || 0;
+    const validGst = targetProduct.salesGst || targetProduct.gstRate || targetProduct.gst || 0;
     const existingItem = _.find(cart, { productSku: validSku });
 
-    const currentQtyInCart = existingItem ? existingItem.qty : 0;
-    const availableStock = Number(product.quantity || 0) * (Number(product.unit) || 1);
+    const currentQtyInCart = existingItem ? Number(existingItem.qty) || 0 : 0;
+    const availableStock = Number(targetProduct.quantity || 0) * (Number(targetProduct.unit) || 1);
+    const delta = customQty !== null ? Number(customQty) : 1;
 
-    if (currentQtyInCart + 1 > availableStock) {
+    if (availableStock > 0 && currentQtyInCart + delta > availableStock) {
       alert(`Insufficient stock! Only ${availableStock} units available.`);
       return;
     }
 
     if (!existingItem) {
-      setCart([...cart, { productId: product.id, productSku: validSku, image: product.imageUrl || product.image, name: product.name, price: itemRate, category: product.category, qty: 1, gstRate: validGst }]);
+      setCart([...cart, {
+        productId: targetProduct.id,
+        productSku: validSku,
+        image: targetProduct.imageUrl || targetProduct.image,
+        name: targetProduct.name,
+        price: itemRate,
+        category: targetProduct.category,
+        qty: delta,
+        gstRate: validGst,
+        batchNumber: targetProduct.batchNumber || targetProduct.batchNo || "",
+        expiryDate: targetProduct.expiryDate || "",
+        mfgDate: targetProduct.mfgDate || "",
+        salt: targetProduct.salt || "",
+        imei1: targetProduct.imei1 || "",
+        imei2: targetProduct.imei2 || "",
+        ram: targetProduct.ram || "",
+        storage: targetProduct.storage || "",
+        color: targetProduct.color || "",
+        warranty: targetProduct.warranty || ""
+      }]);
     } else {
-      setCart(_.map(cart, (item) => item.productSku === validSku ? { ...item, qty: (Number(item.qty) || 0) + 1 } : item));
+      const newTotal = Math.round((currentQtyInCart + delta) * 1000) / 1000;
+      setCart(_.map(cart, (item) => item.productSku === validSku ? { ...item, qty: newTotal } : item));
     }
     beep();
     updateChange();
@@ -505,39 +683,62 @@ const IndustryBilling = () => {
 
     const updatedCart = _.map(cart, (cartItem) => {
       if (cartItem.productSku === itemSku) {
-        if (qtyChange > 0 && (cartItem.qty + qtyChange > availableStock)) {
+        const current = parseFloat(cartItem.qty) || 0;
+        // If weight-based (grocery) and current qty < 1, stepping +/- adjusts by 0.25 (250g).
+        // For retail/clothing, step is always a whole 1 piece.
+        const step = (isWeightBased && current < 1 && Math.abs(qtyChange) === 1) ? (qtyChange > 0 ? 0.25 : -0.25) : qtyChange;
+        const newQty = isWeightBased ? (Math.round((current + step) * 1000) / 1000) : Math.round(current + step);
+
+        if (step > 0 && availableStock > 0 && (newQty > availableStock)) {
           alert(`Insufficient stock! Only ${availableStock} units available.`);
           return cartItem;
         }
-        const newQty = cartItem.qty + qtyChange;
         return newQty > 0 ? { ...cartItem, qty: newQty } : null;
       }
       return cartItem;
     });
     setCart(_.compact(updatedCart));
     const updatedItem = cart.find((c) => c.productSku === itemSku);
-    if (updatedItem && updatedItem.qty + qtyChange <= 0) clearSound();
+    if (updatedItem && (parseFloat(updatedItem.qty) || 0) + qtyChange <= 0) clearSound();
     else beep();
     updateChange();
   };
 
   const setQty = (itemSku, newQtyValue) => {
-    const newQty = newQtyValue === "" ? "" : (parseInt(newQtyValue) || 0);
+    let newQty = newQtyValue === "" ? "" : parseFloat(newQtyValue);
+    if (newQty !== "" && isNaN(newQty)) newQty = 0;
+    if (typeof newQty === "number") {
+      newQty = isWeightBased ? (Math.round(newQty * 1000) / 1000) : Math.round(newQty);
+    }
+
     const product = products.find(p => (p.sku || p.id) === itemSku);
     const availableStock = Number(product?.quantity || 0) * (Number(product?.unit) || 1);
 
-    if (newQty !== "" && newQty > availableStock) {
+    if (newQty !== "" && availableStock > 0 && newQty > availableStock) {
       alert(`Insufficient stock! Only ${availableStock} units available.`);
+      newQty = availableStock;
     }
 
     const updatedCart = _.map(cart, (cartItem) => {
       if (cartItem.productSku === itemSku) {
-        return (newQty === "" || newQty > 0) ? { ...cartItem, qty: newQty === "" ? "" : Math.min(newQty, availableStock) } : null;
+        return (newQty === "" || newQty > 0) ? { ...cartItem, qty: newQty } : null;
       }
       return cartItem;
     });
     setCart(_.compact(updatedCart));
     updateChange();
+  };
+
+  const setGramsQty = (itemSku, gramsValue) => {
+    if (!isWeightBased) return;
+    if (gramsValue === "") {
+      setQty(itemSku, "");
+      return;
+    }
+    const grams = parseFloat(gramsValue);
+    if (!isNaN(grams) && grams >= 0) {
+      setQty(itemSku, Math.round((grams / 1000) * 1000) / 1000);
+    }
   };
 
   const updatePrice = (itemSku, newPrice) => {
@@ -550,7 +751,12 @@ const IndustryBilling = () => {
     setCart(updatedCart);
   };
 
-  const getItemsCount = () => _.sumBy(cart, "qty");
+  const getItemsCount = () => {
+    const total = _.sumBy(cart, (i) => Number(i.qty) || 0);
+    if (!isWeightBased) return Math.round(total);
+    return Number.isInteger(total) ? total : Number(total.toFixed(3).replace(/\.?0+$/, ''));
+  };
+
   const updateChange = () => setChange(cash - getTotals().grandTotal);
   const updateCashInput = (value) => {
     const numericValue = parseFloat(value.replace(/[^0-9.]/g, ""));
@@ -802,9 +1008,27 @@ const IndustryBilling = () => {
       const saleData = {
         receiptNo: receiptNo || "N/A", receiptDate: receiptDate || new Date().toISOString(), customerId: customerId || null,
         customerName: customerForm.name || "", customerPhone: customerForm.phone || "",
-        items: cart.map(item => ({ sku: item.productSku || "NA", name: item.name || "Unknown", price: Number(item.price || 0), qty: Number(item.qty || 1), category: item.category || "Uncategorized", gstRate: Number(item.gstRate || 0) })),
+        items: cart.map(item => ({
+          sku: item.productSku || "NA",
+          name: item.name || "Unknown",
+          price: Number(item.price || 0),
+          qty: Number(item.qty || 1),
+          category: item.category || "Uncategorized",
+          gstRate: Number(item.gstRate || 0),
+          batchNumber: item.batchNumber || item.batchNo || "",
+          expiryDate: item.expiryDate || "",
+          mfgDate: item.mfgDate || "",
+          salt: item.salt || "",
+          imei1: item.imei1 || "",
+          imei2: item.imei2 || "",
+          ram: item.ram || "",
+          storage: item.storage || "",
+          color: item.color || "",
+          warranty: item.warranty || ""
+        })),
         totals: getTotals(),
         paymentMethod: paymentMethod,
+        salesmanName: selectedSalesman || null,
         discount: Number(discount || 0), soldBy: currentUser.email || currentUser.uid, createdAt: new Date().toISOString(),
         dueBill: isDueSale, dueAmount: isDueSale ? dueAmount : 0
       };
@@ -821,7 +1045,20 @@ const IndustryBilling = () => {
 
       if (savedBillId && canWhatsappBill && sendWhatsappBill && customerForm.phone) {
         await sendBillOnWhatsapp(savedBillId, token);
+      } else if (customerForm.phone && profile.key === 'clothing') {
+        const authToken = localStorage.getItem('token') || token;
+        axios.post(`${API_URL}/clothing/send-bill-whatsapp`, {
+          customerPhone: customerForm.phone,
+          customerName: customerForm.name || 'Valued Customer',
+          billNumber: receiptNo || 'N/A',
+          items: cart,
+          grandTotal: getTotals().grandTotal,
+          discountTotal: discount,
+          paymentMethod,
+          salesmanName: selectedSalesman || ''
+        }, { headers: { Authorization: `Bearer ${authToken}` } }).catch(() => {});
       }
+
 
       if (flags.credit && creditPaymentData) {
         try {
@@ -998,7 +1235,28 @@ const IndustryBilling = () => {
           </div>
           <table className="w-full text-xs mb-4">
             <thead><tr className="border-b-2 border-t-2 border-dashed border-gray-400"><th className="text-left py-1.5 font-semibold">Item</th><th className="text-center py-1.5 font-semibold">Qty</th><th className="text-right py-1.5 font-semibold">Price</th><th className="text-right py-1.5 font-semibold">Total</th></tr></thead>
-            <tbody>{cart.map((item, i) => (<tr key={i} className="border-b border-dashed border-gray-300"><td className="py-1.5 text-left">{item.name}</td><td className="py-1.5 text-center">{item.qty}</td><td className="py-1.5 text-right">{numberFormat(item.price)}</td><td className="py-1.5 text-right">{numberFormat(item.qty * item.price)}</td></tr>))}</tbody>
+            <tbody>{cart.map((item, i) => (
+              <tr key={i} className="border-b border-dashed border-gray-300">
+                <td className="py-1.5 text-left">
+                  <div>{item.name}</div>
+                  {(item.batchNumber || item.batchNo || item.expiryDate) && (
+                    <div className="text-[9px] text-gray-500 font-mono">
+                      {(item.batchNumber || item.batchNo) ? `B: ${item.batchNumber || item.batchNo}` : ""}
+                      {item.expiryDate ? ` | Exp: ${item.expiryDate}` : ""}
+                    </div>
+                  )}
+                  {(item.imei1 || item.imei2) && (
+                    <div className="text-[9px] text-gray-700 font-mono font-bold">
+                      {item.imei1 ? `IMEI: ${item.imei1}` : ""}
+                      {item.warranty ? ` | Warranty: ${item.warranty}` : ""}
+                    </div>
+                  )}
+                </td>
+                <td className="py-1.5 text-center">{item.qty}</td>
+                <td className="py-1.5 text-right">{numberFormat(item.price)}</td>
+                <td className="py-1.5 text-right">{numberFormat(item.qty * item.price)}</td>
+              </tr>
+            ))}</tbody>
           </table>
           <div className="text-xs">
             <div className="flex justify-between mb-0.5"><span>Subtotal (Excl. GST):</span><span>{priceFormat(currentSubtotal)}</span></div>
@@ -1036,7 +1294,7 @@ const IndustryBilling = () => {
         </div>
         <table className="w-full border-collapse border border-black mb-4 text-[11px]">
           <thead className="bg-gray-100"><tr><th className="border border-black px-1 py-2 text-center w-[5%]">S.No</th><th className="border border-black px-1 py-2 text-center w-[10%]">Batch</th><th className="border border-black px-1 py-2 text-left w-[25%]">Item Description</th><th className="border border-black px-1 py-2 text-center w-[10%]">Mfg Date</th><th className="border border-black px-1 py-2 text-center w-[10%]">Exp Date</th><th className="border border-black px-1 py-2 text-center w-[5%]">Qty</th><th className="border border-black px-1 py-2 text-right w-[10%]">Rate</th><th className="border border-black px-1 py-2 text-right w-[10%]">Tax</th><th className="border border-black px-1 py-2 text-right w-[15%]">Amount</th></tr></thead>
-          <tbody>{cart.map((item, i) => (<tr key={i}><td className="border border-black px-1 py-1 text-center">{i + 1}</td><td className="border border-black px-1 py-1 text-center">-</td><td className="border border-black px-1 py-1 text-left">{item.name}</td><td className="border border-black px-1 py-1 text-center">-</td><td className="border border-black px-1 py-1 text-center">-</td><td className="border border-black px-1 py-1 text-center font-bold">{item.qty}</td><td className="border border-black px-1 py-1 text-right">{numberFormat(item.price)}</td><td className="border border-black px-1 py-1 text-right">{item.gstRate}%</td><td className="border border-black px-1 py-1 text-right font-bold">{numberFormat(item.qty * item.price)}</td></tr>))}</tbody>
+          <tbody>{cart.map((item, i) => (<tr key={i}><td className="border border-black px-1 py-1 text-center">{i + 1}</td><td className="border border-black px-1 py-1 text-center font-mono">{item.batchNumber || item.batchNo || "-"}</td><td className="border border-black px-1 py-1 text-left"><div>{item.name}</div>{(item.imei1 || item.imei2) && (<div className="text-[9px] text-gray-700 font-mono font-bold">IMEI: {item.imei1}{item.imei2 ? ` / ${item.imei2}` : ""}{item.warranty ? ` | Warranty: ${item.warranty}` : ""}</div>)}</td><td className="border border-black px-1 py-1 text-center font-mono">{item.mfgDate || "-"}</td><td className="border border-black px-1 py-1 text-center font-mono">{item.expiryDate || "-"}</td><td className="border border-black px-1 py-1 text-center font-bold">{item.qty}</td><td className="border border-black px-1 py-1 text-right">{numberFormat(item.price)}</td><td className="border border-black px-1 py-1 text-right">{item.gstRate}%</td><td className="border border-black px-1 py-1 text-right font-bold">{numberFormat(item.qty * item.price)}</td></tr>))}</tbody>
         </table>
         <div className="flex border border-black min-h-[150px]">
           <div className="w-[60%] border-r border-black flex flex-col justify-between p-2"><div><p className="font-bold mb-1">Amount (in words):</p><p className="italic mb-4">{numberToWord(currentGrandTotal)}</p></div><div className="text-xs"><p className="font-bold">Terms & Conditions:</p><ol className="list-decimal list-inside pl-1"><li>Goods once sold will not be taken back.</li><li>Subject to local jurisdiction.</li><li>Interest @18% pa charged if not paid on due date.</li></ol><p className="border-t border-black mt-2 pt-1 font-bold">Thanks for your Business</p></div></div>
@@ -1164,13 +1422,104 @@ const IndustryBilling = () => {
                   value={barcodeInput}
                   onChange={(e) => setBarcodeInput(e.target.value)}
                   onKeyDown={handleBarcodeScan}
-                  placeholder="Scan barcode..."
-                  className={`w-full h-9 pl-8 pr-3 text-[11px] ${theme.barcodeInputBg} border rounded-lg focus:outline-none focus:ring-2`}
+                  placeholder="Scan barcode or IMEI..."
+                  className={`w-full h-9 pl-8 pr-8 text-[11px] ${theme.barcodeInputBg} border rounded-lg focus:outline-none focus:ring-2`}
                   autoFocus
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowCameraBillingScanner(true)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-emerald-600 rounded transition-colors"
+                  title="Scan Barcode / IMEI with Camera"
+                >
+                  <Camera size={14} />
+                </button>
+              </div>
+            )}
+
+            {/* Clothing Promos and Fast Counter Actions */}
+            {profile.key === "clothing" && (
+              <div className="p-2 bg-pink-50/70 rounded-xl border border-pink-100 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold text-pink-700 uppercase tracking-wider flex items-center gap-1">
+                    <Sparkles size={12} /> Promos
+                  </span>
+                  <div className="flex items-center gap-1.5 text-[10px]">
+                    <Link to="/alterations" className="text-pink-600 hover:text-pink-800 font-semibold flex items-center gap-0.5">
+                      <Scissors size={10} /> Alterations
+                    </Link>
+                    <span className="text-pink-300">•</span>
+                    <Link to="/clothing-hub" className="text-pink-600 hover:text-pink-800 font-semibold flex items-center gap-0.5">
+                      <RotateCcw size={10} /> Exchange
+                    </Link>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-1">
+                  <button
+                    type="button"
+                    onClick={() => applyPromoDeal("BOGO")}
+                    className="px-2 py-0.5 bg-white border border-pink-200 text-pink-700 rounded text-[10px] font-bold hover:bg-pink-100 transition-colors"
+                  >
+                    Buy 2 Get 1 Free
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => applyPromoDeal("FLAT10")}
+                    className="px-2 py-0.5 bg-white border border-pink-200 text-pink-700 rounded text-[10px] font-bold hover:bg-pink-100 transition-colors"
+                  >
+                    10% Off
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => applyPromoDeal("FLAT20")}
+                    className="px-2 py-0.5 bg-white border border-pink-200 text-pink-700 rounded text-[10px] font-bold hover:bg-pink-100 transition-colors"
+                  >
+                    20% Off
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => applyPromoDeal("FLAT30")}
+                    className="px-2 py-0.5 bg-white border border-pink-200 text-pink-700 rounded text-[10px] font-bold hover:bg-pink-100 transition-colors"
+                  >
+                    30% Off
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => applyPromoDeal("FESTIVE500")}
+                    className="px-2 py-0.5 bg-white border border-pink-200 text-pink-700 rounded text-[10px] font-bold hover:bg-pink-100 transition-colors"
+                  >
+                    Festive ₹500
+                  </button>
+                  {discount > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => applyPromoDeal("CLEAR")}
+                      className="px-1.5 py-0.5 bg-red-100 text-red-600 rounded text-[10px] font-bold hover:bg-red-200"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+
+                {/* Salesperson Selector */}
+                <div className="flex items-center gap-1.5 pt-1 border-t border-pink-100">
+                  <span className="text-[10px] text-pink-800 font-medium">Salesperson:</span>
+                  <select
+                    value={selectedSalesman}
+                    onChange={(e) => setSelectedSalesman(e.target.value)}
+                    className="text-[10px] bg-white border border-pink-200 rounded px-1.5 py-0.5 text-gray-700 focus:outline-none flex-1"
+                  >
+                    <option value="">-- None --</option>
+                    {salesmenList.map((s, idx) => (
+                      <option key={idx} value={s.name}>{s.name}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
             )}
           </div>
+
 
           <div className="flex-1 overflow-y-auto">
 
@@ -1240,7 +1589,32 @@ const IndustryBilling = () => {
                               </span>
                             );
                           })()}
+
+                          {/* Quick Weight addition tags — Only for Grocery */}
+                          {isWeightBased && (
+                            <div className="flex items-center gap-1 mt-1.5 flex-wrap">
+                              {[
+                                { label: "250g", val: 0.25 },
+                                { label: "500g", val: 0.5 },
+                                { label: "1kg", val: 1 },
+                              ].map((pill) => (
+                                <button
+                                  key={pill.label}
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    addToCart(product, pill.val);
+                                  }}
+                                  className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-white border border-gray-200 text-gray-600 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-300 transition-all shadow-2xs active:scale-95"
+                                  title={`Add ${pill.label} directly to cart`}
+                                >
+                                  +{pill.label}
+                                </button>
+                              ))}
+                            </div>
+                          )}
                         </div>
+
 
                         <span className={`text-sm font-bold ${theme.productPriceBadge} px-2 py-1 rounded-md flex-shrink-0`}>
                           ₹{product.salePrice || product.salesPrice || product.price}
@@ -1290,45 +1664,152 @@ const IndustryBilling = () => {
               </div>
             ) : (
               <div className="p-2 space-y-1">
-                {cart.map((item, index) => (
-                  <div key={item.productSku} className={`flex items-center gap-2 p-2 rounded-lg bg-gray-50/60 border ${theme.cartItemHover} transition-all`}>
-                    <span className={`w-5 h-5 rounded-md ${theme.cartItemIndexBg} text-[10px] font-bold flex items-center justify-center flex-shrink-0`}>
-                      {index + 1}
-                    </span>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-700 truncate leading-tight">{item.name}</p>
-                      <div className="flex items-center gap-1 mt-0.5">
-                        <span className="text-xs text-gray-400">₹</span>
-                        <input
-                          type="number"
-                          value={item.price}
-                          onChange={(e) => updatePrice(item.productSku, e.target.value)}
-                          className={`w-20 bg-transparent border-b border-dashed border-gray-200 text-xs font-semibold text-gray-700 focus:outline-none ${theme.priceInputFocus} transition-colors`}
-                        />
-                        {item.gstRate > 0 && <span className={`${theme.gstBadgeText} text-[10px]`}>+{item.gstRate}%</span>}
+                {cart.map((item, index) => {
+                  const currentQty = item.qty === "" ? "" : (parseFloat(item.qty) || 0);
+                  const currentGrams = item.qty === "" ? "" : Math.round((Number(item.qty) || 0) * 1000);
+
+                  return (
+                    <div key={item.productSku} className={`p-2.5 rounded-lg bg-gray-50/60 border ${theme.cartItemHover} transition-all space-y-1.5`}>
+                      <div className="flex items-center gap-2">
+                        <span className={`w-5 h-5 rounded-md ${theme.cartItemIndexBg} text-[10px] font-bold flex items-center justify-center flex-shrink-0`}>
+                          {index + 1}
+                        </span>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-gray-700 truncate leading-tight">{item.name}</p>
+                          {(item.batchNumber || item.batchNo || item.expiryDate) && (
+                            <div className="flex items-center gap-1.5 text-[10px] font-medium mt-0.5">
+                              {(item.batchNumber || item.batchNo) && (
+                                <span className="bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded border border-emerald-200 font-mono text-[9px]">
+                                  B: {item.batchNumber || item.batchNo}
+                                </span>
+                              )}
+                              {item.expiryDate && (
+                                <span className="bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded border border-amber-200 font-mono text-[9px]">
+                                  Exp: {item.expiryDate}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                          {(item.imei1 || item.imei2) && (
+                            <div className="flex items-center gap-1.5 text-[10px] font-medium mt-0.5 flex-wrap">
+                              {item.imei1 && (
+                                <span className="bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded border border-blue-200 font-mono text-[9px]">
+                                  IMEI: {item.imei1}
+                                </span>
+                              )}
+                              {item.ram && item.storage && (
+                                <span className="bg-purple-50 text-purple-700 px-1.5 py-0.5 rounded border border-purple-200 text-[9px]">
+                                  {item.ram}/{item.storage}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                          <div className="flex items-center gap-1 mt-0.5">
+                            <span className="text-xs text-gray-400">₹</span>
+                            <input
+                              type="number"
+                              value={item.price}
+                              onChange={(e) => updatePrice(item.productSku, e.target.value)}
+                              className={`w-20 bg-transparent border-b border-dashed border-gray-200 text-xs font-semibold text-gray-700 focus:outline-none ${theme.priceInputFocus} transition-colors`}
+                            />
+                            {item.gstRate > 0 && <span className={`${theme.gstBadgeText} text-[10px]`}>+{item.gstRate}%</span>}
+                          </div>
+                        </div>
+
+                        {/* Quantity Controls: Stepper (Pcs for Clothing / kg for Grocery) */}
+                        <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                          <div className="flex items-center gap-1">
+                            {/* Stepper */}
+                            <div className="flex items-center bg-white border border-gray-200 rounded-md overflow-hidden">
+                              <button
+                                type="button"
+                                onClick={() => addQty(item.productSku, -1)}
+                                className="w-6 h-6 flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+                                title="Decrease"
+                              >
+                                <Minus size={10} />
+                              </button>
+                              <input
+                                type="number"
+                                step={isWeightBased ? "any" : "1"}
+                                min={isWeightBased ? "0.001" : "1"}
+                                placeholder="1"
+                                value={item.qty}
+                                onChange={(e) => setQty(item.productSku, e.target.value)}
+                                className="w-12 h-6 text-center text-xs font-bold text-gray-700 border-x border-gray-200 bg-gray-50/50 focus:outline-none"
+                                title={isWeightBased ? "Weight in kg" : "Quantity in Pcs"}
+                              />
+                              <span className="text-[10px] font-semibold text-gray-500 px-1.5 bg-gray-50/80 select-none">
+                                {isWeightBased ? "kg" : "Pcs"}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => addQty(item.productSku, 1)}
+                                className={`w-6 h-6 flex items-center justify-center text-gray-400 ${theme.qtyPlusHover} transition-colors`}
+                                title="Increase"
+                              >
+                                <Plus size={10} />
+                              </button>
+                            </div>
+
+                            {/* Editable Grams Input — ONLY for Grocery */}
+                            {isWeightBased && (
+                              <div className="flex items-center bg-white border border-gray-200 rounded-md px-1.5 h-6 text-[10px]" title="Type exact grams (e.g. 250, 500, 750)">
+                                <input
+                                  type="number"
+                                  step="1"
+                                  min="1"
+                                  placeholder="0"
+                                  value={currentGrams}
+                                  onChange={(e) => setGramsQty(item.productSku, e.target.value)}
+                                  className="w-10 text-right text-xs font-bold text-emerald-700 bg-transparent focus:outline-none"
+                                />
+                                <span className="text-[10px] font-bold text-gray-400 pl-0.5 select-none">g</span>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Line item total */}
+                          <span className="text-sm font-bold text-gray-700 text-right">
+                            ₹{numberFormat(item.price * (Number(item.qty) || 0))}
+                          </span>
+                        </div>
                       </div>
+
+                      {/* Quick Decimal Weight Buttons — ONLY for Grocery */}
+                      {isWeightBased && (
+                        <div className="flex items-center gap-1 pt-1 border-t border-dashed border-gray-100 flex-wrap">
+                          <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mr-0.5">Quick:</span>
+                          {[
+                            { label: "100g", val: 0.1 },
+                            { label: "250g", val: 0.25 },
+                            { label: "500g", val: 0.5 },
+                            { label: "1kg", val: 1 },
+                            { label: "2kg", val: 2 },
+                            { label: "5kg", val: 5 },
+                          ].map((pill) => {
+                            const isSelected = typeof currentQty === "number" && Math.abs(currentQty - pill.val) < 0.001;
+                            return (
+                              <button
+                                key={pill.label}
+                                type="button"
+                                onClick={() => setQty(item.productSku, pill.val)}
+                                className={`px-1.5 py-0.5 rounded text-[10px] font-bold transition-all ${
+                                  isSelected
+                                    ? "bg-emerald-600 text-white shadow-sm scale-105"
+                                    : "bg-white border border-gray-200 text-gray-600 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-300 active:scale-95"
+                                }`}
+                              >
+                                {pill.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+
                     </div>
-                    <div className="flex items-center bg-white border border-gray-200 rounded-md overflow-hidden flex-shrink-0">
-                      <button onClick={() => addQty(item.productSku, -1)} className="w-6 h-6 flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors">
-                        <Minus size={10} />
-                      </button>
-                      <input
-                        type="number"
-                        min="1"
-                        placeholder="0"
-                        value={item.qty}
-                        onChange={(e) => setQty(item.productSku, e.target.value)}
-                        className="w-10 h-6 text-center text-sm font-bold text-gray-700 border-x border-gray-200 bg-gray-50/50 focus:outline-none"
-                      />
-                      <button onClick={() => addQty(item.productSku, 1)} className={`w-6 h-6 flex items-center justify-center text-gray-400 ${theme.qtyPlusHover} transition-colors`}>
-                        <Plus size={10} />
-                      </button>
-                    </div>
-                    <span className="text-sm font-bold text-gray-700 w-16 text-right flex-shrink-0">
-                      ₹{numberFormat(item.price * item.qty)}
-                    </span>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -1785,6 +2266,16 @@ const IndustryBilling = () => {
       background: #d1d5db;
     }
   `}</style>
+      {/* Camera Barcode & IMEI Scanner Modal */}
+      {showCameraBillingScanner && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+          <BarcodeScanner
+            onScan={handleCameraScanSuccess}
+            onClose={() => setShowCameraBillingScanner(false)}
+            title="Camera Barcode & IMEI Scanner"
+          />
+        </div>
+      )}
     </BillingLayout>
   );
 };

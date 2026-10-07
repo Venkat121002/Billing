@@ -36,9 +36,9 @@ async function generateDailySalesSummary({ ownerId, date = new Date() }) {
         const ownerMobile = owner.mobile || owner.phone;
         const ownerEmail = owner.email;
 
-        // Fetch all bills generated today
+        // Fetch all bills generated today strictly for this owner
         const bills = await Bill.find({
-            $or: [{ ownerId }, { tenantId: owner.tenantId || ownerId }],
+            ownerId,
             createdAt: { $gte: start, $lte: end }
         }).lean();
 
@@ -79,17 +79,17 @@ async function generateDailySalesSummary({ ownerId, date = new Date() }) {
             .sort((a, b) => b.qty - a.qty)
             .slice(0, 5);
 
-        // Fetch dues created today
+        // Fetch dues created today strictly for this owner
         const todayCredits = await Credit.find({
-            $or: [{ ownerId }, { tenantId: owner.tenantId || ownerId }],
+            ownerId,
             createdAt: { $gte: start, $lte: end }
         }).lean();
 
         const duesIncurred = todayCredits.reduce((sum, c) => sum + Number(c.balance || c.amount || 0), 0);
 
-        // Fetch low-stock products for this owner
+        // Fetch low-stock products strictly for this owner
         const products = await Product.find({
-            $or: [{ ownerId }, { tenantId: owner.tenantId || ownerId }]
+            ownerId
         }).lean();
 
         const lowStockItems = (products || []).filter((p) => {

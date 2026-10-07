@@ -43,7 +43,7 @@ const Login = () => {
 
     setIsLoading(true);
     try {
-      await employerLogin(formData.email, formData.password, loginType);
+      await employerLogin(formData.email.trim(), formData.password, loginType);
       toast.success("Successfully logged in!");
     } catch (error) {
       console.error("Login component error:", error);

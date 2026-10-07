@@ -27,13 +27,16 @@ const getGeminiClient = () => {
 };
 
 const DEFAULT_MODELS = [
-    'gemini-3.5-flash',
     'gemini-2.5-flash',
-    'gemini-3-flash-preview',
-    'gemini-flash-latest'
+    'gemini-2.0-flash',
+    'gemini-1.5-flash',
+    'gemini-3.5-flash-lite',
+    'gemini-3.1-flash-lite',
+    'gemini-3.5-flash',
+    'gemini-3.8-flash'
 ];
 
-const getGeminiModel = (modelName = 'gemini-3.5-flash') => {
+const getGeminiModel = (modelName = 'gemini-3.5-flash-lite') => {
     const client = getGeminiClient();
     if (!client) return null;
     return client.getGenerativeModel({ model: modelName });
@@ -42,7 +45,7 @@ const getGeminiModel = (modelName = 'gemini-3.5-flash') => {
 /**
  * Execute a promise with a hard timeout
  */
-const withTimeout = (promise, ms = 15000, errorMsg = 'AI request timed out') => {
+const withTimeout = (promise, ms = 45000, errorMsg = 'AI request timed out') => {
     return Promise.race([
         promise,
         new Promise((_, reject) => setTimeout(() => reject(new Error(errorMsg)), ms))
@@ -52,7 +55,7 @@ const withTimeout = (promise, ms = 15000, errorMsg = 'AI request timed out') => 
 /**
  * Execute a prompt or generator with automatic model fallback and strict per-attempt timeout
  */
-const generateWithFallback = async (runWithModel, candidateModels = DEFAULT_MODELS, timeoutMs = 15000) => {
+const generateWithFallback = async (runWithModel, candidateModels = DEFAULT_MODELS, timeoutMs = 45000) => {
     const client = getGeminiClient();
     if (!client) throw new Error('Gemini AI is not configured');
 
@@ -63,7 +66,7 @@ const generateWithFallback = async (runWithModel, candidateModels = DEFAULT_MODE
                 model: modelName,
                 generationConfig: {
                     temperature: 0.1,
-                    maxOutputTokens: 2048,
+                    maxOutputTokens: 8192,
                     responseMimeType: "application/json"
                 }
             });

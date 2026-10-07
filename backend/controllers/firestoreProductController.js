@@ -41,9 +41,11 @@ exports.createProduct = async (req, res) => {
         const { userId, role, ownerId } = req.user;
         const productData = {
             ...req.body,
+            industry: req.body.industry || req.user?.industry || '',
             ownerId: role === 'owner' ? userId : ownerId,
             createdBy: userId,
-            createdAt: new Date().toISOString()
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
         };
 
         const productsRef = getCollection(req, 'products');
@@ -70,19 +72,29 @@ exports.updateProduct = async (req, res) => {
         }
 
         const prevData = doc.data() || {};
-        await productDoc.update(req.body);
+        const updateData = { ...req.body };
+        // Protect immutable audit & tenancy fields from date or ownership changes
+        delete updateData._id;
+        delete updateData.id;
+        delete updateData.createdAt;
+        delete updateData.ownerId;
+        delete updateData.tenantId;
+        delete updateData.createdBy;
+        updateData.updatedAt = new Date().toISOString();
+
+        await productDoc.update(updateData);
 
         // Check for low stock alert if quantity was updated
-        if (req.body.quantity !== undefined) {
+        if (updateData.quantity !== undefined) {
             checkAndAlertLowStock({
                 productDoc: { ...prevData, id },
-                updatedQuantity: req.body.quantity,
+                updatedQuantity: updateData.quantity,
                 ownerId: req.user?.ownerId || prevData.ownerId,
                 productDocRef: productDoc
             }).catch((err) => console.error('[updateProduct] Low stock check failed:', err.message));
         }
 
-        res.json({ id, ...req.body });
+        res.json({ id, ...updateData });
     } catch (err) {
         console.error("Update Product Error:", err.message);
         res.status(500).send("Server Error");

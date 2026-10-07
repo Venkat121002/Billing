@@ -17,15 +17,10 @@ async function generateDemandForecast({ ownerId, tenantId, lookbackDays = 30, fo
         sinceDate.setDate(sinceDate.getDate() - Number(lookbackDays));
         const sinceIso = sinceDate.toISOString();
 
-        // 1. Fetch current inventory products
+        // 1. Fetch current inventory products strictly for this owner
         const productQuery = {};
-        if (ownerId && tenantId) {
-            productQuery.$or = [{ ownerId }, { tenantId }];
-        } else if (ownerId) {
-            productQuery.ownerId = ownerId;
-        } else if (tenantId) {
-            productQuery.tenantId = tenantId;
-        }
+        if (ownerId) productQuery.ownerId = ownerId;
+        if (tenantId) productQuery.tenantId = tenantId;
 
         const products = await Product.find(productQuery).lean();
 

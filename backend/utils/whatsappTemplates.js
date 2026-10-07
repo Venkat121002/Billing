@@ -148,6 +148,28 @@ const templates = {
                 { type: 'body', parameters: named({ owner_name, store_name, date, total_sales, total_bills, cash_sales, digital_sales, dues_incurred, top_products }) }
             ]
         }
+    }),
+
+    // Medicine refill reminder for chronic prescription patients
+    // Configured to use the Meta-approved "bill_remainder" template so it delivers instantly to patient mobile
+    MEDICINE_REFILL_REMINDER: ({ patient_name = 'Patient', pharmacy_name = SOFTWARE_NAME, medicine_name = 'Prescription Medicine', days_left = '3', expiry_date = '' }) => ({
+        textFallback: `💊 *MEDICINE REFILL REMINDER* 💊\n━━━━━━━━━━━━━━━━━━━━━\n🏪 *Pharmacy:* ${pharmacy_name}\n👤 *Hello:* ${patient_name}\n\n🩺 Your regular supply of *${medicine_name}* is due for refill in *${days_left} days*.\n\n✅ To ensure your treatment continues uninterrupted, please reply *YES* or call us to have your pack kept ready for priority pickup or delivery! 📦\n━━━━━━━━━━━━━━━━━━━━━\n✨ *Wishing you good health!* 🙏`,
+        metaTemplate: {
+            name: 'bill_remainder',
+            languageCode: 'en_US',
+            components: [
+                { type: 'header', parameters: named({ customer_name: patient_name }) },
+                {
+                    type: 'body',
+                    parameters: named({
+                        software_name: pharmacy_name,
+                        days_left: String(days_left).replace(/[^\d]/g, '') || '3',
+                        plan_name: `Medicine Refill: ${medicine_name}`,
+                        expiry_date: expiry_date || 'Soon'
+                    })
+                }
+            ]
+        }
     })
 };
 

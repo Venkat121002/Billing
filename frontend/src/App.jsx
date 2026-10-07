@@ -50,11 +50,15 @@ import Clients from "./industry/SoftwareDevelopment/Clients";
 import RepairTickets from "./industry/mobile/RepairTickets";
 import ImeiLookup from "./industry/mobile/ImeiLookup";
 import Pets from "./industry/petshop/Pets";
+import PetServices from "./industry/petshop/PetServices";
+import PetPassport from "./industry/petshop/PetPassport";
 import ExpiryAlerts from "./industry/Pharmacy/ExpiryAlerts";
 import Milestones from "./industry/SoftwareDevelopment/Milestones";
 import SoftwareDevelopmentInventory from "./industry/SoftwareDevelopment/SoftwareDevelopmentInventory";
 import AddClient from "./industry/SoftwareDevelopment/AddClient";
 import AddSoftwareService from "./industry/SoftwareDevelopment/AddSoftwareService";
+import Alterations from "./industry/clothing/Alterations";
+import ClothingHub from "./industry/clothing/ClothingHub";
 
 
 
@@ -102,11 +106,15 @@ const employerRoutes = [
         <Route element={<SubscriptionRoute><RepairTickets /></SubscriptionRoute>} path="/repair-tickets" />
         <Route element={<SubscriptionRoute><ImeiLookup /></SubscriptionRoute>} path="/imei-lookup" />
         <Route element={<SubscriptionRoute><Pets /></SubscriptionRoute>} path="/pets" />
+        <Route element={<SubscriptionRoute><PetServices /></SubscriptionRoute>} path="/pet-services" />
         <Route element={<SubscriptionRoute><ExpiryAlerts /></SubscriptionRoute>} path="/expiry-alerts" />
         <Route element={<SubscriptionRoute><Milestones /></SubscriptionRoute>} path="/milestones" />
+        <Route element={<SubscriptionRoute><Alterations /></SubscriptionRoute>} path="/alterations" />
+        <Route element={<SubscriptionRoute><ClothingHub /></SubscriptionRoute>} path="/clothing-hub" />
         <Route element={<SubscriptionRoute><AddSoftwareService /></SubscriptionRoute>} path="add-service" />
         <Route element={<SubscriptionRoute><AddClient /></SubscriptionRoute>} path="add-client" />
       </Routes>
+
     ),
   },
 ];
@@ -126,6 +134,7 @@ function App() {
               <Route path="/signup" element={<Signup />} />
               <Route path="/pricing" element={<Pricing />} />
               <Route path="/pay/:token" element={<PayPage />} />
+              <Route path="/pet-passport/:id" element={<PetPassport />} />
               <Route path="/onboarding" element={<PrivateRoute><Onboarding /></PrivateRoute>} />
 
               {/* <Route path="/credit" element={<Credit />}/> */}

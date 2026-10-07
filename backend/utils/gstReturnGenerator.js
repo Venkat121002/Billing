@@ -50,13 +50,8 @@ async function generateGstReturnsSummary({ ownerId, tenantId, month, year, start
         createdAt: { $gte: start, $lte: end }
     };
 
-    if (ownerId && tenantId) {
-        query.$or = [{ ownerId }, { tenantId }];
-    } else if (ownerId) {
-        query.ownerId = ownerId;
-    } else if (tenantId) {
-        query.tenantId = tenantId;
-    }
+    if (ownerId) query.ownerId = ownerId;
+    if (tenantId) query.tenantId = tenantId;
 
     const bills = await GstBill.find(query).sort({ createdAt: 1 }).lean();
 

@@ -12,8 +12,10 @@ import {
   Wrench,
   ScanSearch,
   PawPrint,
+  Scissors,
   AlertTriangle,
-  Milestone
+  Milestone,
+  Shirt
 } from "lucide-react";
 
 export const MODULES = {
@@ -35,8 +37,11 @@ export const MODULES = {
   repair_tickets: { label: "Repairs", path: "/repair-tickets", icon: Wrench },
   imei_lookup: { label: "IMEI Lookup", path: "/imei-lookup", icon: ScanSearch },
   pets: { label: "Pets", path: "/pets", icon: PawPrint },
+  pet_services: { label: "Grooming & Spa", path: "/pet-services", icon: Scissors },
   expiry_alerts: { label: "Expiry Alerts", path: "/expiry-alerts", icon: AlertTriangle },
   milestones: { label: "Milestones", path: "/milestones", icon: Milestone },
+  alterations: { label: "Tailoring & Alterations", path: "/alterations", icon: Scissors },
+  clothing_hub: { label: "Clothing Automation", path: "/clothing-hub", icon: Shirt },
 };
 
 export const INDUSTRY_MODULES = {
@@ -46,11 +51,16 @@ export const INDUSTRY_MODULES = {
   mobile_shop: ["dashboard", "inventory", "barcodes", "billing", "record", "reports", "gst", "cashbook", "credit", "repair_tickets", "imei_lookup", "staff_records"],
   academy: ["dashboard", "inventory", "billing", "record", "credit", "cashbook", "gst", "students", "trainers", "staff_records",],
   software_development: ["dashboard", "inventory", "billing", "record", "clients", "milestones", "gst", "cashbook", "staff_records"],
-  clothing: ["dashboard", "inventory", "barcodes", "billing", "record", "gst", "cashbook", "staff_records"],
+  clothing: ["dashboard", "inventory", "barcodes", "billing", "clothing_hub", "alterations", "record", "gst", "cashbook", "staff_records"],
+  garments: ["dashboard", "inventory", "barcodes", "billing", "clothing_hub", "alterations", "record", "gst", "cashbook", "staff_records"],
+  garment: ["dashboard", "inventory", "barcodes", "billing", "clothing_hub", "alterations", "record", "gst", "cashbook", "staff_records"],
+  textile: ["dashboard", "inventory", "barcodes", "billing", "clothing_hub", "alterations", "record", "gst", "cashbook", "staff_records"],
+  apparel: ["dashboard", "inventory", "barcodes", "billing", "clothing_hub", "alterations", "record", "gst", "cashbook", "staff_records"],
+
 
   pharmacy: ["dashboard", "inventory", "billing", "record", "gst", "cashbook", "credit", "expiry_alerts", "staff_records"],
 
-  petshop: ["dashboard", "inventory", "barcodes", "billing", "record", "reports", "gst", "cashbook", "pets", "staff_records"],
+  petshop: ["dashboard", "inventory", "barcodes", "billing", "record", "reports", "gst", "cashbook", "pets", "pet_services", "staff_records"],
 
   others: ["dashboard", "billing", "inventory", "gst", "record", "reports", "cashbook", "credit", "staff_records"],
 };

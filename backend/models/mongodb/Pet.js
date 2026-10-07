@@ -12,7 +12,22 @@ const PetSchema = new mongoose.Schema({
     species: { type: String, default: '' },
     breed: { type: String, default: '' },
     dob: { type: String, default: '' },
+    gender: { type: String, default: 'Male' },
+    microchipId: { type: String, default: '' },
+    weightKg: { type: String, default: '' },
+    // Vaccination & Deworming tracking
+    vaccineName: { type: String, default: 'Rabies Booster' },
     lastVaccinationDate: { type: String, default: '' },
+    nextVaccineDate: { type: String, default: '' },
+    dewormingDate: { type: String, default: '' },
+    nextDewormingDate: { type: String, default: '' },
+    vaccineHistory: { type: Array, default: [] },
+    // Food & Nutrition Refill Automation
+    foodBrand: { type: String, default: '' },
+    packSizeKg: { type: Number, default: 0 },
+    dailyConsumptionGrams: { type: Number, default: 0 },
+    lastFoodPurchaseDate: { type: String, default: '' },
+    nextFoodRefillDate: { type: String, default: '' },
     notes: { type: String, default: '' },
     createdAt: { type: String, default: () => new Date().toISOString() },
     updatedAt: { type: String, default: () => new Date().toISOString() }

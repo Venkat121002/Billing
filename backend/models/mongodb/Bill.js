@@ -18,6 +18,7 @@ const BillSchema = new mongoose.Schema({
     receivedAmount: { type: Number, default: 0 },
     changeAmount: { type: Number, default: 0 },
     date: { type: String },
+    industry: { type: String, default: '', index: true },
     createdAt: { type: String, default: () => new Date().toISOString() }
 }, {
     timestamps: true,
@@ -25,6 +26,7 @@ const BillSchema = new mongoose.Schema({
 });
 
 BillSchema.index({ tenantId: 1, ownerId: 1 });
+BillSchema.index({ tenantId: 1, ownerId: 1, industry: 1 });
 BillSchema.index({ tenantId: 1, ownerId: 1, createdAt: -1 });
 
 module.exports = mongoose.model('Bill', BillSchema);

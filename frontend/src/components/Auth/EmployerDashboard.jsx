@@ -3,9 +3,11 @@ import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { format } from "date-fns";
 import axios from "axios";
+import toast from "react-hot-toast";
 import API_URL from "../../config/api";
 import { useAuth } from "../../contexts/AuthContext";
 import IndustryNudgeBanner from "../Billing/IndustryNudgeBanner";
+import ReceiptScannerModal from "../AI/ReceiptScannerModal";
 import {
   Users,
   ShoppingCart,
@@ -18,6 +20,9 @@ import {
   RefreshCw,
   Package,
   BarChart3,
+  Camera,
+  Sparkles,
+  Send,
   AlertCircle,
   BookOpen,
   Calendar,
@@ -105,6 +110,31 @@ function EmployerDashboard() {
   const [productsData, setProductsData] = useState([]);
   const [transactionsData, setTransactionsData] = useState([]);
   const [isAcademyIndustry, setIsAcademyIndustry] = useState(false);
+  const [showScannerModal, setShowScannerModal] = useState(false);
+  const [isSendingClosing, setIsSendingClosing] = useState(false);
+
+  const isPharmacy = useMemo(() => {
+    const ind = (currentUser?.industry || currentUser?.businessType || "").toLowerCase();
+    return ind.includes("pharm") || ind === "medical" || ind === "chemist";
+  }, [currentUser]);
+
+  const handleSendDailyClosing = async () => {
+    setIsSendingClosing(true);
+    try {
+      const token = sessionStorage.getItem("token");
+      const res = await axios.post(
+        `${API_URL}/automation/sales-summary`,
+        {},
+        { headers: { "x-auth-token": token } }
+      );
+      toast.success(res.data?.msg || "1-Page PDF closing report sent to your email & WhatsApp!");
+    } catch (err) {
+      console.error("Daily closing dispatch error:", err);
+      toast.error(err.response?.data?.msg || "Failed to dispatch closing report.");
+    } finally {
+      setIsSendingClosing(false);
+    }
+  };
 
   useEffect(() => {
     if (currentUser) {
@@ -692,6 +722,87 @@ function EmployerDashboard() {
       <div className="min-h-screen bg-white -m-4 p-3">
         <IndustryNudgeBanner currentUser={currentUser} />
         <SubscriptionCard user={currentUser} />
+
+        {/* ═══════════════ AI AUTOMATION QUICK ACTION HUB ═══════════════ */}
+        <div className="mb-6 p-4 rounded-2xl bg-gradient-to-r from-emerald-900 via-slate-900 to-indigo-950 text-white shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border border-emerald-500/20">
+          <div className="flex items-center gap-3.5">
+            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center text-slate-950 font-black shadow-lg shadow-emerald-500/30 shrink-0">
+              <Sparkles size={24} className="text-slate-950" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="font-extrabold text-base tracking-tight text-white">
+                  {isPharmacy ? "Pharmacy AI Inward & Expiry Automation" : "SwordNex AI Automation Hub"}
+                </h3>
+                <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 uppercase tracking-wider">
+                  Live OCR
+                </span>
+              </div>
+              <p className="text-xs text-slate-300 mt-0.5">
+                {isPharmacy
+                  ? "4-Second medicine bill OCR (Batch & Expiry inwards), FEFO stock shield & auto closing reports."
+                  : "4-Second invoice scanner, real-time stock protection & zero-touch daily executive closing."}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2.5 flex-wrap w-full md:w-auto">
+            <button
+              type="button"
+              onClick={() => setShowScannerModal(true)}
+              className="flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-bold text-xs rounded-xl shadow-lg shadow-emerald-500/20 transition-all active:scale-[0.98]"
+            >
+              <Camera size={16} />
+              <span>{isPharmacy ? "📸 Scan Medicine Invoice" : "📸 Scan Inward Bill"}</span>
+            </button>
+
+            {isPharmacy ? (
+              <button
+                type="button"
+                onClick={() => navigate("/expiry-alerts")}
+                className="flex-1 md:flex-none flex items-center justify-center gap-2 px-3.5 py-2.5 bg-white/10 hover:bg-white/20 text-white font-bold text-xs rounded-xl border border-white/15 transition-all"
+              >
+                <AlertTriangle size={15} className="text-amber-400" />
+                <span>Expiry Shield</span>
+                {stats.lowStockItems > 0 && (
+                  <span className="px-1.5 py-0.2 bg-amber-500 text-slate-950 rounded-full text-[10px] font-black">
+                    {stats.lowStockItems}
+                  </span>
+                )}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => navigate("/inventory")}
+                className="flex-1 md:flex-none flex items-center justify-center gap-2 px-3.5 py-2.5 bg-white/10 hover:bg-white/20 text-white font-bold text-xs rounded-xl border border-white/15 transition-all"
+              >
+                <Package size={15} className="text-cyan-400" />
+                <span>Restock Alerts</span>
+                {stats.lowStockItems > 0 && (
+                  <span className="px-1.5 py-0.2 bg-cyan-400 text-slate-950 rounded-full text-[10px] font-black">
+                    {stats.lowStockItems}
+                  </span>
+                )}
+              </button>
+            )}
+
+            <button
+              type="button"
+              disabled={isSendingClosing}
+              onClick={handleSendDailyClosing}
+              className="flex-1 md:flex-none flex items-center justify-center gap-2 px-3.5 py-2.5 bg-white/10 hover:bg-white/20 disabled:opacity-50 text-white font-bold text-xs rounded-xl border border-white/15 transition-all"
+              title="Dispatches today's 1-page PDF summary to your email and WhatsApp right now"
+            >
+              {isSendingClosing ? (
+                <Loader2 size={15} className="animate-spin text-emerald-400" />
+              ) : (
+                <Send size={15} className="text-emerald-400" />
+              )}
+              <span>{isSendingClosing ? "Sending..." : "Send Daily PDF Now"}</span>
+            </button>
+          </div>
+        </div>
+
         {/* ═══════════════ HEADER ═══════════════ */}
         <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-8">
           <div>
@@ -2074,6 +2185,21 @@ function EmployerDashboard() {
 
         {/* Footer spacer */}
         <div className="h-4" />
+
+        {/* SwordNex OCR Invoice & Receipt Scanner Modal */}
+        <ReceiptScannerModal
+          isOpen={showScannerModal}
+          onClose={() => setShowScannerModal(false)}
+          businessType={isPharmacy ? "Pharmacy" : (currentUser?.industry || currentUser?.businessType || "Retail")}
+          onInventorySaved={() => {
+            handleRefresh();
+            setShowScannerModal(false);
+          }}
+          onExpenseSaved={() => {
+            handleRefresh();
+            setShowScannerModal(false);
+          }}
+        />
       </div>
     </BillingLayout>
   );
