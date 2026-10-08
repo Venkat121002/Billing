@@ -170,9 +170,9 @@ exports.getDueReminders = async (req, res) => {
 };
 
 // Helper: send WhatsApp reminder
-async function sendPetWhatsApp(req, pet, defaultMessage, customMessage) {
+async function sendPetWhatsApp(req, pet, defaultMessage, customMessage, phoneOverride) {
     const message = customMessage || defaultMessage;
-    const phone = pet.customerPhone;
+    const phone = phoneOverride || req.body?.phone || pet.customerPhone;
 
     if (!phone) {
         return {
@@ -198,7 +198,8 @@ async function sendPetWhatsApp(req, pet, defaultMessage, customMessage) {
         messageId: waResult?.messageId || null,
         mode: waResult?.mode || 'web-link',
         whatsappWebUrl,
-        message
+        message,
+        phone
     };
 }
 
@@ -207,7 +208,7 @@ async function sendPetWhatsApp(req, pet, defaultMessage, customMessage) {
 exports.sendVaccineReminder = async (req, res) => {
     try {
         const { id } = req.params;
-        const { customMessage } = req.body;
+        const { customMessage, phone } = req.body;
 
         const petsRef = getPetsCollection(req);
         const petDoc = await petsRef.doc(id).get();
@@ -228,7 +229,16 @@ Staying on schedule keeps ${petName} healthy and protected against critical dise
 
 - Team ${storeName}`;
 
-        const result = await sendPetWhatsApp(req, pet, defaultMessage, customMessage);
+        const result = await sendPetWhatsApp(req, pet, defaultMessage, customMessage, phone);
+        if (phone && !pet.customerPhone) {
+            try {
+                if (petDoc.ref && typeof petDoc.ref.update === 'function') {
+                    await petDoc.ref.update({ customerPhone: phone });
+                } else if (Pet) {
+                    await Pet.updateOne({ _id: id }, { $set: { customerPhone: phone } });
+                }
+            } catch { /* ignore */ }
+        }
         res.json({ success: true, ...result });
     } catch (err) {
         console.error("Send Vaccine Reminder Error:", err.message);
@@ -241,7 +251,7 @@ Staying on schedule keeps ${petName} healthy and protected against critical dise
 exports.sendDewormingReminder = async (req, res) => {
     try {
         const { id } = req.params;
-        const { customMessage } = req.body;
+        const { customMessage, phone } = req.body;
 
         const petsRef = getPetsCollection(req);
         const petDoc = await petsRef.doc(id).get();
@@ -261,7 +271,16 @@ Routine deworming prevents digestive issues and keeps your pet active and playfu
 
 - Team ${storeName}`;
 
-        const result = await sendPetWhatsApp(req, pet, defaultMessage, customMessage);
+        const result = await sendPetWhatsApp(req, pet, defaultMessage, customMessage, phone);
+        if (phone && !pet.customerPhone) {
+            try {
+                if (petDoc.ref && typeof petDoc.ref.update === 'function') {
+                    await petDoc.ref.update({ customerPhone: phone });
+                } else if (Pet) {
+                    await Pet.updateOne({ _id: id }, { $set: { customerPhone: phone } });
+                }
+            } catch { /* ignore */ }
+        }
         res.json({ success: true, ...result });
     } catch (err) {
         console.error("Send Deworming Reminder Error:", err.message);
@@ -274,7 +293,7 @@ Routine deworming prevents digestive issues and keeps your pet active and playfu
 exports.sendFoodRefillReminder = async (req, res) => {
     try {
         const { id } = req.params;
-        const { customMessage } = req.body;
+        const { customMessage, phone } = req.body;
 
         const petsRef = getPetsCollection(req);
         const petDoc = await petsRef.doc(id).get();
@@ -295,7 +314,16 @@ Would you like us to reserve a fresh bag for pickup or arrange home delivery? Ju
 
 - Team ${storeName}`;
 
-        const result = await sendPetWhatsApp(req, pet, defaultMessage, customMessage);
+        const result = await sendPetWhatsApp(req, pet, defaultMessage, customMessage, phone);
+        if (phone && !pet.customerPhone) {
+            try {
+                if (petDoc.ref && typeof petDoc.ref.update === 'function') {
+                    await petDoc.ref.update({ customerPhone: phone });
+                } else if (Pet) {
+                    await Pet.updateOne({ _id: id }, { $set: { customerPhone: phone } });
+                }
+            } catch { /* ignore */ }
+        }
         res.json({ success: true, ...result });
     } catch (err) {
         console.error("Send Food Refill Reminder Error:", err.message);

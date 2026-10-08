@@ -347,7 +347,7 @@ const BillingLayout = ({ children, hideHeader = false, hideSidebar = false }) =>
       )}
 
       {/* Floating Chatbot Assistant */}
-      <SwordNexi />
+      {hasCapability('aiAssistant') && <SwordNexi />}
     </div>
   );
 

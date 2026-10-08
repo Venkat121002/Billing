@@ -7,6 +7,9 @@ const KEYS = planStore.KEYS;
 // @route   GET /api/v2/billing/plans
 exports.getPublicPlans = async (req, res) => {
     try {
+        res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+        res.set('Pragma', 'no-cache');
+        res.set('Expires', '0');
         const plans = await planStore.listPlans();
         res.json(plans.map(({ key, order, name, tagline, badge, monthly, yearly, capabilities }) => ({
             key, order, name, tagline, badge, monthly, yearly, capabilities
@@ -21,6 +24,9 @@ exports.getPublicPlans = async (req, res) => {
 // @route   GET /superadmin/plans
 exports.getAdminPlans = async (req, res) => {
     try {
+        res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+        res.set('Pragma', 'no-cache');
+        res.set('Expires', '0');
         res.json(await planStore.listPlans());
     } catch (err) {
         console.error('SuperAdmin getPlans Error:', err.message);

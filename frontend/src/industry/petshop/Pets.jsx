@@ -81,6 +81,7 @@ const Pets = () => {
     pet: null,
     reminderType: "vaccine", // 'vaccine' | 'deworming' | 'refill'
     message: "",
+    phone: "",
     isSending: false
   });
 
@@ -243,15 +244,22 @@ const Pets = () => {
       pet,
       reminderType: type,
       message: msg,
+      phone: pet.customerPhone || "",
       isSending: false
     });
   };
 
   // Send WhatsApp Reminder via API or Web
   const handleSendReminder = async () => {
-    const { pet, reminderType, message } = reminderModal;
+    const { pet, reminderType, message, phone } = reminderModal;
     const petId = pet.id || pet._id;
     const token = sessionStorage.getItem("token");
+
+    const targetPhone = (phone || "").trim();
+    if (!targetPhone) {
+      toast.error("Please enter a mobile number to send the WhatsApp reminder.");
+      return;
+    }
 
     setReminderModal((prev) => ({ ...prev, isSending: true }));
     try {
@@ -263,16 +271,26 @@ const Pets = () => {
 
       const res = await axios.post(
         endpointMap[reminderType],
-        { customMessage: message },
+        { customMessage: message, phone: targetPhone },
         { headers: { "x-auth-token": token } }
       );
 
+      // Persist the phone number back to the pet profile if it was missing or updated
+      if (!pet.customerPhone || pet.customerPhone !== targetPhone) {
+        try {
+          await axios.put(`${API_URL}/pets/${petId}`, { ...pet, customerPhone: targetPhone }, {
+            headers: { "x-auth-token": token }
+          });
+          fetchData();
+        } catch { /* ignore */ }
+      }
+
       if (res.data.sent) {
-        toast.success(`WhatsApp reminder sent to ${pet.customerPhone}!`);
+        toast.success(`WhatsApp reminder sent to ${targetPhone}!`);
       } else {
         toast.success("Reminder generated! Opening WhatsApp link...");
       }
-      setReminderModal({ isOpen: false, pet: null, reminderType: "vaccine", message: "", isSending: false });
+      setReminderModal({ isOpen: false, pet: null, reminderType: "vaccine", message: "", phone: "", isSending: false });
     } catch (err) {
       console.error("Reminder error:", err);
       toast.error("Failed to send WhatsApp message via API");
@@ -980,7 +998,7 @@ const Pets = () => {
                   <span>Send Automated WhatsApp Reminder</span>
                 </div>
                 <button
-                  onClick={() => setReminderModal({ isOpen: false, pet: null, reminderType: "vaccine", message: "", isSending: false })}
+                  onClick={() => setReminderModal({ isOpen: false, pet: null, reminderType: "vaccine", message: "", phone: "", isSending: false })}
                   className="text-gray-400 hover:text-gray-600"
                 >
                   <X size={20} />
@@ -1022,22 +1040,47 @@ const Pets = () => {
               </div>
 
               <div>
-                <p className="text-xs text-gray-500 mb-1">
-                  Recipient: <span className="font-semibold text-gray-900">{reminderModal.pet?.customerName}</span> (
-                  {reminderModal.pet?.customerPhone || "No phone"})
+                <p className="text-xs text-gray-500 mb-2">
+                  Recipient: <span className="font-semibold text-gray-900">{reminderModal.pet?.customerName || "Pet Parent"}</span>
                 </p>
+
+                {/* Mobile Number Input */}
+                <div className="mb-3">
+                  <label className="text-[11px] font-bold text-gray-700 uppercase tracking-wider block mb-1">
+                    Mobile Number *
+                  </label>
+                  <div className="relative">
+                    <Phone size={14} className="absolute left-3.5 top-3 text-gray-400" />
+                    <input
+                      type="tel"
+                      value={reminderModal.phone}
+                      onChange={(e) => setReminderModal({ ...reminderModal, phone: e.target.value })}
+                      placeholder="Enter mobile number (e.g. 9791402934)"
+                      className="w-full pl-9 pr-3.5 py-2 rounded-xl border border-gray-200 bg-white text-sm text-gray-800 font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                    />
+                  </div>
+                  {!reminderModal.phone?.trim() && (
+                    <p className="text-[11px] text-amber-600 mt-1">
+                      ⚠️ No phone number saved on profile. Enter mobile number above to send reminder.
+                    </p>
+                  )}
+                </div>
+
+                <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wider block mb-1">
+                  Message Preview
+                </label>
                 <textarea
-                  rows={8}
+                  rows={6}
                   value={reminderModal.message}
                   onChange={(e) => setReminderModal({ ...reminderModal, message: e.target.value })}
-                  className="w-full p-3.5 bg-gray-50 rounded-2xl border border-gray-200 text-sm text-gray-800 font-mono leading-relaxed"
+                  className="w-full p-3.5 bg-gray-50 rounded-2xl border border-gray-200 text-sm text-gray-800 font-mono leading-relaxed focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 />
               </div>
 
               <div className="flex items-center justify-between pt-2">
-                {reminderModal.pet?.customerPhone ? (
+                {reminderModal.phone?.trim() ? (
                   <a
-                    href={`https://wa.me/${String(reminderModal.pet.customerPhone).replace(/\D/g, '')}?text=${encodeURIComponent(reminderModal.message)}`}
+                    href={`https://wa.me/${String(reminderModal.phone).replace(/\D/g, '').length === 10 ? '91' + String(reminderModal.phone).replace(/\D/g, '') : String(reminderModal.phone).replace(/\D/g, '')}?text=${encodeURIComponent(reminderModal.message)}`}
                     target="_blank"
                     rel="noreferrer"
                     className="inline-flex items-center gap-1.5 text-xs text-emerald-700 hover:underline font-semibold"
@@ -1045,13 +1088,13 @@ const Pets = () => {
                     <ExternalLink size={14} /> Open in WhatsApp Web
                   </a>
                 ) : (
-                  <span className="text-xs text-red-500">No phone number on profile</span>
+                  <span className="text-xs text-red-500">Enter mobile number</span>
                 )}
 
                 <button
-                  disabled={reminderModal.isSending || !reminderModal.pet?.customerPhone}
+                  disabled={reminderModal.isSending || !reminderModal.phone?.trim()}
                   onClick={handleSendReminder}
-                  className="px-5 py-2.5 rounded-xl text-xs font-semibold bg-green-600 hover:bg-green-700 text-white shadow-md shadow-green-100 flex items-center gap-1.5 disabled:opacity-50"
+                  className="px-5 py-2.5 rounded-xl text-xs font-semibold bg-green-600 hover:bg-green-700 text-white shadow-md shadow-green-100 flex items-center gap-1.5 disabled:opacity-50 transition-all"
                 >
                   <Send size={14} />
                   {reminderModal.isSending ? "Sending..." : "Send via WhatsApp"}
