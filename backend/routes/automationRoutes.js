@@ -6,6 +6,9 @@ const { runDailyLowStockSummary } = require('../utils/inventoryAlerts');
 const { runDuePaymentReminders } = require('../utils/dueReminders');
 const { generateDailySalesSummary, runAllOwnersDailySalesSummary } = require('../utils/salesSummary');
 const { isGeminiConfigured } = require('../config/gemini');
+const { Product, Bill } = require('../models/mongodb');
+const platformStore = require('../utils/platformStore');
+const { generateDailyReportPDF } = require('../utils/reportPdfGenerator');
 
 // Phase 2 Utilities
 const { generateDemandForecast } = require('../utils/demandForecasting');
@@ -378,6 +381,212 @@ router.post('/due-reminders', roleAuth(['owner', 'TenantAdmin', 'superadmin']), 
     } catch (err) {
         console.error('Trigger dues reminder error:', err);
         res.status(500).json({ msg: 'Failed to run due payment reminders', error: err.message });
+    }
+});
+
+// =========================================================================
+// Pharmacy Refill Automation & Nightly Closing PDF
+// =========================================================================
+
+// Compute chronic patients due for medicine refill based on purchase history
+router.get('/pharmacy/refills', async (req, res) => {
+    try {
+        const effectiveOwnerId = req.user.role === 'owner' || req.user.role === 'TenantAdmin'
+            ? (req.user.userId || req.user.ownerId)
+            : (req.user.ownerId || req.user.userId);
+        const tenantId = req.user.tenantId || effectiveOwnerId;
+
+        // Look back 60 days of bills to detect repeat course cycles
+        const startDate = new Date(Date.now() - 60 * 86400000).toISOString();
+        const bills = await Bill.find({
+            ownerId: effectiveOwnerId,
+            createdAt: { $gte: startDate }
+        }).sort({ createdAt: -1 }).lean();
+
+        const refills = [];
+        const seenCombo = new Set();
+
+        for (const bill of bills) {
+            const customerName = bill.customer?.name || bill.customerName || bill.clientName;
+            const customerPhone = bill.customer?.phone || bill.customer?.mobile || bill.customerPhone || bill.phone;
+            if (!customerName || !customerPhone) continue;
+
+            const items = bill.items || bill.products || [];
+            const billDate = new Date(bill.createdAt || bill.date || Date.now());
+            const daysElapsed = Math.max(0, Math.round((Date.now() - billDate.getTime()) / (1000 * 60 * 60 * 24)));
+
+            for (const item of items) {
+                const medName = item.name || item.description || '';
+                if (!medName) continue;
+
+                const comboKey = `${customerPhone}_${medName.toLowerCase().trim()}`;
+                if (seenCombo.has(comboKey)) continue;
+                seenCombo.add(comboKey);
+
+                const qty = Number(item.qty || item.quantity || 1);
+                // Standard course assumption: 1 strip (10-15 tabs) = 15-30 days supply
+                const courseDays = qty >= 10 ? Math.min(60, Math.max(20, Math.round(qty))) : 30;
+                const daysRemaining = courseDays - daysElapsed;
+                const dueDate = new Date(billDate.getTime() + courseDays * 86400000).toISOString().split('T')[0];
+
+                let status = 'active';
+                if (daysRemaining <= 0) {
+                    status = 'overdue';
+                } else if (daysRemaining <= 5) {
+                    status = 'due_soon'; // Day 25 to 30 window
+                }
+
+                refills.push({
+                    id: `${bill._id || bill.id}_${item.sku || Math.random().toString(36).substring(7)}`,
+                    patientName: customerName,
+                    patientPhone: customerPhone,
+                    medicineName: medName,
+                    salt: item.salt || '',
+                    batchNumber: item.batchNumber || '',
+                    qtyPurchased: qty,
+                    purchasedDate: billDate.toISOString().split('T')[0],
+                    courseDays,
+                    daysElapsed,
+                    daysRemaining,
+                    dueDate,
+                    status
+                });
+            }
+        }
+
+        // Prioritize due_soon and overdue
+        refills.sort((a, b) => a.daysRemaining - b.daysRemaining);
+
+        res.json({
+            success: true,
+            totalPatients: refills.length,
+            dueSoonCount: refills.filter(r => r.status === 'due_soon').length,
+            overdueCount: refills.filter(r => r.status === 'overdue').length,
+            refills
+        });
+    } catch (err) {
+        console.error('❌ Pharmacy Refills Error:', err);
+        res.status(500).json({ msg: 'Failed to compute medicine refills', error: err.message });
+    }
+});
+
+// 1-Click Send Refill WhatsApp Reminder
+router.post('/pharmacy/send-refill', async (req, res) => {
+    try {
+        const { patientName, patientPhone, medicineName, daysRemaining } = req.body;
+        if (!patientPhone) {
+            return res.status(400).json({ msg: 'Patient phone number is required' });
+        }
+
+        const effectiveOwnerId = req.user.role === 'owner' || req.user.role === 'TenantAdmin'
+            ? (req.user.userId || req.user.ownerId)
+            : (req.user.ownerId || req.user.userId);
+        const owner = await platformStore.getOwner(effectiveOwnerId);
+        const pharmacyName = owner?.companyDetails?.name || owner?.businessName || 'Your Neighborhood Pharmacy';
+
+        const daysCount = Math.max(1, Math.abs(Number(daysRemaining) || 3));
+        const dueDate = req.body.dueDate || new Date(Date.now() + daysCount * 86400000).toLocaleDateString('en-GB');
+
+        const waRes = await wa.sendTemplate({
+            to: patientPhone,
+            type: 'MEDICINE_REFILL_REMINDER',
+            data: {
+                patient_name: patientName || 'Valued Patient',
+                pharmacy_name: pharmacyName,
+                medicine_name: medicineName || 'Prescription Medicines',
+                days_left: String(daysCount),
+                expiry_date: dueDate
+            }
+        });
+
+        res.json({
+            success: true,
+            msg: `Refill reminder dispatched to ${patientName} on WhatsApp!`,
+            waRes
+        });
+    } catch (err) {
+        console.error('❌ Send Refill WhatsApp Error:', err);
+        res.status(500).json({ msg: 'Failed to dispatch WhatsApp refill reminder', error: err.message });
+    }
+});
+
+// Download 1-Page Nightly Closing PDF on demand
+router.get('/daily-sales-summary/download-pdf', async (req, res) => {
+    try {
+        const effectiveOwnerId = req.user.role === 'owner' || req.user.role === 'TenantAdmin'
+            ? (req.user.userId || req.user.ownerId)
+            : (req.user.ownerId || req.user.userId);
+
+        const targetDate = req.query.date ? new Date(req.query.date) : new Date();
+        const owner = await platformStore.getOwner(effectiveOwnerId);
+        const storeName = owner?.companyDetails?.name || owner?.businessName || 'Pharmacy & Medical Store';
+
+        // Format to yyyy-mm-dd in Asia/Kolkata
+        const istString = targetDate.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+        const start = new Date(`${istString}T00:00:00.000+05:30`).toISOString();
+        const end = new Date(`${istString}T23:59:59.999+05:30`).toISOString();
+
+        const bills = await Bill.find({
+            ownerId: effectiveOwnerId,
+            createdAt: { $gte: start, $lte: end }
+        }).lean();
+
+        let totalRevenue = 0;
+        let cashTotal = 0;
+        let digitalTotal = 0;
+        let cardTotal = 0;
+        const productStats = {};
+
+        bills.forEach((bill) => {
+            const billTotal = Number(bill.totals?.grandTotal ?? bill.grandTotal ?? bill.total ?? 0);
+            totalRevenue += billTotal;
+            const method = String(bill.paymentMethod || 'cash').toLowerCase();
+            if (method.includes('cash')) cashTotal += billTotal;
+            else if (method.includes('card')) cardTotal += billTotal;
+            else digitalTotal += billTotal;
+
+            (bill.items || []).forEach((item) => {
+                const name = item.name || 'Medicine';
+                const qty = Number(item.qty || 1);
+                const price = Number(item.price || 0);
+                if (!productStats[name]) productStats[name] = { name, qty: 0, revenue: 0 };
+                productStats[name].qty += qty;
+                productStats[name].revenue += (price * qty);
+            });
+        });
+
+        const topProducts = Object.values(productStats).sort((a, b) => b.qty - a.qty).slice(0, 5);
+        const { Credit } = require('../models/mongodb');
+        const todayCredits = await Credit.find({
+            ownerId: effectiveOwnerId,
+            createdAt: { $gte: start, $lte: end }
+        }).lean();
+        const duesIncurred = todayCredits.reduce((sum, c) => sum + Number(c.balance || c.amount || 0), 0);
+
+        const pdfBuffer = await generateDailyReportPDF({
+            storeName,
+            ownerName: owner?.firstName || owner?.name || 'Pharmacist',
+            date: istString,
+            websiteUrl: process.env.FRONTEND_URL || 'https://swordnex-billing-app.web.app',
+            totalSales: `Rs. ${totalRevenue.toFixed(2)}`,
+            totalBills: bills.length,
+            paymentBreakdown: {
+                cash: `Rs. ${cashTotal.toFixed(2)}`,
+                digital: `Rs. ${digitalTotal.toFixed(2)}`,
+                card: `Rs. ${cardTotal.toFixed(2)}`
+            },
+            topProducts,
+            duesIncurred: `Rs. ${duesIncurred.toFixed(2)}`,
+            lowStockItems: []
+        });
+
+        const fileName = `Pharmacy_Closing_Report_${istString}.pdf`;
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+        res.send(pdfBuffer);
+    } catch (err) {
+        console.error('❌ Download Closing PDF Error:', err);
+        res.status(500).json({ msg: 'Failed to generate closing PDF', error: err.message });
     }
 });
 

@@ -93,6 +93,13 @@ exports.updateCustomer = async (req, res) => {
             ...req.body,
             updatedAt: new Date().toISOString()
         };
+        // Protect immutable audit & tenancy fields
+        delete updateData._id;
+        delete updateData.id;
+        delete updateData.createdAt;
+        delete updateData.ownerId;
+        delete updateData.tenantId;
+        delete updateData.createdBy;
 
         await customerRef.update(updateData);
         res.json({ id, ...updateData });

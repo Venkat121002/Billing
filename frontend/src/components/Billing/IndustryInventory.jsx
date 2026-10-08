@@ -1123,12 +1123,14 @@ const IndustryInventory = () => {
         <DemandForecastModal
           isOpen={showDemandModal}
           onClose={() => setShowDemandModal(false)}
+          onProductUpdated={fetchProducts}
         />
 
-        {/* Phase 3 Feature 11: AI Receipt & Inward Bill Scanner Modal */}
+        {/* Phase 1 Pharmacy Batch OCR & Inward Bill Scanner Modal */}
         <ReceiptScannerModal
           isOpen={showScannerModal}
           onClose={() => setShowScannerModal(false)}
+          businessType={profile?.industry || currentUser?.businessType || currentUser?.industry || "Pharmacy"}
           onInventorySaved={() => {
             fetchProducts();
             setShowScannerModal(false);

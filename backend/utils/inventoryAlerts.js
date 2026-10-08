@@ -104,8 +104,10 @@ async function runDailyLowStockSummary(now = new Date(), { ownerId: onlyOwnerId 
             const storeName = owner.companyDetails?.name || owner.businessName || 'Your Store';
             const ownerName = owner.firstName || owner.name || 'Owner';
 
-            // Query low-stock products for this owner
-            const products = await listStoreRecords(ownerId, 'products');
+            // Query low-stock products strictly for this owner
+            const products = await Product.find({
+                ownerId
+            }).lean();
 
             const lowStockItems = (products || []).filter((p) => {
                 const threshold = Number(p.minStockThreshold !== undefined ? p.minStockThreshold : (p.reorderLevel || 5));

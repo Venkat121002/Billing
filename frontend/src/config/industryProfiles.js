@@ -52,11 +52,12 @@ export const PROFILES = {
   clothing: {
     ...RETAIL_DEFAULTS,
     key: "clothing",
-    aliases: [],
+    aliases: ["textile", "apparel", "garment", "garments", "fashion", "boutique"],
     label: "Clothing",
     theme: "green",
     itemFieldGroups: { ...RETAIL_DEFAULTS.itemFieldGroups, variants: true },
   },
+
   petshop: {
     ...RETAIL_DEFAULTS,
     key: "petshop",

@@ -30,10 +30,13 @@ import {
   MapPin,
   CreditCard,
   Hash,
-  FileText
+  FileText,
+  Camera
 } from "lucide-react";
 import BillingLayout from "../../Layout/BillingLayout/AdminLayout";
 import { useNavigate } from "react-router-dom";
+import ReceiptScannerModal from "../../components/AI/ReceiptScannerModal";
+import BarcodeScanner from "../../components/Auth/BarcodeScanner";
 
 const MobileInventory = () => {
   const { currentUser } = useAuth();
@@ -46,11 +49,16 @@ const MobileInventory = () => {
   const [editingId, setEditingId] = useState(null);
   const [error, setError] = useState(null);
 
+  // Camera Barcode Scanner State
+  const [showCameraScanner, setShowCameraScanner] = useState(false);
+  const [cameraScanTarget, setCameraScanTarget] = useState(null); // 'search' | 'imei1' | 'imei2'
+
   // New State for View & Stock
   const [viewProduct, setViewProduct] = useState(null);
   const [stockProduct, setStockProduct] = useState(null);
   const [addStockQty, setAddStockQty] = useState("");
   const [isSupplierModalOpen, setIsSupplierModalOpen] = useState(false);
+  const [isOcrModalOpen, setIsOcrModalOpen] = useState(false);
   const [supplierFormData, setSupplierFormData] = useState({
     name: "",
     company: "",
@@ -63,7 +71,7 @@ const MobileInventory = () => {
     paymentMode: "Cash",
   });
 
-  const [formData, setFormData] = useState({
+  const initialFormState = {
     brand: "",
     model: "",
     ram: "",
@@ -77,17 +85,37 @@ const MobileInventory = () => {
     stock: "",
     warranty: "",
     category: "Mobile",
-  });
+  };
+
+  const EDITABLE_FIELDS = [
+    "brand",
+    "model",
+    "ram",
+    "storage",
+    "color",
+    "imei1",
+    "imei2",
+    "purchasePrice",
+    "salePrice",
+    "gst",
+    "stock",
+    "warranty",
+  ];
+
+  const [formData, setFormData] = useState(initialFormState);
 
   const handleAddStock = async (e) => {
     e.preventDefault();
     if (!stockProduct || !addStockQty || isNaN(addStockQty) || Number(addStockQty) <= 0) return;
 
     const token = sessionStorage.getItem("token");
+    const targetId = stockProduct.id || stockProduct._id;
     try {
-      const newQty = (Number(stockProduct.quantity) || 0) + Number(addStockQty);
-      await axios.put(`${API_URL}/products/${stockProduct.id}`, {
-        quantity: newQty
+      const currentQty = Number(stockProduct.quantity) || Number(stockProduct.stock) || 0;
+      const newQty = currentQty + Number(addStockQty);
+      await axios.put(`${API_URL}/products/${targetId}`, {
+        quantity: newQty,
+        stock: newQty
       }, {
         headers: { "x-auth-token": token },
       });
@@ -118,15 +146,12 @@ const MobileInventory = () => {
       const res = await axios.get(`${API_URL}/products`, {
         headers: { "x-auth-token": token },
       });
-      console.log("✅ MobileInventory: Found", res.data.length, "products");
-      // Filter for mobile category or just show all? The previous code was specific to 'mobiles' collection.
-      // But now we are using the general products collection. 
-      // We should probably filter by category 'Mobile' or just show all if the user is in mobile industry?
-      // For now, let's load all data from the products API as the user might haven't set categories strictly yet.
-      // Or better, let's just use the data as is, assuming the user will use this UI to manage them.
-      setMobiles(res.data.map(p => ({
+      console.log("✅ MobileInventory: Found", res.data?.length || 0, "products");
+      setMobiles((res.data || []).map(p => ({
         ...p,
-        stock: p.quantity,
+        id: p.id || p._id,
+        stock: (p.stock !== undefined && p.stock !== null) ? p.stock : (p.quantity ?? 0),
+        quantity: (p.quantity !== undefined && p.quantity !== null) ? p.quantity : (p.stock ?? 0),
         brand: p.brand || p.name?.split(' ')[0] || "Unknown",
         model: p.model || p.name?.split(' ').slice(1).join(' ') || ""
       })));
@@ -178,7 +203,55 @@ const MobileInventory = () => {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
+    // Auto-split if user scans or pastes a string containing both IMEIs
+    if (name === "imei1") {
+      const imeis = (value || "").match(/\b\d{15}\b/g) || [];
+      if (imeis.length >= 2) {
+        setFormData((prev) => ({
+          ...prev,
+          imei1: imeis[0],
+          imei2: imeis[1]
+        }));
+        return;
+      }
+    }
     setFormData((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleImeiKeyDown = (field) => (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      if (field === "imei1") {
+        const next = document.getElementById("modal-input-imei2");
+        if (next) next.focus();
+      }
+    }
+  };
+
+  const handleCameraScan = (scannedCode) => {
+    if (!scannedCode) return;
+    const clean = String(scannedCode).trim();
+    const imeis = clean.match(/\b\d{15}\b/g) || [];
+
+    if (cameraScanTarget === "search") {
+      setSearchTerm(imeis[0] || clean);
+    } else if (cameraScanTarget === "imei1" || cameraScanTarget === "imei2") {
+      if (imeis.length >= 2) {
+        setFormData((prev) => ({
+          ...prev,
+          imei1: imeis[0],
+          imei2: imeis[1]
+        }));
+      } else {
+        setFormData((prev) => ({
+          ...prev,
+          [cameraScanTarget]: imeis[0] || clean
+        }));
+      }
+    }
+
+    setShowCameraScanner(false);
+    setCameraScanTarget(null);
   };
 
   const handleSubmit = async (e) => {
@@ -187,13 +260,20 @@ const MobileInventory = () => {
     const token = sessionStorage.getItem("token");
 
     const data = {
-      ...formData,
-      purchasePrice: Number(formData.purchasePrice),
-      salePrice: Number(formData.salePrice),
-      gst: Number(formData.gst),
-      quantity: Number(formData.stock), // Map stock to quantity
-      // Ensure we save main fields for compatibility
-      name: `${formData.brand} ${formData.model}`,
+      brand: formData.brand || "",
+      model: formData.model || "",
+      ram: formData.ram || "",
+      storage: formData.storage || "",
+      color: formData.color || "",
+      imei1: formData.imei1 || "",
+      imei2: formData.imei2 || "",
+      purchasePrice: Number(formData.purchasePrice) || 0,
+      salePrice: Number(formData.salePrice) || 0,
+      gst: Number(formData.gst) || 0,
+      quantity: Number(formData.stock) || 0,
+      stock: Number(formData.stock) || 0,
+      warranty: formData.warranty || "",
+      name: `${formData.brand || ""} ${formData.model || ""}`.trim() || formData.model || formData.brand || "Mobile Device",
       category: formData.category || "Mobile",
     };
 
@@ -207,41 +287,38 @@ const MobileInventory = () => {
           headers: { "x-auth-token": token },
         });
       }
-      fetchMobiles();
+      await fetchMobiles();
       resetForm();
     } catch (err) {
       console.error("Error saving mobile:", err);
-      alert(err.response?.data?.msg || "Failed to save mobile.");
+      alert(err.response?.data?.msg || err.message || "Failed to save mobile.");
     }
   };
 
   const resetForm = () => {
-    setFormData({
-      brand: "",
-      model: "",
-      ram: "",
-      storage: "",
-      color: "",
-      imei1: "",
-      imei2: "",
-      purchasePrice: "",
-      salePrice: "",
-      gst: "",
-      stock: "",
-      warranty: "",
-      category: "Mobile",
-    });
+    setFormData(initialFormState);
     setEditingId(null);
     setIsModalOpen(false);
   };
 
   const handleEdit = (mobile) => {
+    const targetId = mobile.id || mobile._id;
+    setEditingId(targetId);
     setFormData({
-      ...mobile,
-      stock: mobile.quantity || mobile.stock, // Handle mapping back
-      category: mobile.category || "Mobile"
+      brand: mobile.brand ?? (mobile.name ? mobile.name.split(' ')[0] : "") ?? "",
+      model: mobile.model ?? (mobile.name ? mobile.name.split(' ').slice(1).join(' ') : "") ?? "",
+      ram: mobile.ram ?? "",
+      storage: mobile.storage ?? "",
+      color: mobile.color ?? "",
+      imei1: mobile.imei1 ?? "",
+      imei2: mobile.imei2 ?? "",
+      purchasePrice: mobile.purchasePrice ?? "",
+      salePrice: mobile.salePrice ?? "",
+      gst: mobile.gst ?? "",
+      stock: (mobile.stock !== undefined && mobile.stock !== null) ? mobile.stock : (mobile.quantity ?? ""),
+      warranty: mobile.warranty ?? "",
+      category: mobile.category || "Mobile",
     });
-    setEditingId(mobile.id);
     setIsModalOpen(true);
   };
 
@@ -271,8 +348,10 @@ const MobileInventory = () => {
     }
   };
 
-  const handleDelete = async (id) => {
-    if (!window.confirm("Are you sure?")) return;
+  const handleDelete = async (target) => {
+    const id = typeof target === 'object' ? (target?.id || target?._id) : target;
+    if (!id) return;
+    if (!window.confirm("Are you sure you want to delete this device?")) return;
     const token = sessionStorage.getItem("token");
     try {
       await axios.delete(`${API_URL}/products/${id}`, {
@@ -328,8 +407,15 @@ const MobileInventory = () => {
 
           <div className="flex items-center gap-3">
             <button
+              onClick={() => setIsOcrModalOpen(true)}
+              className="flex items-center gap-2 px-5 py-3 bg-white text-emerald-700 border border-emerald-300 rounded-xl shadow-sm hover:bg-emerald-50 transition-all font-semibold"
+            >
+              <Camera size={20} className="text-emerald-600" />
+              Scan Wholesale Bill (OCR)
+            </button>
+            <button
               onClick={() => setIsSupplierModalOpen(true)}
-              className="flex items-center gap-2 px-6 py-3 bg-white text-emerald-600 border border-emerald-200 rounded-xl shadow-sm hover:bg-emerald-50 transition-all font-medium"
+              className="flex items-center gap-2 px-5 py-3 bg-white text-emerald-600 border border-emerald-200 rounded-xl shadow-sm hover:bg-emerald-50 transition-all font-medium"
             >
               <UserPlus size={20} />
               Add Supplier
@@ -412,8 +498,16 @@ const MobileInventory = () => {
             placeholder="Search by Brand, Model or IMEI..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+            className="w-full pl-10 pr-12 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
           />
+          <button
+            type="button"
+            onClick={() => { setCameraScanTarget("search"); setShowCameraScanner(true); }}
+            className="absolute right-3 top-2.5 p-1.5 text-gray-500 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
+            title="Scan Barcode / IMEI with Camera"
+          >
+            <Camera size={18} />
+          </button>
         </div>
 
         {/* Table */}
@@ -435,7 +529,7 @@ const MobileInventory = () => {
 
             <tbody>
               {filteredMobiles.map((mobile) => (
-                <tr key={mobile.id} className="border-t">
+                <tr key={mobile.id || mobile._id} className="border-t">
                   <td className="p-3">{mobile.brand}</td>
                   <td className="p-3">{mobile.model}</td>
                   <td className="p-3">{mobile.ram}</td>
@@ -454,7 +548,7 @@ const MobileInventory = () => {
                     <button title="Add Stock" onClick={() => { setStockProduct(mobile); setAddStockQty(""); }} className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors">
                       <PackagePlus size={18} />
                     </button>
-                    <button title="Delete" onClick={() => handleDelete(mobile.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+                    <button title="Delete" onClick={() => handleDelete(mobile.id || mobile._id)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors">
                       <Trash2 size={18} />
                     </button>
                   </td>
@@ -602,9 +696,8 @@ const MobileInventory = () => {
                     </select>
                   </div>
 
-                  {Object.keys(formData)
+                  {EDITABLE_FIELDS
                     .filter(field => {
-                      if (field === "category") return false;
                       // Only show mobile specific fields for "Mobile" category
                       if (formData.category !== "Mobile" && ["ram", "storage", "imei1", "imei2"].includes(field)) {
                         return false;
@@ -616,15 +709,31 @@ const MobileInventory = () => {
                         <label className="text-xs font-bold text-gray-500 uppercase tracking-widest ml-1">
                           {field.replace(/([A-Z])/g, ' $1').trim()}
                         </label>
-                        <input
-                          name={field}
-                          type={field.toLowerCase().includes("price") || field === "gst" || field === "stock" ? "number" : "text"}
-                          value={formData[field]}
-                          onChange={handleChange}
-                          placeholder={`Enter ${field.replace(/([A-Z])/g, ' $1').toLowerCase()}...`}
-                          className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white text-gray-700 placeholder-gray-400 
-                                   focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all shadow-sm"
-                        />
+                        <div className="relative">
+                          <input
+                            id={`modal-input-${field}`}
+                            name={field}
+                            type={field.toLowerCase().includes("price") || field === "gst" || field === "stock" ? "number" : "text"}
+                            value={formData[field] ?? ""}
+                            onChange={handleChange}
+                            onKeyDown={field === "imei1" || field === "imei2" ? handleImeiKeyDown(field) : undefined}
+                            placeholder={`Enter ${field.replace(/([A-Z])/g, ' $1').toLowerCase()}...`}
+                            className={`w-full px-4 py-3 rounded-xl border border-gray-200 bg-white text-gray-700 placeholder-gray-400 
+                                     focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all shadow-sm ${
+                                       field === "imei1" || field === "imei2" ? "pr-11 font-mono tracking-wider" : ""
+                                     }`}
+                          />
+                          {(field === "imei1" || field === "imei2") && (
+                            <button
+                              type="button"
+                              onClick={() => { setCameraScanTarget(field); setShowCameraScanner(true); }}
+                              className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
+                              title={`Scan ${field.toUpperCase()} with Camera`}
+                            >
+                              <Camera size={16} />
+                            </button>
+                          )}
+                        </div>
                       </div>
                     ))}
                 </form>
@@ -823,6 +932,32 @@ const MobileInventory = () => {
             </div>
           </div>
         )}
+
+        {/* Camera Barcode / IMEI Scanner Modal */}
+        {showCameraScanner && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+            <BarcodeScanner
+              onScan={handleCameraScan}
+              onClose={() => { setShowCameraScanner(false); setCameraScanTarget(null); }}
+              title={
+                cameraScanTarget === "search"
+                  ? "Scan Phone IMEI or Barcode to Search"
+                  : `Scan ${cameraScanTarget?.toUpperCase()} with Camera`
+              }
+            />
+          </div>
+        )}
+
+        {/* Wholesale Invoice OCR Modal */}
+        <ReceiptScannerModal
+          isOpen={isOcrModalOpen}
+          onClose={() => setIsOcrModalOpen(false)}
+          businessType="mobile_shop"
+          onInventorySaved={() => {
+            fetchMobiles();
+            setIsOcrModalOpen(false);
+          }}
+        />
 
       </div>
     </BillingLayout>

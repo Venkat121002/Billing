@@ -17,8 +17,12 @@ async function generateDemandForecast({ ownerId, tenantId, lookbackDays = 30, fo
         sinceDate.setDate(sinceDate.getDate() - Number(lookbackDays));
         const sinceIso = sinceDate.toISOString();
 
-        // 1. Fetch current inventory products
-        const products = await listStoreRecords(ownerId, 'products');
+        // 1. Fetch current inventory products strictly for this owner
+        const productQuery = {};
+        if (ownerId) productQuery.ownerId = ownerId;
+        if (tenantId) productQuery.tenantId = tenantId;
+
+        const products = await Product.find(productQuery).lean();
 
         // 2. Fetch past bills within the lookback window
         const [standardBills, gstBills] = await Promise.all([

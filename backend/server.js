@@ -268,6 +268,17 @@ app.use(
     require('./routes/firestorePetRoutes')
 );
 
+// Pet Services (Grooming, Spa & Clinic)
+app.use(
+    '/api/v2/pet-services',
+    require('./routes/firestorePetServiceRoutes')
+);
+
+app.use(
+    '/v2/pet-services',
+    require('./routes/firestorePetServiceRoutes')
+);
+
 // Milestones
 app.use(
     '/api/v2/milestones',
@@ -301,6 +312,34 @@ app.use(
     require('./routes/supportRequestRoutes')
 );
 
+// Alteration Tickets (Tailoring & Fitting)
+app.use(
+    '/api/v2/alteration-tickets',
+    require('./routes/firestoreAlterationTicketRoutes')
+);
+app.use(
+    '/v2/alteration-tickets',
+    require('./routes/firestoreAlterationTicketRoutes')
+);
+
+// Clothing Store Automation (Matrix Variants, WhatsApp Bill, Size Exchange, Aging Stock, EOD Closing)
+app.use(
+    '/api/v2/clothing',
+    require('./routes/firestoreClothingRoutes')
+);
+app.use(
+    '/v2/clothing',
+    require('./routes/firestoreClothingRoutes')
+);
+
+// Payments: public pay-link endpoints (token-authenticated) + Razorpay webhook
+app.use('/api/v2/pay', require('./routes/paymentRoutes'));
+app.use('/v2/pay', require('./routes/paymentRoutes'));
+
+
+const { razorpayWebhook } = require('./controllers/paymentController');
+app.post('/api/v2/webhooks/razorpay', razorpayWebhook);
+app.post('/v2/webhooks/razorpay', razorpayWebhook);
 // Payments: public pay-link endpoints (token-authenticated) + Cashfree webhook
 app.use('/api/v2/pay', require('./routes/paymentRoutes'));
 app.use('/v2/pay', require('./routes/paymentRoutes'));
@@ -331,6 +370,28 @@ app.use(
 app.use(
     '/v2/automation',
     require('./routes/automationRoutes')
+);
+
+// Intelligent Chatbot & Knowledge Ingestion (SwordNexi Multi-Tenant RAG)
+app.use(
+    '/api/v2/chatbot',
+    require('./routes/chatbotRoutes')
+);
+
+app.use(
+    '/v2/chatbot',
+    require('./routes/chatbotRoutes')
+);
+
+// Software Development Automation (Proposal AI, Auto Milestone Invoicing)
+app.use(
+    '/api/v2/software',
+    require('./routes/softwareAutomationRoutes')
+);
+
+app.use(
+    '/v2/software',
+    require('./routes/softwareAutomationRoutes')
 );
 
 // ---------------------------------------------------------

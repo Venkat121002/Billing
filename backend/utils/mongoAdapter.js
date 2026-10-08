@@ -42,13 +42,22 @@ function withoutScopeKeys(data) {
 function toMongoUpdate(data) {
     const $set = {};
     const $inc = {};
-    for (const [key, value] of Object.entries(withoutScopeKeys(data))) {
+    // Security: Protect immutable identification and creation timestamps from being tampered with
+    const IMMUTABLE_KEYS = new Set(['_id', 'id', 'createdAt', 'ownerId', 'tenantId', 'createdBy']);
+
+    for (const [key, value] of Object.entries(data)) {
+        if (IMMUTABLE_KEYS.has(key)) continue;
         if (value && typeof value === 'object' && typeof value.$inc === 'number') {
             $inc[key] = value.$inc;
         } else {
             $set[key] = value;
         }
     }
+    // Stamp updatedAt automatically if not provided
+    if (!$set.updatedAt) {
+        $set.updatedAt = new Date().toISOString();
+    }
+
     const update = {};
     if (Object.keys($set).length) update.$set = $set;
     if (Object.keys($inc).length) update.$inc = $inc;

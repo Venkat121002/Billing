@@ -162,7 +162,8 @@ exports.register = async (req, res) => {
                 userId: userId,
                 ownerId: userId,
                 subuserId: null,
-                role: 'owner'
+                role: 'owner',
+                industry: industry || ''
             }
         };
 
@@ -214,8 +215,12 @@ exports.login = async (req, res) => {
 
         // === MONGODB MODE ===
         if (DB_TYPE === 'mongodb') {
+            const cleanEmail = email.trim();
+            const escapedEmail = cleanEmail.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const emailRegex = new RegExp(`^${escapedEmail}$`, 'i');
+
             // Try to find owner first
-            let user = await OwnerModel.findOne({ email, tenantId });
+            let user = await OwnerModel.findOne({ email: emailRegex, tenantId });
 
             if (user) {
                 // Verify password
@@ -231,7 +236,7 @@ exports.login = async (req, res) => {
 
             } else {
                 // Try to find subuser
-                user = await SubUserModel.findOne({ email, tenantId });
+                user = await SubUserModel.findOne({ email: emailRegex, tenantId });
 
                 if (!user) {
                     return res.status(401).json({ msg: "Authentication failed: EMAIL_NOT_FOUND" });
@@ -384,12 +389,14 @@ exports.login = async (req, res) => {
         }
 
         // Generate JWT Token
+        const effectiveIndustry = bossData?.companyDetails?.industry || bossData?.industry || userData?.companyDetails?.industry || userData?.industry || '';
         const payload = {
             user: {
                 userId: uid,
                 ownerId: ownerId,
                 subuserId: isSubUser ? uid : null,
-                role: isSubUser ? 'subuser' : 'owner'
+                role: isSubUser ? 'subuser' : 'owner',
+                industry: effectiveIndustry
             }
         };
 

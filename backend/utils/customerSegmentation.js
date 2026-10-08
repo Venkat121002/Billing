@@ -13,6 +13,10 @@ const { listStoreRecords } = require('./storeRecords');
  */
 async function analyzeCustomerSegments({ ownerId, tenantId }) {
     try {
+        const query = {};
+        if (ownerId) query.ownerId = ownerId;
+        if (tenantId) query.tenantId = tenantId;
+
         // 1. Fetch store owner details for branding in promo messages
         const owner = ownerId ? await platformStore.getOwner(ownerId) : null;
         const storeName = owner?.companyDetails?.name || owner?.businessName || 'Our Store';

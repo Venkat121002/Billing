@@ -2,6 +2,12 @@ const jwt = require('jsonwebtoken');
 const { db } = require('../config/firebase');
 const { SubUser: SubUserModel } = require('../models/mongodb');
 
+module.exports = function (req, res, next) {
+    // Get token from header (x-auth-token or Authorization Bearer), query, or body
+    const authHeader = req.header('Authorization') || req.header('authorization');
+    const bearerToken = authHeader && authHeader.toLowerCase().startsWith('bearer ') ? authHeader.substring(7).trim() : null;
+    const rawToken = req.header('x-auth-token') || bearerToken || req.query['x-auth-token'] || req.body?.['x-auth-token'];
+    const token = (rawToken && rawToken !== 'null' && rawToken !== 'undefined') ? rawToken : null;
 const DB_TYPE = process.env.DB_TYPE || 'mongodb';
 
 // A sub-user's token stays cryptographically valid until it expires (up to 30
@@ -31,6 +37,7 @@ module.exports = async function (req, res, next) {
     if (!token) {
         return res.status(401).json({ msg: 'No token, authorization denied' });
     }
+
 
     let decoded;
     try {

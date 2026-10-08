@@ -45,9 +45,170 @@ function normalizeDate(rawDate) {
 }
 
 /**
+ * Normalizes medicine batch expiry dates into standard YYYY-MM-DD
+ * Handles MM/YY, MM/YYYY, DD/MM/YYYY, or YYYY-MM
+ */
+function normalizeExpiryDate(rawExp) {
+    if (!rawExp) return null;
+    let clean = String(rawExp).trim().replace(/^(exp|expiry|exp\s*date|bb)[:\s]*/i, '').trim();
+
+    // Already YYYY-MM-DD
+    if (/^\d{4}-\d{2}-\d{2}$/.test(clean)) return clean;
+
+    // YYYY-MM
+    if (/^\d{4}-\d{2}$/.test(clean)) {
+        const [year, month] = clean.split('-');
+        const lastDay = new Date(parseInt(year, 10), parseInt(month, 10), 0).getDate();
+        return `${year}-${month}-${String(lastDay).padStart(2, '0')}`;
+    }
+
+    // MM/YYYY or MM-YYYY
+    const mmyyyy = clean.match(/^(\d{1,2})[\/\-](\d{4})$/);
+    if (mmyyyy) {
+        const month = mmyyyy[1].padStart(2, '0');
+        const year = mmyyyy[2];
+        const lastDay = new Date(parseInt(year, 10), parseInt(month, 10), 0).getDate();
+        return `${year}-${month}-${String(lastDay).padStart(2, '0')}`;
+    }
+
+    // MM/YY or MM-YY (e.g. 09/27 -> 2027-09-30)
+    const mmyy = clean.match(/^(\d{1,2})[\/\-](\d{2})$/);
+    if (mmyy) {
+        const month = mmyy[1].padStart(2, '0');
+        const year = `20${mmyy[2]}`;
+        const lastDay = new Date(parseInt(year, 10), parseInt(month, 10), 0).getDate();
+        return `${year}-${month}-${String(lastDay).padStart(2, '0')}`;
+    }
+
+    // DD/MM/YYYY or DD-MM-YYYY
+    const dmy = clean.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+    if (dmy) {
+        return `${dmy[3]}-${dmy[2].padStart(2, '0')}-${dmy[1].padStart(2, '0')}`;
+    }
+
+    // Month Name Year e.g. "Aug 2027" or "Aug-27"
+    const parsed = new Date(clean);
+    if (!isNaN(parsed.getTime())) {
+        return parsed.toISOString().split('T')[0];
+    }
+
+    return clean;
+}
+
+/**
  * Built-in preset sample receipts for instant 1-click testing
  */
 const SAMPLE_RECEIPTS = [
+    {
+        id: 'sample-pharma-wholesale',
+        name: 'Pharma Wholesale Tax Invoice (Batch & Expiry Inward)',
+        type: 'Pharma B2B Bill',
+        data: {
+            documentType: 'tax_invoice',
+            vendor: {
+                name: 'Apollo MedDistributors & Wholesale Stockists Pvt Ltd',
+                gstin: '33AAICA2024Q1Z2',
+                phone: '+91 98410 77889',
+                email: 'orders@apollomeddistributors.com',
+                address: '44/2 Mount Road, Teynampet, Chennai, TN - 600018'
+            },
+            buyer: {
+                name: 'City Care Pharmacy & Medicals',
+                gstin: '33AABCC5544R1Z1',
+                phone: '+91 94440 22331',
+                address: 'Shop #4, Cross Cut Road, Coimbatore, TN'
+            },
+            invoiceNumber: 'MED-INV-2026/4102',
+            invoiceDate: new Date().toISOString().split('T')[0],
+            dueDate: new Date(Date.now() + 21 * 86400000).toISOString().split('T')[0],
+            items: [
+                {
+                    description: 'Dolo 650mg Tablets',
+                    salt: 'Paracetamol 650mg',
+                    batchNumber: 'DL-9082',
+                    expiryDate: '2027-09-30',
+                    mfgDate: '2025-09-01',
+                    pack: '15 Tablets / Strip',
+                    hsnCode: '3004',
+                    quantity: 40,
+                    unit: 'strips',
+                    unitPrice: 24.50,
+                    mrp: 33.60,
+                    taxRate: 12,
+                    discount: 5,
+                    amount: 931.00
+                },
+                {
+                    description: 'Augmentin 625 Duo Tablet',
+                    salt: 'Amoxicillin & Potassium Clavulanate (500mg + 125mg)',
+                    batchNumber: 'AUG-4412',
+                    expiryDate: '2026-11-30',
+                    mfgDate: '2024-11-01',
+                    pack: '10 Tablets / Strip',
+                    hsnCode: '3004',
+                    quantity: 20,
+                    unit: 'strips',
+                    unitPrice: 152.00,
+                    mrp: 204.50,
+                    taxRate: 12,
+                    discount: 10,
+                    amount: 2736.00
+                },
+                {
+                    description: 'Pan-D Capsule',
+                    salt: 'Pantoprazole (40mg) + Domperidone (30mg)',
+                    batchNumber: 'PD-8821B',
+                    expiryDate: '2027-06-30',
+                    mfgDate: '2025-06-01',
+                    pack: '15 Capsules / Strip',
+                    hsnCode: '3004',
+                    quantity: 30,
+                    unit: 'strips',
+                    unitPrice: 135.00,
+                    mrp: 199.00,
+                    taxRate: 12,
+                    discount: 0,
+                    amount: 4050.00
+                },
+                {
+                    description: 'Cetirizine 10mg Tablets (Cetzine)',
+                    salt: 'Cetirizine Hydrochloride 10mg',
+                    batchNumber: 'CZ-3019',
+                    expiryDate: '2027-12-31',
+                    mfgDate: '2025-01-01',
+                    pack: '10 Tablets / Strip',
+                    hsnCode: '3004',
+                    quantity: 50,
+                    unit: 'strips',
+                    unitPrice: 14.20,
+                    mrp: 21.00,
+                    taxRate: 12,
+                    discount: 0,
+                    amount: 710.00
+                }
+            ],
+            financials: {
+                subtotal: 8427.00,
+                cgst: 505.62,
+                sgst: 505.62,
+                igst: 0,
+                totalTax: 1011.24,
+                discount: 320.00,
+                roundOff: -0.24,
+                grandTotal: 9438.00
+            },
+            payment: {
+                mode: 'credit',
+                status: 'unpaid',
+                reference: 'CREDIT-21-DAYS'
+            },
+            suggestedExpenseCategory: 'Inventory & Supplies',
+            summary: 'Wholesale medicine purchase of Dolo 650, Augmentin 625 Duo, Pan-D, and Cetzine with batch & expiry inwards.',
+            confidence: 0.98,
+            currency: 'INR',
+            warnings: []
+        }
+    },
     {
         id: 'sample-hardware-gst',
         name: 'Hardware & Electricals Tax Invoice (GST B2B)',
@@ -287,11 +448,24 @@ Extract all fields into STRICT JSON format matching the schema below:
   "dueDate": "YYYY-MM-DD or null",
   "items": [
     {
-      "description": "Item or service name",
-      "hsnCode": "HSN/SAC 4 to 8 digit code if present or null",
+      "description": "Item, phone model, or medicine trade brand name (e.g., Redmi Note 13 Pro, Dolo 650)",
+      "brand": "Brand name (e.g. Redmi, Samsung, Apple, Realme) or null",
+      "model": "Model name (e.g. Note 13 Pro 5G) or null",
+      "ram": "RAM size (e.g. 8GB) or null",
+      "storage": "Storage capacity (e.g. 128GB, 256GB) or null",
+      "color": "Color variant (e.g. Midnight Black) or null",
+      "imei1": "15-digit IMEI 1 or Serial Number if printed or null",
+      "imei2": "15-digit IMEI 2 if printed or null",
+      "salt": "Active generic chemical salt / composition (e.g. Paracetamol 650mg) or null",
+      "batchNumber": "Batch Number / Lot Number (e.g., DL-9082, B401) or null",
+      "expiryDate": "Expiry date in YYYY-MM-DD or MM/YY format (e.g., 09/27 or 2027-09-30) or null",
+      "mfgDate": "Manufacturing date in YYYY-MM-DD or MM/YY format or null",
+      "pack": "Packaging / pack size (e.g., 10x10, 15 Tabs, 100ml, 1 Strip, 1 Unit) or null",
+      "hsnCode": "HSN/SAC 4 to 8 digit code (pharma 3004, mobile 8517) or null",
       "quantity": 1,
-      "unit": "pcs, kg, ltr, box, etc. or null",
+      "unit": "pcs, strips, boxes, units, etc. or null",
       "unitPrice": 0,
+      "mrp": 0,
       "taxRate": 18,
       "discount": 0,
       "amount": 0
@@ -324,7 +498,20 @@ CRITICAL RULES:
 2. If total amount or line item math doesn't sum up cleanly, compute best estimate and add an explanatory warning into "warnings".
 3. Check for GSTIN (15 alphanumeric characters). If found, validate it.
 4. If an invoice date is printed in DD/MM/YYYY or DD-MM-YYYY format, convert it to YYYY-MM-DD.
-5. If line items are partially legible, extract what you see and add any unclear notes into "warnings".`;
+5. If line items are partially legible, extract what you see and add any unclear notes into "warnings".
+6. PHARMACY & HEALTHCARE BILLS: Always extract the Batch Number (Batch No/Lot No), Expiry Date (Exp/Expiry/B.No), PTR (Price to Retailer as unitPrice), MRP (Maximum Retail Price), Pack size, and Salt/Composition where printed. Normalize MM/YY expiry dates to full date format (e.g. 09/27 -> 2027-09-30).
+7. MOBILE & ELECTRONICS INVOICES: Extract Brand, Model, RAM, Storage, Color, IMEI 1 (15-digit number or Serial Number), IMEI 2 (15-digit number if present), and HSN code (typically 8517). Tax rate is typically 18% for mobile phones and accessories.
+8. PHONE RETAIL BOX STICKERS & IMEI LABELS: If the image is a smartphone retail box sticker or IMEI barcode label (showing S/N, IMEI 1, IMEI 2):
+- You MUST identify the phone's exact Brand and Model (e.g. Realme C3, Redmi 13C, Samsung A14) from the 8-digit IMEI TAC prefix or Serial Number.
+- Infer the standard RAM and Storage capacity for this model variant (e.g. 3GB RAM / 32GB ROM).
+- Set "description" to the full phone name e.g. "Realme C3 (3GB/32GB)".
+- Set "brand" e.g. "Realme".
+- Set "model" e.g. "Realme C3".
+- Set "ram" e.g. "3GB".
+- Set "storage" e.g. "32GB".
+- Set "imei1" to the exact 15-digit IMEI 1 (e.g. 861536030196001).
+- Set "imei2" to the exact 15-digit IMEI 2 (e.g. 861536030196019).
+- Set "quantity" to 1.`;
 
     const result = await generateWithFallback(async (model, modelName) => {
         const response = await model.generateContent([
@@ -339,7 +526,18 @@ CRITICAL RULES:
 
         const rawText = response.response.text().trim();
         const jsonText = rawText.replace(/```(?:json)?/gi, '').replace(/```/g, '').trim();
-        const parsed = JSON.parse(jsonText);
+        let parsed;
+        try {
+            parsed = JSON.parse(jsonText);
+        } catch (jsonErr) {
+            const firstBrace = jsonText.indexOf('{');
+            const lastBrace = jsonText.lastIndexOf('}');
+            if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+                parsed = JSON.parse(jsonText.slice(firstBrace, lastBrace + 1));
+            } else {
+                throw jsonErr;
+            }
+        }
         parsed._engineModel = modelName;
         return parsed;
     });
@@ -350,13 +548,15 @@ CRITICAL RULES:
 /**
  * Normalizes and sanitizes OCR extraction result
  */
-function normalizeOcrData(raw = {}) {
+function normalizeOcrData(raw = {}, businessType = '') {
     const docType = raw.documentType || 'retail_receipt';
     const vendor = raw.vendor || {};
     const buyer = raw.buyer || {};
     const financials = raw.financials || {};
     const payment = raw.payment || {};
     const warnings = Array.isArray(raw.warnings) ? [...raw.warnings] : [];
+    const isPharma = String(businessType).toLowerCase().includes('pharm') ||
+        (Array.isArray(raw.items) && raw.items.some(i => i.batchNumber || i.expiryDate || i.salt || i.mrp));
 
     // Clean vendor GSTIN
     let gstin = vendor.gstin ? String(vendor.gstin).replace(/[^A-Z0-9]/gi, '').toUpperCase() : null;
@@ -366,17 +566,52 @@ function normalizeOcrData(raw = {}) {
 
     // Clean items
     let items = Array.isArray(raw.items) && raw.items.length > 0 ? raw.items : [];
-    items = items.map((item, idx) => ({
-        id: `item-${idx + 1}`,
-        description: item.description || `Item #${idx + 1}`,
-        hsnCode: item.hsnCode || '',
-        quantity: Math.max(1, parseFloat(item.quantity) || 1),
-        unit: item.unit || 'pcs',
-        unitPrice: parseFloat(item.unitPrice) || 0,
-        taxRate: parseFloat(item.taxRate) || 0,
-        discount: parseFloat(item.discount) || 0,
-        amount: parseFloat(item.amount) || ((parseFloat(item.quantity) || 1) * (parseFloat(item.unitPrice) || 0))
-    }));
+    items = items.map((item, idx) => {
+        const unitPrice = parseFloat(item.unitPrice) || 0;
+        const rawMrp = parseFloat(item.mrp);
+        const mrp = !isNaN(rawMrp) && rawMrp > 0 ? rawMrp : (unitPrice > 0 ? Math.round(unitPrice * 1.25 * 100) / 100 : 0);
+        const qty = Math.max(1, parseFloat(item.quantity) || 1);
+        const taxRate = parseFloat(item.taxRate) || (isPharma ? 12 : 18);
+        const amount = parseFloat(item.amount) || Math.round(qty * unitPrice * 100) / 100;
+
+        const brand = item.brand || '';
+        const model = item.model || '';
+        const ram = item.ram || '';
+        const storage = item.storage || '';
+        const imei1 = item.imei1 || item.imei || '';
+        const imei2 = item.imei2 || '';
+        const serialNumber = item.serialNumber || item.sn || '';
+        let fullDesc = item.description || '';
+        if (!fullDesc || fullDesc.toLowerCase() === 'item' || fullDesc.toLowerCase() === 'mobi' || fullDesc.toLowerCase() === 'mobile') {
+            fullDesc = [brand, model, ram && storage ? `(${ram}/${storage})` : storage].filter(Boolean).join(' ') || (imei1 ? `Mobile (${imei1})` : `Item #${idx + 1}`);
+        }
+
+        return {
+            id: `item-${idx + 1}`,
+            description: fullDesc,
+            brand: brand,
+            model: model,
+            ram: ram,
+            storage: storage,
+            color: item.color || '',
+            imei1: imei1,
+            imei2: imei2,
+            serialNumber: serialNumber,
+            salt: item.salt || '',
+            batchNumber: imei1 || item.batchNumber || item.batchNo || '',
+            expiryDate: item.expiryDate ? normalizeExpiryDate(item.expiryDate) : '',
+            mfgDate: item.mfgDate ? normalizeExpiryDate(item.mfgDate) : '',
+            pack: item.pack || item.unit || 'pcs',
+            hsnCode: item.hsnCode || (isPharma ? '3004' : (imei1 ? '8517' : '')),
+            quantity: qty,
+            unit: item.unit || item.pack || 'pcs',
+            unitPrice: unitPrice,
+            mrp: mrp,
+            taxRate: taxRate,
+            discount: parseFloat(item.discount) || 0,
+            amount: amount
+        };
+    });
 
     // If no items found but grand total exists, create a default item
     const grandTotal = parseFloat(financials.grandTotal) || items.reduce((sum, i) => sum + (i.amount || 0), 0);
@@ -384,10 +619,16 @@ function normalizeOcrData(raw = {}) {
         items.push({
             id: 'item-1',
             description: `${vendor.name || 'Vendor'} Purchase`,
-            hsnCode: '',
+            salt: '',
+            batchNumber: '',
+            expiryDate: '',
+            mfgDate: '',
+            pack: 'nos',
+            hsnCode: isPharma ? '3004' : '',
             quantity: 1,
             unit: 'nos',
             unitPrice: grandTotal,
+            mrp: grandTotal,
             taxRate: 0,
             discount: 0,
             amount: grandTotal
@@ -511,7 +752,7 @@ async function scanReceiptOrInvoice({ buffer, base64Data, mimeType, filename, ow
             businessType
         });
 
-        return normalizeOcrData(rawOcr);
+        return normalizeOcrData(rawOcr, businessType);
     } catch (err) {
         console.error('❌ [ReceiptScanner] Gemini OCR error:', err.message);
         // Fallback gracefully so the user is never stuck
@@ -579,6 +820,7 @@ async function saveScannedReceiptAsExpense({ ownerId, userId, receiptData, req }
 
 /**
  * Push scanned receipt items directly into Products / Inventory
+ * Full Pharmacy Batch & Expiry support with FEFO inwarding
  */
 async function saveScannedReceiptToInventory({ ownerId, userId, receiptData, req }) {
     const items = receiptData.items || [];
@@ -586,6 +828,7 @@ async function saveScannedReceiptToInventory({ ownerId, userId, receiptData, req
         throw new Error('No items in scanned receipt to add to inventory');
     }
 
+    const tenantId = req?.user?.tenantId || undefined;
     const productsRef = getCollection(req, 'products');
     const existingSnapshot = await productsRef.where('ownerId', '==', ownerId).get();
     const existingProducts = [];
@@ -602,16 +845,58 @@ async function saveScannedReceiptToInventory({ ownerId, userId, receiptData, req
 
         const qtyToAdd = parseFloat(item.quantity) || 1;
         const costPrice = parseFloat(item.unitPrice) || 0;
-        const taxRate = parseFloat(item.taxRate) || 0;
-        const hsnCode = item.hsnCode || '';
+        const rawMrp = parseFloat(item.mrp);
+        const mrp = !isNaN(rawMrp) && rawMrp > 0 ? rawMrp : (costPrice > 0 ? Math.round(costPrice * 1.25 * 100) / 100 : 0);
+        const taxRate = parseFloat(item.taxRate) || 12;
+        const hsnCode = item.hsnCode || '3004';
+        const batchNumber = (item.batchNumber || item.batchNo || '').trim();
+        const expiryDate = item.expiryDate ? normalizeExpiryDate(item.expiryDate) : '';
+        const mfgDate = item.mfgDate ? normalizeExpiryDate(item.mfgDate) : '';
+        const pack = (item.pack || item.unit || 'strips').trim();
+        const salt = (item.salt || '').trim();
 
-        // Match existing product by name (case-insensitive)
-        const match = existingProducts.find(p =>
+        // Find existing products matching by name (case-insensitive)
+        const nameMatches = existingProducts.filter(p =>
             p.name && p.name.trim().toLowerCase() === itemName.toLowerCase()
         );
 
-        if (match) {
-            // Increment existing stock
+        // Check if there is an exact batch match
+        let exactBatchMatch = null;
+        if (batchNumber && nameMatches.length > 0) {
+            exactBatchMatch = nameMatches.find(p => {
+                const b = (p.batchNumber || p.batchNo || '').trim().toLowerCase();
+                return b === batchNumber.toLowerCase();
+            });
+        }
+
+        // Check if this item is a mobile device or accessory
+        const isMobileItem = Boolean(
+            item.imei1 || item.imei || item.imei2 || item.ram || item.storage ||
+            hsnCode === '8517' || String(req?.body?.businessType || '').toLowerCase().includes('mobile')
+        );
+
+        if (exactBatchMatch) {
+            // Increment existing batch stock
+            const currentStock = parseFloat(exactBatchMatch.stock || exactBatchMatch.quantity) || 0;
+            const newStock = currentStock + qtyToAdd;
+            const updatePayload = {
+                stock: newStock,
+                quantity: newStock,
+                costPrice: costPrice > 0 ? costPrice : (exactBatchMatch.costPrice || exactBatchMatch.purchasePrice),
+                purchasePrice: costPrice > 0 ? costPrice : (exactBatchMatch.purchasePrice || exactBatchMatch.costPrice),
+                price: mrp > 0 ? mrp : (exactBatchMatch.price || exactBatchMatch.salesPrice),
+                salesPrice: mrp > 0 ? mrp : (exactBatchMatch.salesPrice || exactBatchMatch.price),
+                lastRestockedAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+            };
+            if (expiryDate && !exactBatchMatch.expiryDate) updatePayload.expiryDate = expiryDate;
+            if (mfgDate && !exactBatchMatch.mfgDate) updatePayload.mfgDate = mfgDate;
+            if (salt && !exactBatchMatch.salt) updatePayload.salt = salt;
+            await productsRef.doc(exactBatchMatch.id).update(updatePayload);
+            updated.push({ id: exactBatchMatch.id, name: exactBatchMatch.name, batchNumber, expiryDate, oldStock: currentStock, newStock, addedQty: qtyToAdd });
+        } else if (!batchNumber && !isMobileItem && nameMatches.length > 0) {
+            // No batch specified (general retail item) - increment stock on first match
+            const match = nameMatches[0];
             const currentStock = parseFloat(match.stock || match.quantity) || 0;
             const newStock = currentStock + qtyToAdd;
             const updatePayload = {
@@ -624,26 +909,59 @@ async function saveScannedReceiptToInventory({ ownerId, userId, receiptData, req
             await productsRef.doc(match.id).update(updatePayload);
             updated.push({ id: match.id, name: match.name, oldStock: currentStock, newStock, addedQty: qtyToAdd });
         } else {
-            // Create new inventory product
-            const markup = 1.25; // Default 25% margin suggestion
-            const sellingPrice = costPrice > 0 ? Math.round(costPrice * markup) : Math.round(costPrice);
+            // New batch or new product record
+            const proto = nameMatches[0] || {};
+            const brandName = item.brand || proto.brand || (itemName.split(' ')[0]) || '';
+            const modelName = item.model || proto.model || (itemName.split(' ').slice(1).join(' ')) || itemName;
+            const imei1 = (item.imei1 || item.imei || '').trim();
+            const imei2 = (item.imei2 || '').trim();
+            const ram = item.ram || proto.ram || '';
+            const storage = item.storage || proto.storage || '';
+            const color = item.color || proto.color || '';
 
             const newProduct = {
                 ownerId,
                 createdBy: userId,
                 name: itemName,
-                price: sellingPrice,
+                price: mrp,
+                salesPrice: mrp,
+                salePrice: mrp,
+                purchasePrice: costPrice,
                 costPrice: costPrice,
-                stock: qtyToAdd,
-                quantity: qtyToAdd,
-                unit: item.unit || 'pcs',
+                stock: isMobileItem ? 1 : qtyToAdd,
+                quantity: isMobileItem ? 1 : qtyToAdd,
+                unit: pack,
+                hsn: hsnCode,
                 hsnCode: hsnCode,
+                hsnSac: hsnCode,
+                gst: taxRate,
                 gstRate: taxRate,
+                salesGst: taxRate,
+                batchNumber: batchNumber,
+                batchNo: batchNumber,
+                expiryDate: expiryDate,
+                mfgDate: mfgDate,
+                salt: salt,
+                category: isMobileItem ? 'Mobile' : (proto.category || (salt ? 'Medicines' : 'General')),
+                brand: brandName,
+                model: modelName,
+                ram,
+                storage,
+                color,
+                imei1,
+                imei2,
+                warranty: isMobileItem ? (item.warranty || '1 Year Brand Warranty') : '',
+                pharmaCompany: proto.pharmaCompany || proto.brand || receiptData.vendor?.name || '',
                 supplier: receiptData.vendor?.name || 'Inward Invoice',
+                description: salt ? `${itemName} (${salt})` : itemName,
                 createdAt: new Date().toISOString()
             };
+            if (tenantId) newProduct.tenantId = tenantId;
+
             const docRef = await productsRef.add(newProduct);
-            created.push({ id: docRef.id, name: itemName, stock: qtyToAdd, price: sellingPrice, costPrice });
+            created.push({ id: docRef.id, name: itemName, imei1, batchNumber, expiryDate, stock: newProduct.stock, price: mrp, costPrice });
+            // Add to in-memory existing products list for subsequent rows in this same receipt
+            existingProducts.push({ id: docRef.id, ...newProduct });
         }
     }
 
@@ -653,7 +971,7 @@ async function saveScannedReceiptToInventory({ ownerId, userId, receiptData, req
         createdCount: created.length,
         updated,
         created,
-        msg: `Inventory updated: ${created.length} new products created, ${updated.length} existing products restocked`
+        msg: `Inventory updated: ${created.length} new medicine batches created, ${updated.length} existing batches restocked`
     };
 }
 
@@ -661,6 +979,7 @@ module.exports = {
     scanReceiptOrInvoice,
     saveScannedReceiptAsExpense,
     saveScannedReceiptToInventory,
+    normalizeExpiryDate,
     SAMPLE_RECEIPTS,
     STANDARD_CATEGORIES
 };

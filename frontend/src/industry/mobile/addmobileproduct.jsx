@@ -26,11 +26,14 @@ import {
   MapPin,
   CreditCard,
   Clock,
-  List
+  List,
+  Camera,
+  Sparkles
 } from "lucide-react";
 import BillingLayout from "../../Layout/BillingLayout/AdminLayout";
 import toast from "react-hot-toast";
 import { handleEnterToNext } from "../../utils/formUtils";
+import ReceiptScannerModal from "../../components/AI/ReceiptScannerModal";
 
 
 
@@ -40,6 +43,8 @@ const InputField = ({
   icon: Icon,
   value,
   onChange,
+  onKeyDown,
+  id,
   type = "text",
   placeholder,
   required = false,
@@ -53,13 +58,14 @@ const InputField = ({
       {required && <span className="text-red-400 text-xs">*</span>}
     </label>
     <input
+      id={id}
       type={type}
       value={value || ""}
       onChange={onChange}
       placeholder={placeholder || label}
       required={required}
       readOnly={readOnly}
-      onKeyDown={handleEnterToNext}
+      onKeyDown={onKeyDown || handleEnterToNext}
       className={`px-4 py-3 rounded-xl border border-green-200 bg-white text-gray-700 placeholder-gray-400 
         focus:outline-none focus:ring-2 focus:ring-green-300 focus:border-green-400 
         transition-all duration-200 hover:border-green-300 ${readOnly ? "bg-gray-50 cursor-not-allowed opacity-80" : ""} ${className}`}
@@ -117,6 +123,8 @@ const AddMobile = () => {
 
   const [suppliers, setSuppliers] = useState([]);
   const [showScanner, setShowScanner] = useState(false);
+  const [scannerTarget, setScannerTarget] = useState(null); // { index, field }
+  const [showOcrModal, setShowOcrModal] = useState(false);
 
   const [formData, setFormData] = useState({
     brand: "",
@@ -363,6 +371,23 @@ const AddMobile = () => {
 
   const handleIMEIChange = (index, field) => (e) => {
     const { value } = e.target;
+    // Check if the input contains two 15-digit IMEIs pasted or typed together
+    const imeis = (value || "").match(/\b\d{15}\b/g) || [];
+    if (field === "imei1" && imeis.length >= 2) {
+      setFormData((prev) => {
+        const newList = [...prev.imeiList];
+        newList[index] = { ...newList[index], imei1: imeis[0], imei2: imeis[1] };
+        return {
+          ...prev,
+          imeiList: newList,
+          imei1: index === 0 ? imeis[0] : prev.imei1,
+          imei2: index === 0 ? imeis[1] : prev.imei2,
+        };
+      });
+      toast.success(`Device #${index + 1}: Both IMEI 1 & IMEI 2 auto-filled!`);
+      return;
+    }
+
     setFormData((prev) => {
       const newList = [...prev.imeiList];
       newList[index] = { ...newList[index], [field]: value };
@@ -373,6 +398,51 @@ const AddMobile = () => {
       }
       return { ...prev, imeiList: newList };
     });
+  };
+
+  // Keyboard & Physical Barcode Gun Auto-Advance Handler
+  const handleImeiKeyDown = (index, field) => (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      const currentVal = (formData.imeiList[index]?.[field] || "").trim();
+      const imeis = currentVal.match(/\b\d{15}\b/g) || [];
+
+      // If user scanned a combined barcode containing both IMEIs
+      if (field === "imei1" && imeis.length >= 2) {
+        setFormData(prev => {
+          const newList = [...prev.imeiList];
+          newList[index] = { ...newList[index], imei1: imeis[0], imei2: imeis[1] };
+          return {
+            ...prev,
+            imeiList: newList,
+            imei1: index === 0 ? imeis[0] : prev.imei1,
+            imei2: index === 0 ? imeis[1] : prev.imei2,
+          };
+        });
+        toast.success("Both IMEI 1 & IMEI 2 captured!");
+        const colorInput = document.getElementById(`imei-color-${index}`);
+        if (colorInput) colorInput.focus();
+        return;
+      }
+
+      // If scanned IMEI 1, auto-advance focus to IMEI 2
+      if (field === "imei1") {
+        const nextInput = document.getElementById(`imei-input-imei2-${index}`);
+        if (nextInput) nextInput.focus();
+      } else if (field === "imei2") {
+        // If scanned IMEI 2, advance to next device or create a new row
+        if (index === formData.imeiList.length - 1) {
+          addIMEIRow();
+          setTimeout(() => {
+            const nextDeviceImei1 = document.getElementById(`imei-input-imei1-${index + 1}`);
+            if (nextDeviceImei1) nextDeviceImei1.focus();
+          }, 100);
+        } else {
+          const nextDeviceImei1 = document.getElementById(`imei-input-imei1-${index + 1}`);
+          if (nextDeviceImei1) nextDeviceImei1.focus();
+        }
+      }
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -528,44 +598,76 @@ const AddMobile = () => {
 
 
   const handleScan = async (barcodeValue) => {
+    if (!barcodeValue) return;
+    const clean = barcodeValue.trim();
+
+    // Check if scanning directly into an IMEI row (Camera or Barcode)
+    if (scannerTarget !== null && scannerTarget.index !== undefined) {
+      const idx = scannerTarget.index;
+      const imeis = clean.match(/\b\d{15}\b/g) || [];
+
+      if (imeis.length >= 2) {
+        // Dual IMEI detected from box label
+        setFormData(prev => {
+          const newList = [...prev.imeiList];
+          newList[idx] = { ...newList[idx], imei1: imeis[0], imei2: imeis[1] };
+          return {
+            ...prev,
+            imeiList: newList,
+            imei1: idx === 0 ? imeis[0] : prev.imei1,
+            imei2: idx === 0 ? imeis[1] : prev.imei2,
+          };
+        });
+        toast.success(`Device #${idx + 1}: Both IMEI 1 & IMEI 2 scanned!`);
+      } else {
+        const val = imeis[0] || clean;
+        const targetField = scannerTarget.field || "imei1";
+        setFormData(prev => {
+          const newList = [...prev.imeiList];
+          newList[idx] = { ...newList[idx], [targetField]: val };
+          return {
+            ...prev,
+            imeiList: newList,
+            [targetField]: idx === 0 ? val : prev[targetField],
+          };
+        });
+        toast.success(`Device #${idx + 1}: ${targetField.toUpperCase()} scanned!`);
+      }
+      setShowScanner(false);
+      setScannerTarget(null);
+      return;
+    }
+
     try {
       const token = sessionStorage.getItem("token");
 
       const res = await axios.get(
-        `${API_URL}/products/barcode/${barcodeValue}`,
+        `${API_URL}/products/barcode/${clean}`,
         { headers: { "x-auth-token": token } }
       );
 
       const product = res.data;
 
-      setFormData({
-        brand: product.brand || "",
-        model: product.model || "",
-        ram: product.ram || "",
-        storage: product.storage || "",
-        color: product.color || "",
-        imei1: product.imei1 || "",
-        imei2: product.imei2 || "",
-        supplier: product.supplier || "",
-        purchasePrice: product.purchasePrice?.toString() || "",
-        purchaseGst: product.purchaseGst?.toString() || "",
-        purchaseGstAmount: product.purchaseGstAmount?.toString() || "",
-        purchaseTotalAmount: product.purchaseTotalAmount?.toString() || "",
-        salePrice: product.salePrice?.toString() || "",
-        sgst: product.sgst?.toString() || "",
-        sgstAmount: product.sgstAmount?.toString() || "",
-        cgst: product.cgst?.toString() || "",
-        cgstAmount: product.cgstAmount?.toString() || "",
-        gst: product.gst?.toString() || "",
-        saleTotalPrice: product.saleTotalPrice?.toString() || "",
-        warranty: product.warranty || "",
-      });
+      setFormData(prev => ({
+        ...prev,
+        brand: product.brand || prev.brand,
+        model: product.model || prev.model,
+        ram: product.ram || prev.ram,
+        storage: product.storage || prev.storage,
+        color: product.color || prev.color,
+        imei1: product.imei1 || prev.imei1,
+        imei2: product.imei2 || prev.imei2,
+        supplier: product.supplier || prev.supplier,
+        purchasePrice: product.purchasePrice?.toString() || prev.purchasePrice,
+        salePrice: product.salePrice?.toString() || prev.salePrice,
+        warranty: product.warranty || prev.warranty,
+      }));
 
-      toast.success("Product loaded successfully!");
+      toast.success("Product specs loaded from barcode!");
       setShowScanner(false);
 
     } catch (error) {
-      toast.error("Product not found");
+      toast.error("Product not found by this barcode");
     }
   };
 
@@ -586,13 +688,23 @@ const AddMobile = () => {
               </p>
             </div>
 
-            <button
-              onClick={() => navigate("/inventory")}
-              className="flex items-center gap-2 bg-white/90 backdrop-blur px-5 py-2.5 rounded-xl text-green-700 font-medium hover:bg-white hover:shadow-md transition-all duration-200"
-            >
-              <ArrowLeft size={16} />
-              Back
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setShowOcrModal(true)}
+                className="flex items-center gap-2 bg-white/90 backdrop-blur px-5 py-2.5 rounded-xl text-green-800 font-bold hover:bg-white hover:shadow-md transition-all shadow-sm"
+              >
+                <Camera size={18} className="text-green-600" />
+                Scan Wholesale Bill (OCR)
+              </button>
+              <button
+                onClick={() => navigate("/inventory")}
+                className="flex items-center gap-2 bg-white/90 backdrop-blur px-5 py-2.5 rounded-xl text-green-700 font-medium hover:bg-white hover:shadow-md transition-all duration-200"
+              >
+                <ArrowLeft size={16} />
+                Back
+              </button>
+            </div>
           </div>
         </div>
 
@@ -648,16 +760,12 @@ const AddMobile = () => {
                 </div>
 
                 {showScanner && (
-                  <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
-                    <div className="bg-white p-6 rounded-xl">
-                      <BarcodeScanner onScan={handleScan} />
-                      <button
-                        onClick={() => setShowScanner(false)}
-                        className="mt-4 px-4 py-2 bg-red-500 text-white rounded"
-                      >
-                        Close
-                      </button>
-                    </div>
+                  <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+                    <BarcodeScanner
+                      onScan={handleScan}
+                      onClose={() => { setShowScanner(false); setScannerTarget(null); }}
+                      title={`Scan IMEI for Device #${(scannerTarget?.index ?? 0) + 1} (${scannerTarget?.field === 'imei2' ? 'IMEI 2' : 'IMEI 1'})`}
+                    />
                   </div>
                 )}
 
@@ -680,24 +788,51 @@ const AddMobile = () => {
                         )}
                       </div>
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div className="relative">
+                          <InputField
+                            id={`imei-input-imei1-${index}`}
+                            label={`IMEI 1`}
+                            icon={Hash}
+                            value={imeiSet.imei1}
+                            onChange={handleIMEIChange(index, "imei1")}
+                            onKeyDown={handleImeiKeyDown(index, "imei1")}
+                            placeholder="Enter or scan IMEI 1"
+                            required
+                            className="tracking-widest pr-10"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => { setScannerTarget({ index, field: "imei1" }); setShowScanner(true); }}
+                            className="absolute right-3 top-9 p-1.5 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                            title="Scan IMEI 1 with Camera"
+                          >
+                            <Camera size={16} />
+                          </button>
+                        </div>
+
+                        <div className="relative">
+                          <InputField
+                            id={`imei-input-imei2-${index}`}
+                            label={`IMEI 2`}
+                            icon={Hash}
+                            value={imeiSet.imei2}
+                            onChange={handleIMEIChange(index, "imei2")}
+                            onKeyDown={handleImeiKeyDown(index, "imei2")}
+                            placeholder="IMEI 2 (Optional)"
+                            className="tracking-widest pr-10"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => { setScannerTarget({ index, field: "imei2" }); setShowScanner(true); }}
+                            className="absolute right-3 top-9 p-1.5 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                            title="Scan IMEI 2 with Camera"
+                          >
+                            <Camera size={16} />
+                          </button>
+                        </div>
+
                         <InputField
-                          label={`IMEI 1`}
-                          icon={Hash}
-                          value={imeiSet.imei1}
-                          onChange={handleIMEIChange(index, "imei1")}
-                          placeholder="Enter IMEI 1"
-                          required
-                          className="tracking-widest"
-                        />
-                        <InputField
-                          label={`IMEI 2`}
-                          icon={Hash}
-                          value={imeiSet.imei2}
-                          onChange={handleIMEIChange(index, "imei2")}
-                          placeholder="IMEI 2 (Optional)"
-                          className="tracking-widest"
-                        />
-                        <InputField
+                          id={`imei-color-${index}`}
                           label={`Color`}
                           icon={Palette}
                           value={imeiSet.color}
@@ -882,6 +1017,17 @@ const AddMobile = () => {
             </div>
           </form>
         </div>
+
+        {/* Wholesale Invoice OCR Modal */}
+        <ReceiptScannerModal
+          isOpen={showOcrModal}
+          onClose={() => setShowOcrModal(false)}
+          businessType="mobile_shop"
+          onInventorySaved={() => {
+            toast.success("Wholesale invoice processed & devices added to inventory!");
+            navigate("/inventory");
+          }}
+        />
       </div>
     </BillingLayout>
   );
