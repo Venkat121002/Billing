@@ -66,7 +66,7 @@ function Pricing() {
   const priceFor = (plan) => (billingCycle === "monthly" ? plan.monthly : plan.yearly);
 
   // Secure flow: server creates the order (price comes from the Plan doc, not
-  // the browser), Razorpay collects payment, server verifies + activates.
+  // the browser), Cashfree collects payment, server verifies + activates.
   const handlePayment = async (plan) => {
     if (!currentUser) {
       toast.error("Please log in to subscribe");
@@ -81,47 +81,61 @@ function Pricing() {
     try {
       setProcessingPlan(plan.key);
 
-      const sdkLoaded = await loadScript("https://checkout.razorpay.com/v1/checkout.js");
+      const { orderId, paymentSessionId, amount, currency, environment } = await createSubscriptionOrder({
+        plan: plan.key,
+        billingCycle
+      });
+
+      // Load Cashfree SDK
+      const scriptUrl = environment === 'sandbox'
+        ? "https://sdk.cashfree.com/js/v3/cashfree.sandbox.js"
+        : "https://sdk.cashfree.com/js/v3/cashfree.js";
+
+      const sdkLoaded = await loadScript(scriptUrl);
       if (!sdkLoaded) {
         toast.error("Could not load the payment window. Check your internet connection.");
+        setProcessingPlan(null);
         return;
       }
 
-      const { orderId, amount, currency, keyId } = await createSubscriptionOrder({ plan: plan.key, billingCycle });
-
-      const paymentObject = new window.Razorpay({
-        key: keyId,
-        amount,
-        currency,
-        name: "SwordNex Billing",
-        description: `${plan.name} Plan - ${billingCycle} Subscription`,
-        order_id: orderId,
-        handler: async (response) => {
-          try {
-            // Server derives plan/cycle/amount from the order; we only send proof of payment.
-            await verifySubscriptionPayment({
-              paymentId: response.razorpay_payment_id,
-              orderId: response.razorpay_order_id,
-              signature: response.razorpay_signature,
-            });
-            toast.success(`You're now on the ${plan.name} plan. Remaining days were added.`);
-            navigate("/dashboard");
-          } catch (err) {
-            console.error("Verification error:", err);
-            toast.error(`Payment received but activation failed. Contact support with payment ID ${response.razorpay_payment_id}.`);
-          }
-        },
-        prefill: {
-          name: currentUser?.Tenant?.name || "",
-          email: currentUser?.email || "",
-        },
-        theme: { color: "#16a34a" },
+      // Initialize Cashfree
+      const cashfree = window.Cashfree({
+        mode: environment === 'sandbox' ? 'sandbox' : 'production'
       });
-      paymentObject.open();
+
+      // Checkout options
+      const checkoutOptions = {
+        paymentSessionId: paymentSessionId,
+        returnUrl: `${window.location.origin}/pricing?order_id=${orderId}`,
+      };
+
+      // Open checkout
+      cashfree.checkout(checkoutOptions).then(async (result) => {
+        if (result.error) {
+          toast.error(result.error.message || "Payment failed. Please try again.");
+          setProcessingPlan(null);
+          return;
+        }
+
+        // Verify payment on return
+        try {
+          await verifySubscriptionPayment({ orderId });
+          toast.success(`You're now on the ${plan.name} plan. Remaining days were added.`);
+          navigate("/dashboard");
+        } catch (err) {
+          console.error("Verification error:", err);
+          toast.error(`Payment received but activation failed. Contact support with order ID ${orderId}.`);
+        } finally {
+          setProcessingPlan(null);
+        }
+      }).catch((err) => {
+        toast.error(err.message || "Payment failed. Please try again.");
+        setProcessingPlan(null);
+      });
+
     } catch (error) {
       console.error("Payment initiation error:", error);
       toast.error(error?.msg || "Could not initiate payment.");
-    } finally {
       setProcessingPlan(null);
     }
   };

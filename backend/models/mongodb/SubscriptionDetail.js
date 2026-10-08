@@ -8,8 +8,9 @@ const SubscriptionDetailSchema = new mongoose.Schema({
     amount: { type: Number, default: 0 },
     paymentId: { type: String },
     orderId: { type: String },
+    cashfreeOrderId: { type: String },
     signature: { type: String },
-    paymentMethod: { type: String, default: 'razorpay' },
+    paymentMethod: { type: String, default: 'cashfree' },
     startDate: { type: String },
     endDate: { type: String },
     createdBy: { type: String },
@@ -20,5 +21,9 @@ const SubscriptionDetailSchema = new mongoose.Schema({
 });
 
 SubscriptionDetailSchema.index({ tenantId: 1, ownerId: 1 });
+SubscriptionDetailSchema.index(
+    { cashfreeOrderId: 1 },
+    { unique: true, partialFilterExpression: { cashfreeOrderId: { $type: 'string' } } }
+);
 
 module.exports = mongoose.model('SubscriptionDetail', SubscriptionDetailSchema);

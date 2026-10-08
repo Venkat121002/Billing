@@ -78,7 +78,7 @@ async function runDuePaymentReminders(now = new Date(), { ownerId } = {}) {
 
             // Pay link generation
             let payLink = '';
-            if (process.env.RAZORPAY_KEY_ID) {
+            if (process.env.CASHFREE_APP_ID) {
                 if (!credit.payToken) {
                     credit.payToken = newPayToken();
                     await store.setPayToken(credit, credit.payToken);

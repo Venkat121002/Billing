@@ -17,5 +17,3 @@ export const loadScript = (src) => {
   });
 };
 
-  // Add Razorpay payment handler
-

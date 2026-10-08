@@ -75,7 +75,7 @@ app.use((req, res, next) => {
     next();
 });
 
-// Keep the raw body: Razorpay webhook signatures are computed over the exact bytes.
+// Keep the raw body: Cashfree webhook signatures are computed over the exact bytes.
 app.use(express.json({ verify: (req, _res, buf) => { req.rawBody = buf; } }));
 app.use(express.urlencoded({ extended: true }));
 
@@ -301,13 +301,15 @@ app.use(
     require('./routes/supportRequestRoutes')
 );
 
-// Payments: public pay-link endpoints (token-authenticated) + Razorpay webhook
+// Payments: public pay-link endpoints (token-authenticated) + Cashfree webhook
 app.use('/api/v2/pay', require('./routes/paymentRoutes'));
 app.use('/v2/pay', require('./routes/paymentRoutes'));
 
-const { razorpayWebhook } = require('./controllers/paymentController');
-app.post('/api/v2/webhooks/razorpay', razorpayWebhook);
-app.post('/v2/webhooks/razorpay', razorpayWebhook);
+const { cashfreeWebhook } = require('./controllers/paymentController');
+app.post('/api/v2/webhooks/cashfree', cashfreeWebhook);
+app.post('/v2/webhooks/cashfree', cashfreeWebhook);
+app.post('/api/v2/webhooks/razorpay', cashfreeWebhook);
+app.post('/v2/webhooks/razorpay', cashfreeWebhook);
 
 // Super Admin (platform-level, cross-tenant)
 app.use(

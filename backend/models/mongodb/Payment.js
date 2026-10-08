@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 
-// One row per Razorpay order we create for a customer due (kind: 'credit').
+// One row per Cashfree order we create for a customer due (kind: 'credit').
 // status: created -> paid | failed. `paid` is set exactly once (see paymentService).
 const PaymentSchema = new mongoose.Schema({
     tenantId: { type: String, required: true, index: true },
@@ -9,6 +9,8 @@ const PaymentSchema = new mongoose.Schema({
     creditId: { type: String, index: true },
     customerName: { type: String, default: '' },
     amount: { type: Number, required: true }, // rupees
+    appliedAmount: { type: Number, default: 0 },
+    unappliedAmount: { type: Number, default: 0 },
     currency: { type: String, default: 'INR' },
     orderId: { type: String, required: true, unique: true },
     paymentId: { type: String, index: true, sparse: true },
