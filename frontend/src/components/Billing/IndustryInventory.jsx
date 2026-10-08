@@ -1123,6 +1123,7 @@ const IndustryInventory = () => {
         <DemandForecastModal
           isOpen={showDemandModal}
           onClose={() => setShowDemandModal(false)}
+          onProductUpdated={fetchProducts}
         />
 
         {/* Phase 1 Pharmacy Batch OCR & Inward Bill Scanner Modal */}
