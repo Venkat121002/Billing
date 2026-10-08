@@ -2,21 +2,12 @@
  * Turns a superadmin-configured Plan (see models/mongodb/Plan.js) into actual
  * blocks in the app: Express middleware that 403s a create once a numeric
  * limit is reached, or once a toggle capability is off for the caller's plan.
- *
- * Mongo-only by necessity: the Plan/Payment collections have always lived in
- * MongoDB regardless of DB_TYPE (see Plan.js), and in 'firestore' mode Mongo
- * is never even connected (see server.js). So every check here is a no-op
- * (request allowed through) when DB_TYPE !== 'mongodb' — plan enforcement
- * simply isn't wired up for that mode, same as the rest of the Plan feature.
+ * Works with MongoDB or Firestore (plans: planStore.js, counts: storeRecords.js).
  */
-const { Plan } = require('../models/mongodb');
 const platformStore = require('./platformStore');
+const planStore = require('./planStore');
+const { countStoreRecords } = require('./storeRecords');
 const { CAPABILITY_MAP } = require('./planCapabilities');
-
-const DB_TYPE = process.env.DB_TYPE || 'mongodb';
-const PLAN_KEYS = ['trial', 'standard', 'premium'];
-
-const enforcementActive = () => DB_TYPE === 'mongodb';
 
 const effectiveOwnerId = (user) => (user.role === 'owner' ? user.userId : user.ownerId);
 
@@ -24,8 +15,8 @@ const effectiveOwnerId = (user) => (user.role === 'owner' ? user.userId : user.o
 async function getOwnerPlan(ownerId) {
     const owner = await platformStore.getOwner(ownerId);
     const rawKey = String(owner?.subscription?.plan || 'trial').toLowerCase();
-    const planKey = PLAN_KEYS.includes(rawKey) ? rawKey : 'trial';
-    const plan = await Plan.findOne({ key: planKey }).lean();
+    const planKey = planStore.KEYS.includes(rawKey) ? rawKey : 'trial';
+    const plan = await planStore.getPlan(planKey);
 
     const caps = {};
     for (const c of (plan?.capabilities || [])) caps[c.key] = c;
@@ -39,29 +30,24 @@ const limitMessage = (capKey, planName, limit) => {
 };
 
 /**
- * Blocks creating a new document once `Model.countDocuments({tenantId, ownerId})`
- * reaches the plan's configured limit for `capKey`. Counting by {tenantId,
- * ownerId} (no subuserId filter) is deliberate — the limit is account-wide,
- * covering the owner and every staff login together, because staff records
- * are stored with the SAME ownerId as the owner's own (see dbUtils.getCollection).
+ * Blocks creating a new record once the store's count of `kind` reaches the
+ * plan's configured limit for `capKey`. The count is account-wide — the owner
+ * and every staff login together (see storeRecords.countStoreRecords).
  */
-function enforceLimit(capKey, Model) {
-    return enforceCombinedLimit(capKey, [Model]);
+function enforceLimit(capKey, kind) {
+    return enforceCombinedLimit(capKey, [kind]);
 }
 
-/** Like enforceLimit, but sums several models against one shared limit. */
-function enforceCombinedLimit(capKey, Models) {
+/** Like enforceLimit, but sums several kinds against one shared limit. */
+function enforceCombinedLimit(capKey, kinds) {
     return async (req, res, next) => {
-        if (!enforcementActive()) return next();
         try {
-            const tenantId = process.env.TENANT_ID;
             const ownerId = effectiveOwnerId(req.user);
             const { caps, planName } = await getOwnerPlan(ownerId);
             const limit = caps[capKey]?.limit;
             if (limit == null) return next(); // unlimited / not configured
 
-            const counts = await Promise.all(Models.map((M) => M.countDocuments({ tenantId, ownerId })));
-            const current = counts.reduce((a, b) => a + b, 0);
+            const current = await countStoreRecords(ownerId, kinds);
 
             if (current >= limit) {
                 return res.status(403).json({
@@ -85,7 +71,6 @@ function enforceCombinedLimit(capKey, Models) {
 /** Blocks the request entirely unless the caller's plan has `capKey` enabled. */
 function requireCapability(capKey) {
     return async (req, res, next) => {
-        if (!enforcementActive()) return next();
         try {
             const ownerId = effectiveOwnerId(req.user);
             const { caps, planName } = await getOwnerPlan(ownerId);

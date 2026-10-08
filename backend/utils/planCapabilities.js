@@ -49,7 +49,7 @@ const CAPABILITIES = [
     },
     {
         key: 'payLinks',
-        label: 'Online payment links for dues (Razorpay)',
+        label: 'Online payment links for dues (Cashfree)',
         type: 'toggle',
         enforced: true,
         help: 'Turns the pay-link / email-link buttons on the Credit screen on or off.',

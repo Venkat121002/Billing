@@ -24,9 +24,16 @@ try {
   }
 } catch { /* storage blocked: fall back to per-tab sessions */ }
 
+// The POS keeps an unfinished cart in localStorage (shared by every account on
+// this browser), so it is dropped whenever the signed-in account changes.
+const POS_DRAFT_KEYS = ["pos-cart", "pos-cash", "pos-cash-edited"];
+
 const clearToken = () => {
   sessionStorage.removeItem("token");
-  try { localStorage.removeItem(REMEMBER_KEY); } catch { /* ignore */ }
+  try {
+    localStorage.removeItem(REMEMBER_KEY);
+    POS_DRAFT_KEYS.forEach((key) => localStorage.removeItem(key));
+  } catch { /* ignore */ }
 };
 
 // Add token to headers
@@ -169,6 +176,7 @@ export function AuthProvider({ children }) {
       console.log("✅ Signup Success:", res.data);
       const { token, user } = res.data;
 
+      clearToken();
       sessionStorage.setItem("token", token);
       // The register response is minimal; load the full profile (incl. the auto-started
       // trial) so the dashboard guard sees an active subscription.

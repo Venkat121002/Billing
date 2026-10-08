@@ -5,8 +5,8 @@
  * Analyzes historical sales velocity across Bills and GST Invoices,
  * forecasts next 7-14 days of customer demand, and recommends optimal reorder quantities.
  */
-const { Bill, GstBill, Product } = require('../models/mongodb');
 const { getGeminiModel, isGeminiConfigured } = require('../config/gemini');
+const { listStoreRecords } = require('./storeRecords');
 
 /**
  * Calculates demand forecast and restock suggestions for a store
@@ -18,26 +18,12 @@ async function generateDemandForecast({ ownerId, tenantId, lookbackDays = 30, fo
         const sinceIso = sinceDate.toISOString();
 
         // 1. Fetch current inventory products
-        const productQuery = {};
-        if (ownerId && tenantId) {
-            productQuery.$or = [{ ownerId }, { tenantId }];
-        } else if (ownerId) {
-            productQuery.ownerId = ownerId;
-        } else if (tenantId) {
-            productQuery.tenantId = tenantId;
-        }
-
-        const products = await Product.find(productQuery).lean();
+        const products = await listStoreRecords(ownerId, 'products');
 
         // 2. Fetch past bills within the lookback window
-        const billQuery = {
-            ...productQuery,
-            createdAt: { $gte: sinceIso }
-        };
-
         const [standardBills, gstBills] = await Promise.all([
-            Bill.find(billQuery).lean(),
-            GstBill.find(billQuery).lean()
+            listStoreRecords(ownerId, 'bills', { since: sinceIso }),
+            listStoreRecords(ownerId, 'gstBills', { since: sinceIso })
         ]);
 
         // 3. Aggregate sales by product

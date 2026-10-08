@@ -2,28 +2,38 @@
  * Automated Payment Reminders for Customer Dues
  * Feature 4 of Phase 1 Automation.
  */
-const { Credit } = require('../models/mongodb');
 const platformStore = require('./platformStore');
 const wa = require('./whatsappService');
 const { sendEmail } = require('./emailService');
 const emailTemplates = require('./emailTemplates');
 const { newPayToken, money } = require('./paymentService');
 const store = require('./paymentStore');
+const { listStoreRecords, updateStoreRecord } = require('./storeRecords');
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
  * Scan all unpaid credits and send WhatsApp & Email payment reminders
  * at 3 days, 7 days, and 15 days overdue.
+ * `ownerId` limits the run to that one store (the owner's manual trigger);
+ * without it every store's dues are processed (the scheduled job).
  */
-async function runDuePaymentReminders(now = new Date()) {
+async function runDuePaymentReminders(now = new Date(), { ownerId } = {}) {
     const summary = { checked: 0, remindersSent: 0, skipped: 0, errors: 0 };
 
     try {
-        const credits = await Credit.find({
-            balance: { $gt: 0 },
-            status: { $nin: ['Paid', 'Settled', 'Cancelled'] }
-        });
+        const owners = ownerId
+            ? [await platformStore.getOwner(ownerId)].filter(Boolean)
+            : await platformStore.listOwners();
+
+        const credits = [];
+        for (const owner of owners) {
+            // Business records carry the owner's userId, not the Mongo _id.
+            const storeCredits = await listStoreRecords(owner.userId || String(owner._id), 'credit_customers');
+            credits.push(...storeCredits.filter((c) =>
+                Number(c.balance) > 0 && !['Paid', 'Settled', 'Cancelled'].includes(c.status)
+            ));
+        }
 
         for (const credit of credits) {
             summary.checked += 1;
@@ -68,7 +78,7 @@ async function runDuePaymentReminders(now = new Date()) {
 
             // Pay link generation
             let payLink = '';
-            if (process.env.RAZORPAY_KEY_ID) {
+            if (process.env.CASHFREE_APP_ID) {
                 if (!credit.payToken) {
                     credit.payToken = newPayToken();
                     await store.setPayToken(credit, credit.payToken);
@@ -119,9 +129,10 @@ async function runDuePaymentReminders(now = new Date()) {
 
             if (sentSuccess || !wa.isConfigured()) {
                 const currentSent = Array.isArray(credit.remindersSent) ? credit.remindersSent : [];
-                credit.remindersSent = [...new Set([...currentSent, ...markProcessed])];
-                credit.lastReminderSentAt = now.toISOString();
-                await credit.save();
+                await updateStoreRecord('credit_customers', credit, {
+                    remindersSent: [...new Set([...currentSent, ...markProcessed])],
+                    lastReminderSentAt: now.toISOString()
+                });
                 summary.remindersSent += 1;
             } else {
                 summary.errors += 1;

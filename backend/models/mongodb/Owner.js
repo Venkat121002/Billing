@@ -38,6 +38,7 @@ const OwnerSchema = new mongoose.Schema({
         paymentMethod: { type: String, default: 'manual' }
     },
     additionalSubUsers: { type: Number, default: 0 },
+    processedCashfreeOrderIds: { type: [String], default: [] },
     purchase_gst: { type: Number, default: 0 },
     purchase_tax_type: { type: String, default: 'exclusive' },
     sales_gst: { type: Number, default: 0 },

@@ -5,34 +5,25 @@
  * Automatically segments customers based on Recency, Frequency, and Monetary (RFM) analytics,
  * providing actionable retention alerts and targeted WhatsApp campaign templates.
  */
-const { Customer, Bill, GstBill } = require('../models/mongodb');
 const platformStore = require('./platformStore');
+const { listStoreRecords } = require('./storeRecords');
 
 /**
  * Perform RFM Customer Segmentation
  */
 async function analyzeCustomerSegments({ ownerId, tenantId }) {
     try {
-        const query = {};
-        if (ownerId && tenantId) {
-            query.$or = [{ ownerId }, { tenantId }];
-        } else if (ownerId) {
-            query.ownerId = ownerId;
-        } else if (tenantId) {
-            query.tenantId = tenantId;
-        }
-
         // 1. Fetch store owner details for branding in promo messages
         const owner = ownerId ? await platformStore.getOwner(ownerId) : null;
         const storeName = owner?.companyDetails?.name || owner?.businessName || 'Our Store';
 
         // 2. Fetch all customers
-        const customers = await Customer.find(query).lean();
+        const customers = await listStoreRecords(ownerId, 'customers');
 
         // 3. Fetch all bills and GST bills to compute actual purchase behavior
         const [standardBills, gstBills] = await Promise.all([
-            Bill.find(query).lean(),
-            GstBill.find(query).lean()
+            listStoreRecords(ownerId, 'bills'),
+            listStoreRecords(ownerId, 'gstBills')
         ]);
 
         const allBills = [...standardBills, ...gstBills];

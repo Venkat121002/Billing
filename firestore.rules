@@ -2,26 +2,14 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Multi-tenant billing data lives at:
-    //   SwordNexBillingSoftware/{tenantId}/owner/{ownerId}/{subCollection}/...
-    //   SwordNexBillingSoftware/{tenantId}/owner/{ownerId}/subuser/{subuserId}/{subCollection}/...
-    // {ownerId} and {subuserId} are always the requesting user's own Firebase
-    // Auth uid (see backend/controllers/firestoreUserController.js and
-    // firestoreAuthController.js) — never a value the client can choose
-    // independently of who they authenticated as.
-
-    // A business owner may read/write everything under their own tree,
-    // including every one of their sub-users' nested data.
-    match /SwordNexBillingSoftware/{tenantId}/owner/{ownerId}/{document=**} {
-      allow read, write: if request.auth != null && request.auth.uid == ownerId;
-    }
-
-    // A sub-user may additionally read/write only their own nested records.
-    match /SwordNexBillingSoftware/{tenantId}/owner/{ownerId}/subuser/{subuserId}/{document=**} {
-      allow read, write: if request.auth != null && request.auth.uid == subuserId;
-    }
-
-    // Deny everything else by default — no cross-tenant or cross-owner access.
+    // All billing data (SwordNexBillingSoftware/{tenantId}/...) is read and
+    // written only by the backend through the Firebase Admin SDK, which is not
+    // subject to these rules. The web app never talks to Firestore directly.
+    //
+    // So no client gets any access. Allowing an owner to write their own tree
+    // let them edit their own store record (e.g. set their subscription to
+    // Premium) and let staff edit their own staff record straight from a
+    // browser with the public web API key, bypassing every server-side check.
     match /{document=**} {
       allow read, write: if false;
     }

@@ -93,21 +93,23 @@ function BrandPanel() {
       <div className="absolute -right-24 -top-24 h-80 w-80 rounded-full bg-green-400/30 blur-3xl" />
       <div className="absolute -bottom-32 -left-24 h-96 w-96 rounded-full bg-emerald-300/20 blur-3xl" />
 
-      <div className="relative z-10 mx-auto flex w-full max-w-xl flex-col justify-center px-12 py-12 xl:px-16">
-        <h2 className="text-3xl font-bold leading-tight text-white xl:text-4xl">
+      {/* Shorter laptop screens (768/800px tall) get tighter spacing so the
+          feature list still fits instead of being hidden. */}
+      <div className="relative z-10 mx-auto flex w-full max-w-xl flex-col justify-center px-12 py-12 xl:px-16 [@media(max-height:820px)]:py-8">
+        <h2 className="text-3xl font-bold leading-tight text-white xl:text-4xl [@media(max-height:820px)]:text-[28px]">
           Smart billing for
           <br />
           growing businesses.
         </h2>
-        <p className="mt-3 max-w-md text-sm leading-relaxed text-green-50/90">
+        <p className="mt-3 max-w-md text-sm leading-relaxed text-green-50/90 [@media(max-height:820px)]:mt-2">
           Bill faster, keep stock in check and get paid on time, all from one dashboard.
         </p>
 
-        <div className="mt-10 mb-16">
+        <div className="mt-10 mb-16 [@media(max-height:820px)]:mb-14 [@media(max-height:820px)]:mt-6">
           <InvoicePreview />
         </div>
 
-        <ul className="grid grid-cols-2 gap-x-6 gap-y-5 [@media(max-height:820px)]:hidden">
+        <ul className="grid grid-cols-2 gap-x-6 gap-y-5 [@media(max-height:820px)]:gap-y-3">
           {FEATURES.map(({ icon: Icon, title, text }) => (
             <li key={title} className="flex gap-3">
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/15 text-white ring-1 ring-white/20">
@@ -142,6 +144,21 @@ export default function AuthShell({ title, subtitle, children, footer, wide = fa
             <div className="mt-8">{children}</div>
 
             {footer && <div className="mt-8 space-y-2 text-center text-sm text-gray-500">{footer}</div>}
+
+            {/* Phones/tablets don't get the green panel, so show its feature list here. */}
+            <ul className="mt-10 grid grid-cols-1 gap-3 border-t border-gray-100 pt-8 sm:grid-cols-2 lg:hidden">
+              {FEATURES.map(({ icon: Icon, title, text }) => (
+                <li key={title} className="flex gap-3">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-green-50 text-green-700">
+                    <Icon size={18} />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-gray-900">{title}</p>
+                    <p className="mt-0.5 text-xs leading-relaxed text-gray-500">{text}</p>
+                  </div>
+                </li>
+              ))}
+            </ul>
           </div>
         </div>
 

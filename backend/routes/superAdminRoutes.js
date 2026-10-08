@@ -8,15 +8,18 @@ const planController = require('../controllers/planController');
 router.post('/login', controller.login);
 
 // Protected (super admin token required)
-router.get('/stats', superAdminAuth, controller.getStats);
-router.get('/tenants', superAdminAuth, controller.getTenants);
-router.get('/tenants/:id', superAdminAuth, controller.getTenantById);
-router.get('/tenants/:id/data', superAdminAuth, controller.getTenantData);
+// Console (read-only data): overview, stores, dataset registry + rows
+router.get('/overview', superAdminAuth, controller.getOverview);
+router.get('/stores', superAdminAuth, controller.getStores);
+router.get('/stores/:id', superAdminAuth, controller.getStore);
+router.get('/datasets', superAdminAuth, controller.getDatasets);
+router.get('/data/:dataset', superAdminAuth, controller.getData);
+
+// Store account actions
 router.patch('/tenants/:id/status', superAdminAuth, controller.updateTenantStatus);
 router.patch('/tenants/:id/subscription', superAdminAuth, controller.updateTenantSubscription);
 router.patch('/tenants/:id/bill-delivery', superAdminAuth, controller.updateTenantBillDelivery);
 router.delete('/tenants/:id', superAdminAuth, controller.deleteTenant);
-router.get('/subusers', superAdminAuth, controller.getAllSubUsers);
 router.get('/support-requests', superAdminAuth, controller.getSupportRequests);
 router.post('/support-requests/:id/switch-industry', superAdminAuth, controller.switchIndustryFromRequest);
 router.patch('/support-requests/:id/status', superAdminAuth, controller.updateSupportRequestStatus);

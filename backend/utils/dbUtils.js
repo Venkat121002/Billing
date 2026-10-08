@@ -206,4 +206,17 @@ const fetchUnifiedData = async (req, subCollection, options = {}) => {
     return unifiedRecords;
 };
 
-module.exports = { getCollection, fetchUnifiedData };
+/**
+ * Mongo filter for one store's records (owner + all of its sub-users), for code
+ * that queries models directly instead of through getCollection(). Both fields
+ * are required: TENANT_ID is the same for every store on the platform, so a
+ * filter on tenantId alone (or `$or: [{ownerId}, {tenantId}]`) matches every store.
+ */
+const storeFilter = (ownerId, tenantId = process.env.TENANT_ID) => {
+    if (!ownerId || !tenantId) {
+        throw new Error("Store scope missing (ownerId / tenantId).");
+    }
+    return { tenantId, ownerId };
+};
+
+module.exports = { getCollection, fetchUnifiedData, storeFilter };

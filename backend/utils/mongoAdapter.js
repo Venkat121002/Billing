@@ -21,13 +21,28 @@ function buildIdQuery(docId) {
 }
 
 /**
+ * Tenant-scope fields. Their values always come from the signed-in user's
+ * scope (the collection's base query), never from a request body: a body
+ * that sets `ownerId` must not be able to write into, or move a record to,
+ * another store.
+ */
+const SCOPE_KEYS = ['_id', 'tenantId', 'ownerId', 'subuserId'];
+
+function withoutScopeKeys(data) {
+    const clean = { ...data };
+    for (const key of SCOPE_KEYS) delete clean[key];
+    return clean;
+}
+
+/**
  * Split a Firestore-style update payload into Mongo `$set` / `$inc`.
  * Values produced by `MongoFieldValue.increment(n)` look like `{ $inc: n }`.
+ * Scope fields are dropped, so an update can never change a record's store.
  */
 function toMongoUpdate(data) {
     const $set = {};
     const $inc = {};
-    for (const [key, value] of Object.entries(data)) {
+    for (const [key, value] of Object.entries(withoutScopeKeys(data))) {
         if (value && typeof value === 'object' && typeof value.$inc === 'number') {
             $inc[key] = value.$inc;
         } else {
@@ -88,9 +103,9 @@ class MongoDocumentReference {
             // Fresh id from `collection.doc()` with no argument: this is a create.
             if (this._generatedId) {
                 const newDoc = new this.model({
-                    _id: this._generatedId,
+                    ...withoutScopeKeys(data),
                     ...this.query,
-                    ...data
+                    _id: this._generatedId
                 });
                 return await newDoc.save();
             }
@@ -107,7 +122,7 @@ class MongoDocumentReference {
                 return result;
             }
 
-            const newDoc = new this.model({ ...this.query, ...data });
+            const newDoc = new this.model({ ...withoutScopeKeys(data), ...this.query });
             return await newDoc.save();
         } catch (error) {
             console.error('MongoDocumentReference.set error:', error);
@@ -255,7 +270,7 @@ class MongoCollectionReference {
 
     async add(data) {
         try {
-            const newDoc = new this.model({ ...this.baseQuery, ...data });
+            const newDoc = new this.model({ ...withoutScopeKeys(data), ...this.baseQuery });
             const saved = await newDoc.save();
             return {
                 id: saved._id.toString()

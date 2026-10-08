@@ -91,7 +91,7 @@ const Credit = () => {
   };
 
 
-  // 🔹 Razorpay pay link (customer pays online; webhook updates the balance)
+  // 🔹 Cashfree pay link (customer pays online; webhook updates the balance)
   const authConfig = () => ({ headers: { "x-auth-token": sessionStorage.getItem("token") } });
 
   const copyPayLink = async (c) => {
@@ -785,7 +785,7 @@ const Credit = () => {
                       </button>
                       {c.balance > 0 && hasCapability('payLinks') && (
                         <>
-                          <button onClick={() => copyPayLink(c)} className="text-emerald-600" title="Copy Razorpay pay link">
+                          <button onClick={() => copyPayLink(c)} className="text-emerald-600" title="Copy Cashfree pay link">
                             <Link2 size={18} />
                           </button>
                           <button onClick={() => emailPayLink(c)} className="text-indigo-600" title="Email pay link">

@@ -470,55 +470,59 @@ const Settings = () => {
       const { default: toast } = await import('react-hot-toast');
       const { loadScript } = await import('../components/Auth/loadScript');
 
-      const res = await loadScript("https://checkout.razorpay.com/v1/checkout.js");
-      if (!res) {
-        toast.error("Razorpay SDK failed to load.");
-        return;
-      }
-
       const orderData = await createSubscriptionOrder({
         plan: 'additional_users',
         count: additionalUserCount
       });
 
-      const { orderId, amount, currency, keyId } = orderData;
+      const { orderId, paymentSessionId, amount, currency, environment } = orderData;
 
-      const options = {
-        key: keyId,
-        amount: amount,
-        currency: currency,
-        name: "SwordNex Billing",
-        description: `Additional ${additionalUserCount} Sub-Users`,
-        image: "https://nexusjobs.in/logo.png",
-        order_id: orderId,
-        handler: async function (response) {
-          try {
-            await verifySubscriptionPayment({
-              paymentId: response.razorpay_payment_id,
-              orderId: response.razorpay_order_id,
-              signature: response.razorpay_signature,
-              plan: 'additional_users',
-              count: additionalUserCount,
-              amount: amount
-            });
-            toast.success(`${additionalUserCount} users added successfully!`);
-            setAdditionalUserCount(0);
-          } catch (err) {
-            console.error("Verification error:", err);
-            toast.error("Payment successful but verification failed.");
-          }
-        },
-        prefill: {
-          name: userData?.businessName || "",
-          email: userData?.email || "",
-        },
-        theme: {
-          color: "#f97316"
-        }
+      // Load Cashfree SDK
+      const scriptUrl = environment === 'sandbox'
+        ? "https://sdk.cashfree.com/js/v3/cashfree.sandbox.js"
+        : "https://sdk.cashfree.com/js/v3/cashfree.js";
+
+      const res = await loadScript(scriptUrl);
+      if (!res) {
+        toast.error("Cashfree SDK failed to load.");
+        return;
+      }
+
+      // Initialize Cashfree
+      const cashfree = window.Cashfree({
+        mode: environment === 'sandbox' ? 'sandbox' : 'production'
+      });
+
+      // Checkout options
+      const checkoutOptions = {
+        paymentSessionId: paymentSessionId,
+        returnUrl: `${window.location.origin}/settings?order_id=${orderId}`,
       };
 
-      const paymentObject = new window.Razorpay(options);
-      paymentObject.open();
+      // Open checkout
+      cashfree.checkout(checkoutOptions).then(async (result) => {
+        if (result.error) {
+          toast.error(result.error.message || "Payment failed. Please try again.");
+          return;
+        }
+
+        // Verify payment on return
+        try {
+          await verifySubscriptionPayment({
+            orderId: orderId,
+            plan: 'additional_users',
+            count: additionalUserCount,
+            amount: amount
+          });
+          toast.success(`${additionalUserCount} users added successfully!`);
+          setAdditionalUserCount(0);
+        } catch (err) {
+          console.error("Verification error:", err);
+          toast.error("Payment successful but verification failed.");
+        }
+      }).catch((err) => {
+        toast.error(err.message || "Payment failed. Please try again.");
+      });
 
     } catch (err) {
       console.error("Buy additional users error:", err);

@@ -5,7 +5,6 @@ const auth = require('../middleware/firestoreAuth');
 const roleAuth = require('../middleware/roleAuth');
 const subAuth = require('../middleware/subscriptionAuth');
 const { enforceLimit } = require('../utils/planEnforcement');
-const { Product } = require('../models/mongodb');
 
 // All routes require authentication
 router.use(auth);
@@ -18,7 +17,7 @@ router.get('/barcode/:barcode', productController.getProductByBarcode);
 router.get('/:id', productController.getProduct);
 
 router.get('/', productController.getProducts);
-router.post('/', enforceLimit('products', Product), productController.createProduct);
+router.post('/', enforceLimit('products', 'products'), productController.createProduct);
 router.put('/:id', productController.updateProduct);
 router.delete('/:id', productController.deleteProduct);
 

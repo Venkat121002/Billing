@@ -11,7 +11,7 @@ const CapabilitySchema = new mongoose.Schema({
 
 // The three subscription tiers (Free = the auto-started trial, Standard, Premium).
 // Superadmin-editable via /superadmin/plans; the public pricing page, the
-// Razorpay order amount, and the plan-enforcement middleware all read straight
+// Cashfree order amount, and the plan-enforcement middleware all read straight
 // from this collection — there is no second copy of prices/limits anywhere else.
 const PlanSchema = new mongoose.Schema({
     key: { type: String, required: true, unique: true, enum: ['trial', 'standard', 'premium'] },
@@ -21,7 +21,7 @@ const PlanSchema = new mongoose.Schema({
     badge: { type: String, default: '', trim: true, maxlength: 24 }, // e.g. "Best Value"; blank = none
 
     // Rupees. Always 0 for the trial ("Free"); billing reads these two fields
-    // directly when creating a Razorpay order.
+    // directly when creating a Cashfree order.
     monthly: { type: Number, default: 0, min: 0 },
     yearly: { type: Number, default: 0, min: 0 },
 

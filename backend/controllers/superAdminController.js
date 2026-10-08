@@ -3,6 +3,8 @@ const { admin } = require('../config/firebase');
 const store = require('../utils/platformStore');
 const billDelivery = require('../utils/billDelivery');
 const { VALID_INDUSTRIES } = require('../utils/industries');
+const saData = require('../utils/superAdminData');
+const { listStoreRecords, countStoreRecords } = require('../utils/storeRecords');
 
 const DB_TYPE = process.env.DB_TYPE || 'mongodb';
 
@@ -36,115 +38,206 @@ exports.login = async (req, res) => {
     res.json({ token, email: adminEmail });
 };
 
-// @desc    Platform-wide aggregate stats
-// @route   GET /superadmin/stats
-exports.getStats = async (req, res) => {
+const DAY_MS = 24 * 60 * 60 * 1000;
+const startOfTodayIST = () => new Date(`${new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })}T00:00:00.000+05:30`).toISOString();
+const monthKey = (iso) => String(iso || '').slice(0, 7);
+const billTotal = (b) => Number(b.totals?.grandTotal ?? b.grandTotal ?? b.total ?? 0) || 0;
+
+// Summary row for one store, shared by the store list and the picker.
+async function storeSummary(owner) {
+    const oid = saData.ownerId(owner);
+    const [staff, bills, products] = await Promise.all([
+        store.listSubUsers(oid),
+        countStoreRecords(oid, ['bills', 'gstBills']),
+        countStoreRecords(oid, ['products'])
+    ]);
+    const sub = owner.subscription || {};
+    return {
+        id: oid,
+        name: saData.storeName(owner),
+        email: owner.email || '',
+        mobile: owner.mobile || '',
+        industry: owner.companyDetails?.industry || '',
+        plan: sub.plan || 'none',
+        status: sub.status || 'Inactive',
+        endDate: sub.endDate || null,
+        staff: staff.length,
+        bills,
+        products,
+        lastLogin: owner.lastLogin || null,
+        createdAt: owner.createdAt || null
+    };
+}
+
+// @desc    Platform overview: KPIs, 12-month trends, plans, expiring plans, latest sign-ups/payments
+// @route   GET /superadmin/overview
+exports.getOverview = async (req, res) => {
     try {
-        const [owners, subUsers, pendingSupportRequests] = await Promise.all([
-            store.listOwners(),
-            store.listSubUsers(),
-            store.countPendingSupportRequests()
+        const [owners, subUsers, pendingSupport] = await Promise.all([
+            store.listOwners(), store.listSubUsers(), store.countPendingSupportRequests()
         ]);
+        const now = new Date();
+        const thisMonth = monthKey(now.toISOString());
+        const today = startOfTodayIST();
 
-        const totalTenants = owners.length;
-        const activeSubscriptions = owners.filter(o => o.subscription?.status === 'Active').length;
-
-        const planCounts = {};
-        let totalRevenue = 0;
-        for (const o of owners) {
-            const plan = o.subscription?.plan || 'Free';
-            planCounts[plan] = (planCounts[plan] || 0) + 1;
-            totalRevenue += Number(o.subscription?.amount) || 0;
-        }
-        const planBreakdown = Object.entries(planCounts)
-            .map(([plan, count]) => ({ plan, count }))
-            .sort((a, b) => b.count - a.count);
-
-        // listOwners() is already newest-first
-        const recentTenants = owners.slice(0, 5).map(o => ({
-            _id: o._id,
-            userId: o.userId,
-            email: o.email,
-            companyDetails: { name: o.companyDetails?.name },
-            subscription: { plan: o.subscription?.plan, status: o.subscription?.status },
-            createdAt: o.createdAt
+        const perStore = await Promise.all(owners.map(async (o) => {
+            const oid = saData.ownerId(o);
+            const [payments, billsToday] = await Promise.all([
+                listStoreRecords(oid, 'subscriptiondetails'),
+                listStoreRecords(oid, 'bills', { since: today })
+            ]);
+            return { owner: o, payments, billsToday };
         }));
 
+        const months = [];
+        for (let i = 11; i >= 0; i--) {
+            const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+            months.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+        }
+        const trend = months.map((m) => ({ month: m, revenue: 0, signups: 0 }));
+        const byMonth = Object.fromEntries(trend.map((t) => [t.month, t]));
+
+        let revenueTotal = 0, revenueThisMonth = 0, paymentCount = 0, billsTodayCount = 0, salesToday = 0;
+        const recentPayments = [];
+        for (const { owner, payments, billsToday } of perStore) {
+            if (byMonth[monthKey(owner.createdAt)]) byMonth[monthKey(owner.createdAt)].signups += 1;
+            billsTodayCount += billsToday.length;
+            salesToday += billsToday.reduce((s, b) => s + billTotal(b), 0);
+            for (const p of payments) {
+                const amount = Number(p.amount) || 0;
+                revenueTotal += amount;
+                paymentCount += 1;
+                if (monthKey(p.createdAt) === thisMonth) revenueThisMonth += amount;
+                if (byMonth[monthKey(p.createdAt)]) byMonth[monthKey(p.createdAt)].revenue += amount;
+                recentPayments.push({
+                    id: p._id, storeId: saData.ownerId(owner), storeName: saData.storeName(owner),
+                    plan: p.plan, billingCycle: p.billingCycle, amount, paidAt: p.createdAt
+                });
+            }
+        }
+        recentPayments.sort((a, b) => String(b.paidAt).localeCompare(String(a.paidAt)));
+
+        const byPlan = {};
+        const expiringSoon = [];
+        for (const o of owners) {
+            const plan = String(o.subscription?.plan || 'none').toLowerCase();
+            byPlan[plan] = (byPlan[plan] || 0) + 1;
+            const end = o.subscription?.endDate ? new Date(o.subscription.endDate) : null;
+            if (end && end - now < 14 * DAY_MS) {
+                expiringSoon.push({
+                    id: saData.ownerId(o), name: saData.storeName(o), email: o.email, plan,
+                    expiresAt: o.subscription.endDate, expired: end < now
+                });
+            }
+        }
+        expiringSoon.sort((a, b) => String(a.expiresAt).localeCompare(String(b.expiresAt)));
+
         res.json({
-            totalTenants,
-            totalSubUsers: subUsers.length,
-            activeSubscriptions,
-            inactiveSubscriptions: totalTenants - activeSubscriptions,
-            totalRevenue,
-            planBreakdown,
-            recentTenants,
-            pendingSupportRequests
+            stores: {
+                total: owners.length,
+                active: owners.filter((o) => o.subscription?.status === 'Active').length,
+                newThisMonth: owners.filter((o) => monthKey(o.createdAt) === thisMonth).length,
+                byPlan
+            },
+            staff: subUsers.length,
+            revenue: { total: revenueTotal, thisMonth: revenueThisMonth, payments: paymentCount },
+            today: { bills: billsTodayCount, sales: salesToday },
+            pendingSupport,
+            trend,
+            expiringSoon,
+            recentStores: owners.slice(0, 6).map((o) => ({
+                id: saData.ownerId(o), name: saData.storeName(o), email: o.email,
+                plan: o.subscription?.plan || 'none', industry: o.companyDetails?.industry || '', createdAt: o.createdAt
+            })),
+            recentPayments: recentPayments.slice(0, 6)
         });
     } catch (err) {
-        console.error('SuperAdmin getStats Error:', err.message);
+        console.error('SuperAdmin getOverview Error:', err.message);
         res.status(500).json({ msg: 'Server error: ' + err.message });
     }
 };
 
-// @desc    List all tenants (Owners) with sub-user counts
-// @route   GET /superadmin/tenants
-exports.getTenants = async (req, res) => {
+// @desc    Every store with plan, staff and usage counts
+// @route   GET /superadmin/stores
+exports.getStores = async (req, res) => {
     try {
-        const [owners, subUsers] = await Promise.all([store.listOwners(), store.listSubUsers()]);
-
-        const countMap = {};
-        for (const s of subUsers) countMap[s.ownerId] = (countMap[s.ownerId] || 0) + 1;
-
-        res.json(owners.map(o => ({ ...o, subUserCount: countMap[o.userId] || 0 })));
+        const owners = await store.listOwners();
+        res.json(await Promise.all(owners.map(storeSummary)));
     } catch (err) {
-        console.error('SuperAdmin getTenants Error:', err.message);
+        console.error('SuperAdmin getStores Error:', err.message);
         res.status(500).json({ msg: 'Server error: ' + err.message });
     }
 };
 
-// @desc    Single tenant detail + its sub-users
-// @route   GET /superadmin/tenants/:id
-exports.getTenantById = async (req, res) => {
+// @desc    One store: full profile (no secrets), business stats, bill delivery
+// @route   GET /superadmin/stores/:id
+exports.getStore = async (req, res) => {
     try {
         const owner = await store.getOwner(req.params.id);
-        if (!owner) {
-            return res.status(404).json({ msg: 'Tenant not found' });
-        }
+        if (!owner) return res.status(404).json({ msg: 'Store not found' });
+        const oid = saData.ownerId(owner);
+        const today = startOfTodayIST();
 
-        const subUsers = await store.listSubUsers(req.params.id);
+        const [summary, bills, gstBills, customers, credit, settings] = await Promise.all([
+            storeSummary(owner),
+            listStoreRecords(oid, 'bills'),
+            listStoreRecords(oid, 'gstBills'),
+            countStoreRecords(oid, ['customers']),
+            listStoreRecords(oid, 'credit_customers'),
+            store.getPlatformSettings()
+        ]);
+        const allBills = [...bills, ...gstBills];
+        const lastBillAt = allBills.reduce((latest, b) => (String(b.createdAt || '') > String(latest || '') ? b.createdAt : latest), null);
 
-        res.json({ owner, subUsers });
+        res.json({
+            ...summary,
+            owner: saData.sanitize(owner),
+            billDeliveryMode: owner.billDeliveryMode || 'default',
+            platformBillDeliveryMode: settings.billDeliveryMode,
+            billTextEnabled: billDelivery.isTextEnabled(),
+            stats: {
+                customers,
+                sales: allBills.reduce((s, b) => s + billTotal(b), 0),
+                billsToday: bills.filter((b) => String(b.createdAt || '') >= today).length,
+                lastBillAt,
+                dues: credit.reduce((s, c) => s + (Number(c.balance) > 0 ? Number(c.balance) : 0), 0),
+                openDues: credit.filter((c) => Number(c.balance) > 0).length
+            }
+        });
     } catch (err) {
-        console.error('SuperAdmin getTenantById Error:', err.message);
+        console.error('SuperAdmin getStore Error:', err.message);
         res.status(500).json({ msg: 'Server error: ' + err.message });
     }
 };
 
-// @desc    Counts of every business collection for one tenant (drill-down)
-// @route   GET /superadmin/tenants/:id/data
-exports.getTenantData = async (req, res) => {
+// @desc    Dataset registry with record counts (all stores, or ?storeId=)
+// @route   GET /superadmin/datasets
+exports.getDatasets = async (req, res) => {
     try {
-        res.json(await store.tenantData(req.params.id));
+        res.json(await saData.listDatasets(req.query.storeId || null));
     } catch (err) {
-        console.error('SuperAdmin getTenantData Error:', err.message);
+        console.error('SuperAdmin getDatasets Error:', err.message);
         res.status(500).json({ msg: 'Server error: ' + err.message });
     }
 };
 
-// @desc    All sub-users across every tenant
-// @route   GET /superadmin/subusers
-exports.getAllSubUsers = async (req, res) => {
+// @desc    One page of a dataset. ?storeId=&search=&from=&to=&page=&limit= (export=1 allows up to 5000 rows)
+// @route   GET /superadmin/data/:dataset
+exports.getData = async (req, res) => {
     try {
-        const [subUsers, owners] = await Promise.all([store.listSubUsers(), store.listOwners()]);
-        const ownerMap = Object.fromEntries(owners.map(o => [o.userId, o]));
+        const { storeId, search, from, to } = req.query;
+        const max = req.query.export === '1' ? 5000 : 200;
+        const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 25, 1), max);
+        const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+        const validDate = (d) => (/^\d{4}-\d{2}-\d{2}$/.test(d || '') ? d : undefined);
 
-        res.json(subUsers.map(s => ({
-            ...s,
-            ownerBusinessName: ownerMap[s.ownerId]?.companyDetails?.name || '',
-            ownerEmail: ownerMap[s.ownerId]?.email || ''
-        })));
+        const result = await saData.queryDataset(req.params.dataset, {
+            ownerId: storeId || null, search, from: validDate(from), to: validDate(to), page, limit
+        });
+        if (!result) return res.status(404).json({ msg: 'Unknown dataset' });
+        res.json(result);
     } catch (err) {
-        console.error('SuperAdmin getAllSubUsers Error:', err.message);
+        console.error('SuperAdmin getData Error:', err.message);
         res.status(500).json({ msg: 'Server error: ' + err.message });
     }
 };
@@ -164,7 +257,7 @@ exports.updateTenantStatus = async (req, res) => {
             return res.status(404).json({ msg: 'Tenant not found' });
         }
 
-        res.json({ msg: `Tenant ${status.toLowerCase()}`, owner });
+        res.json({ msg: `Tenant ${status.toLowerCase()}`, owner: saData.sanitize(owner) });
     } catch (err) {
         console.error('SuperAdmin updateTenantStatus Error:', err.message);
         res.status(500).json({ msg: 'Server error: ' + err.message });
@@ -189,7 +282,7 @@ exports.updateTenantSubscription = async (req, res) => {
             return res.status(404).json({ msg: 'Tenant not found' });
         }
 
-        res.json({ msg: 'Subscription updated', owner });
+        res.json({ msg: 'Subscription updated', owner: saData.sanitize(owner) });
     } catch (err) {
         console.error('SuperAdmin updateTenantSubscription Error:', err.message);
         res.status(500).json({ msg: 'Server error: ' + err.message });
@@ -357,7 +450,7 @@ exports.updateTenantBillDelivery = async (req, res) => {
         }
         const owner = await store.updateOwner(req.params.id, { billDeliveryMode: mode === 'default' ? null : mode });
         if (!owner) return res.status(404).json({ msg: 'Tenant not found' });
-        res.json({ msg: 'Bill delivery updated', owner });
+        res.json({ msg: 'Bill delivery updated', owner: saData.sanitize(owner) });
     } catch (err) {
         console.error('SuperAdmin updateTenantBillDelivery Error:', err.message);
         res.status(500).json({ msg: 'Server error: ' + err.message });
