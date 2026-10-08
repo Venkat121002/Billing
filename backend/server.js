@@ -376,6 +376,17 @@ app.use(
     require('./routes/chatbotRoutes')
 );
 
+// Software Development Automation (Proposal AI, Auto Milestone Invoicing)
+app.use(
+    '/api/v2/software',
+    require('./routes/softwareAutomationRoutes')
+);
+
+app.use(
+    '/v2/software',
+    require('./routes/softwareAutomationRoutes')
+);
+
 // ---------------------------------------------------------
 // Root Route
 // ---------------------------------------------------------

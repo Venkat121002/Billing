@@ -23,12 +23,16 @@ exports.queryChatbot = async (req, res) => {
             return res.status(401).json({ success: false, msg: 'Tenant authorization is missing' });
         }
 
+        const effectiveIndustry = (industry && industry !== 'all' && industry !== 'general')
+            ? industry
+            : (req.user?.industry || industry || 'general');
+
         const result = await answerTenantQuery({
             ownerId,
             tenantId,
             userQuery: message.trim(),
             department,
-            industry,
+            industry: effectiveIndustry,
             conversationHistory: Array.isArray(history) ? history : []
         });
 

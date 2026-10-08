@@ -29,29 +29,6 @@ export default function SwordNexi() {
   const profile = resolveIndustryProfile(currentUser);
   const department = resolveDepartment(location.pathname);
 
-  // Suggested prompts customized by current industry and screen
-  const getSuggestedPrompts = () => {
-    const base = [
-      `Check live stock for items 📦`,
-      `Show products running low on stock ⚠️`,
-      `What can I do on the ${department.name} screen? 📍`,
-    ];
-
-    if (profile.key === "clothing") {
-      base.push("What is our alteration & fitting policy? 👗");
-    } else if (profile.key === "pharmacy") {
-      base.push("How do expiry alerts and batches work? 💊");
-    } else if (profile.key === "mobile_shop") {
-      base.push("Check repair tickets and IMEIs 📱");
-    } else if (profile.key === "petshop") {
-      base.push("Check grooming appointments & pet passports 🐾");
-    } else {
-      base.push("How do I create a bill? 🧾");
-    }
-
-    return base.slice(0, 3);
-  };
-
   // Initialize greeting
   useEffect(() => {
     if (messages.length === 0) {
@@ -79,6 +56,20 @@ export default function SwordNexi() {
     }
   }, [isOpen]);
 
+  const handleTextareaChange = (e) => {
+    setInputMessage(e.target.value);
+    const textarea = e.target;
+    textarea.style.height = "auto";
+    textarea.style.height = `${Math.min(textarea.scrollHeight, 120)}px`;
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSendMessage();
+    }
+  };
+
   const handleSendMessage = async (textToSend) => {
     const query = (textToSend || inputMessage).trim();
     if (!query) return;
@@ -92,6 +83,9 @@ export default function SwordNexi() {
 
     setMessages((prev) => [...prev, userMsg]);
     setInputMessage("");
+    if (inputRef.current) {
+      inputRef.current.style.height = "42px";
+    }
     setIsTyping(true);
 
     try {
@@ -272,20 +266,6 @@ export default function SwordNexi() {
             <div ref={messagesEndRef} />
           </div>
 
-          {/* Suggested Quick Prompts */}
-          <div className="p-2 bg-white border-t border-gray-100 flex gap-1.5 overflow-x-auto no-scrollbar">
-            {getSuggestedPrompts().map((prompt, idx) => (
-              <button
-                key={idx}
-                onClick={() => handleSendMessage(prompt)}
-                disabled={isTyping}
-                className="shrink-0 text-[11px] bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200/60 px-2.5 py-1 rounded-full transition-colors active:scale-95 disabled:opacity-50"
-              >
-                {prompt}
-              </button>
-            ))}
-          </div>
-
           {/* Input Box */}
           <div className="p-3 bg-white border-t border-gray-200">
             <form
@@ -293,21 +273,23 @@ export default function SwordNexi() {
                 e.preventDefault();
                 handleSendMessage();
               }}
-              className="flex items-center gap-2"
+              className="flex items-end gap-2"
             >
-              <input
+              <textarea
                 ref={inputRef}
-                type="text"
+                rows={1}
                 value={inputMessage}
-                onChange={(e) => setInputMessage(e.target.value)}
+                onChange={handleTextareaChange}
+                onKeyDown={handleKeyDown}
                 placeholder={`Ask about any product, stock, price, or bill...`}
                 disabled={isTyping}
-                className="flex-1 text-sm bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-gray-800 placeholder-gray-400"
+                className="flex-1 text-sm bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-gray-800 placeholder-gray-400 resize-none max-h-[120px] overflow-y-auto leading-relaxed break-words whitespace-pre-wrap"
+                style={{ minHeight: "42px", height: "42px" }}
               />
               <button
                 type="submit"
                 disabled={!inputMessage.trim() || isTyping}
-                className="p-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl disabled:opacity-40 disabled:hover:bg-emerald-600 transition-colors shadow-sm"
+                className="p-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl disabled:opacity-40 disabled:hover:bg-emerald-600 transition-colors shadow-sm shrink-0 mb-0.5"
                 title="Send question"
               >
                 <Send className="w-4 h-4" />

@@ -59,6 +59,7 @@ import AddClient from "./industry/SoftwareDevelopment/AddClient";
 import AddSoftwareService from "./industry/SoftwareDevelopment/AddSoftwareService";
 import Alterations from "./industry/clothing/Alterations";
 import ClothingHub from "./industry/clothing/ClothingHub";
+import SDProposalGenerator from "./industry/SoftwareDevelopment/SDProposalGenerator";
 
 
 
@@ -109,6 +110,8 @@ const employerRoutes = [
         <Route element={<SubscriptionRoute><PetServices /></SubscriptionRoute>} path="/pet-services" />
         <Route element={<SubscriptionRoute><ExpiryAlerts /></SubscriptionRoute>} path="/expiry-alerts" />
         <Route element={<SubscriptionRoute><Milestones /></SubscriptionRoute>} path="/milestones" />
+        <Route element={<SubscriptionRoute><SDProposalGenerator /></SubscriptionRoute>} path="/ai-proposal" />
+        <Route element={<SubscriptionRoute><SDProposalGenerator /></SubscriptionRoute>} path="ai-proposal" />
         <Route element={<SubscriptionRoute><Alterations /></SubscriptionRoute>} path="/alterations" />
         <Route element={<SubscriptionRoute><ClothingHub /></SubscriptionRoute>} path="/clothing-hub" />
         <Route element={<SubscriptionRoute><AddSoftwareService /></SubscriptionRoute>} path="add-service" />

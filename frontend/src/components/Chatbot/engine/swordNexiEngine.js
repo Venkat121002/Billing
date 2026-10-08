@@ -188,13 +188,35 @@ export async function generateSwordNexiResponse(userQuery, currentUser, currentP
     };
   }
 
-  if (query.includes("product") || query.includes("item") || query.includes("inventory") || query.includes("stock")) {
-    let reply = `To manage your inventory in ${profile.label} 📦:\n\n`;
-    reply += `1. Click Inventory in the sidebar.\n`;
-    reply += `2. Click Add Product / Add Item to register a new item.\n`;
-    reply += `3. Fill in name, pricing (cost price & selling price), and quantity.\n`;
-    reply += `4. Set a Reorder Level so you get low-stock alerts before items run out.\n`;
-    reply += `5. Save to maintain your updated stock catalog. 🚀`;
+  if (
+    query.includes("product") ||
+    query.includes("item") ||
+    query.includes("inventory") ||
+    query.includes("stock") ||
+    query.includes("service") ||
+    query.includes("course")
+  ) {
+    let reply = "";
+    if (industryKey === "software_development") {
+      reply = `To manage your services in Software Development 💻:\n\n`;
+      reply += `1. Click Service in the sidebar.\n`;
+      reply += `2. Click Add Service to register a new software service, solution, or tech stack.\n`;
+      reply += `3. Specify the service name, code, category, tech stack platform, lead/resource, and pricing rates.\n`;
+      reply += `4. Save to keep your live services catalog up to date! 🚀`;
+    } else if (industryKey === "academy") {
+      reply = `To manage your courses in Academy 🎓:\n\n`;
+      reply += `1. Click Courses in the sidebar.\n`;
+      reply += `2. Click Add Course to register a new course or batch.\n`;
+      reply += `3. Set syllabus details, course duration, fees, and trainer name.\n`;
+      reply += `4. Save to update your course catalog! 🚀`;
+    } else {
+      reply = `To manage your inventory in ${profile.label} 📦:\n\n`;
+      reply += `1. Click Inventory in the sidebar.\n`;
+      reply += `2. Click Add Product / Add Item to register a new item.\n`;
+      reply += `3. Fill in name, pricing (cost price & selling price), and quantity.\n`;
+      reply += `4. Set a Reorder Level so you get low-stock alerts before items run out.\n`;
+      reply += `5. Save to maintain your updated stock catalog. 🚀`;
+    }
     return {
       reply: cleanUnnecessaryMarkdown(reply),
       industry: { key: industryKey, label: profile.label, emoji: industryData.emoji },

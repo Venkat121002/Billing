@@ -49,6 +49,11 @@ function getFromCache(key) {
 }
 
 function setInCache(key, data) {
+    if (!data || !data.reply) return;
+    // Don't cache negative/empty replies for long to prevent stale "not found" hallucinations
+    const isNegativeReply = /not\s*found|no\s*(?:service|product|stock|bill|record|item)s?\b/i.test(data.reply);
+    const ttl = isNegativeReply ? 5 * 1000 : CACHE_TTL_MS;
+
     if (responseCache.size >= MAX_CACHE_ENTRIES) {
         // Evict oldest entries
         const firstKey = responseCache.keys().next().value;
@@ -56,7 +61,7 @@ function setInCache(key, data) {
     }
     responseCache.set(key, {
         data,
-        expiresAt: Date.now() + CACHE_TTL_MS
+        expiresAt: Date.now() + ttl
     });
 }
 
@@ -93,7 +98,9 @@ const STOP_WORDS = new Set([
     'what', 'which', 'who', 'whom', 'this', 'that', 'these', 'those', 'am', 'been',
     'how', 'much', 'many', 'any', 'tell', 'show', 'give', 'check', 'find', 'get', 'our', 'my', 'your',
     'we', 'i', 'you', 'can', 'could', 'would', 'should', 'about', 'product', 'item', 'items', 'products',
-    'stock', 'available', 'availability', 'price', 'cost', 'rate', 'ratecard', 'in', 'of', 'for', 'with', 'on'
+    'stock', 'available', 'availability', 'price', 'cost', 'rate', 'rates', 'ratecard', 'in', 'of', 'for', 'with', 'on',
+    'service', 'services', 'course', 'courses', 'store', 'shop', 'all', 'total', 'count', 'list', 'there',
+    'project', 'projects', 'solution', 'solutions'
 ]);
 
 function extractSearchKeywords(query = '') {
@@ -122,9 +129,12 @@ async function retrieveTenantContext({ ownerId, tenantId, query, department = 'a
 
     const context = {
         products: [],
+        totalProductCount: 0,
         knowledgeDocs: [],
         bills: [],
         credits: [],
+        clients: [],
+        milestones: [],
         pets: [],
         petServices: [],
         alterationTickets: [],
@@ -136,9 +146,10 @@ async function retrieveTenantContext({ ownerId, tenantId, query, department = 'a
 
     try {
         // -------------------------------------------------------------
-        // 1. PRODUCTS & INVENTORY SEARCH (Cross-industry)
+        // 1. PRODUCTS & SERVICES INVENTORY SEARCH (Cross-industry)
         // -------------------------------------------------------------
-        const isStockOrInventoryQuery = /stock|inventory|product|item|price|cost|how much|available|quantity|barcode|sku|food|brand/i.test(qLower);
+        const isCountOrListQuery = /\b(how\s*many|total|count|list|all|what\s*(?:do\s*we|are|services|products|items)?|catalog)\b/i.test(qLower);
+        const isStockOrInventoryQuery = isCountOrListQuery || /\b(stock|inventory|product|products|item|items|service|services|course|courses|project|projects|solution|solutions|price|cost|rate|rates|how much|available|quantity|barcode|sku|food|brand)\b/i.test(qLower);
         const isLowStockQuery = /low\s*stock|out\s*of\s*stock|reorder|shortage|empty/i.test(qLower);
 
         let productQuery = { ...tenantFilter };
@@ -147,20 +158,33 @@ async function retrieveTenantContext({ ownerId, tenantId, query, department = 'a
         // Enforce strict industry scoping for inventory
         if (ind === 'grocery') {
             productQuery.isClothingVariant = { $ne: true };
-            productQuery.industry = { $nin: ['clothing', 'petshop', 'mobile_shop', 'pharmacy'] };
+            productQuery.industry = { $nin: ['clothing', 'petshop', 'mobile_shop', 'pharmacy', 'software_development', 'academy'] };
             productQuery.category = { $nin: ['Men', 'Women', 'Kids', 'Medicines', 'Pets'] };
         } else if (ind === 'clothing') {
-            productQuery.industry = { $nin: ['grocery', 'petshop', 'mobile_shop', 'pharmacy'] };
+            productQuery.industry = { $nin: ['grocery', 'petshop', 'mobile_shop', 'pharmacy', 'software_development', 'academy'] };
         } else if (ind === 'petshop') {
             productQuery.isClothingVariant = { $ne: true };
-            productQuery.industry = { $nin: ['clothing', 'grocery', 'mobile_shop', 'pharmacy'] };
+            productQuery.industry = { $nin: ['clothing', 'grocery', 'mobile_shop', 'pharmacy', 'software_development', 'academy'] };
         } else if (ind === 'pharmacy') {
             productQuery.isClothingVariant = { $ne: true };
-            productQuery.industry = { $nin: ['clothing', 'grocery', 'petshop', 'mobile_shop'] };
+            productQuery.industry = { $nin: ['clothing', 'grocery', 'petshop', 'mobile_shop', 'software_development', 'academy'] };
         } else if (ind === 'mobile_shop') {
             productQuery.isClothingVariant = { $ne: true };
-            productQuery.industry = { $nin: ['clothing', 'grocery', 'petshop', 'pharmacy'] };
+            productQuery.industry = { $nin: ['clothing', 'grocery', 'petshop', 'pharmacy', 'software_development', 'academy'] };
+        } else if (ind === 'software_development') {
+            productQuery.industry = { $nin: ['clothing', 'grocery', 'petshop', 'mobile_shop', 'pharmacy'] };
+        } else if (ind === 'academy') {
+            productQuery.industry = { $nin: ['clothing', 'grocery', 'petshop', 'mobile_shop', 'pharmacy'] };
         }
+
+        // Count total registered items/services in this tenant's catalog
+        try {
+            context.totalProductCount = await models.Product.countDocuments(productQuery);
+        } catch (cntErr) {
+            context.totalProductCount = 0;
+        }
+
+        const PRODUCT_FIELDS = 'name price purchasePrice salePrice salesPrice quantity unit category brand size color barcode sku model supplier duration hourlyRate dailyRate maintenanceRate minStockThreshold expiryDate batchNo industry';
 
         if (isLowStockQuery) {
             productQuery.$or = [
@@ -168,8 +192,15 @@ async function retrieveTenantContext({ ownerId, tenantId, query, department = 'a
                 { $expr: { $lte: ['$quantity', '$minStockThreshold'] } }
             ];
             context.products = await models.Product.find(productQuery)
-                .select('name price purchasePrice quantity unit category brand size color barcode minStockThreshold expiryDate batchNo')
+                .select(PRODUCT_FIELDS)
                 .limit(15)
+                .lean();
+        } else if (isCountOrListQuery || (keywords.length === 0 && isStockOrInventoryQuery)) {
+            // General count or list query ("how many services we have", "list products", "show catalog")
+            context.products = await models.Product.find(productQuery)
+                .select(PRODUCT_FIELDS)
+                .sort({ createdAt: -1 })
+                .limit(30)
                 .lean();
         } else if (keywords.length > 0 || isStockOrInventoryQuery) {
             const regexConditions = keywords.map(kw => ({
@@ -178,6 +209,9 @@ async function retrieveTenantContext({ ownerId, tenantId, query, department = 'a
                     { category: { $regex: escapeRegex(kw), $options: 'i' } },
                     { brand: { $regex: escapeRegex(kw), $options: 'i' } },
                     { barcode: { $regex: escapeRegex(kw), $options: 'i' } },
+                    { sku: { $regex: escapeRegex(kw), $options: 'i' } },
+                    { model: { $regex: escapeRegex(kw), $options: 'i' } },
+                    { supplier: { $regex: escapeRegex(kw), $options: 'i' } },
                     { size: { $regex: escapeRegex(kw), $options: 'i' } },
                     { color: { $regex: escapeRegex(kw), $options: 'i' } },
                     { description: { $regex: escapeRegex(kw), $options: 'i' } },
@@ -190,16 +224,16 @@ async function retrieveTenantContext({ ownerId, tenantId, query, department = 'a
                     ...productQuery,
                     $or: regexConditions.map(c => c.$or).flat()
                 })
-                    .select('name price purchasePrice quantity unit category brand size color barcode expiryDate batchNo')
-                    .limit(12)
+                    .select(PRODUCT_FIELDS)
+                    .limit(20)
                     .lean();
             }
 
             if (context.products.length === 0 && isStockOrInventoryQuery) {
                 context.products = await models.Product.find(productQuery)
-                    .select('name price quantity unit category brand size color')
+                    .select(PRODUCT_FIELDS)
                     .sort({ createdAt: -1 })
-                    .limit(8)
+                    .limit(20)
                     .lean();
             }
         }
@@ -341,6 +375,49 @@ async function retrieveTenantContext({ ownerId, tenantId, query, department = 'a
         }
 
         // -------------------------------------------------------------
+        // 6. INDUSTRY ADAPTER: SOFTWARE DEVELOPMENT (Clients, Projects & Milestones)
+        // -------------------------------------------------------------
+        const isSoftwareDev = ind === 'software_development';
+        if (isSoftwareDev) {
+            const isClientOrMilestoneQuery = /client|clients|customer|customers|project|projects|milestone|milestones|phase|phases|contract|lead/i.test(qLower);
+            if (isClientOrMilestoneQuery && models.Client) {
+                let clientQuery = { ...tenantFilter };
+                if (keywords.length > 0) {
+                    clientQuery.$or = keywords.map(kw => ({
+                        $or: [
+                            { companyName: { $regex: escapeRegex(kw), $options: 'i' } },
+                            { contactPerson: { $regex: escapeRegex(kw), $options: 'i' } },
+                            { projectName: { $regex: escapeRegex(kw), $options: 'i' } },
+                            { projectType: { $regex: escapeRegex(kw), $options: 'i' } }
+                        ]
+                    })).map(c => c.$or).flat();
+                }
+                context.clients = await models.Client.find(clientQuery)
+                    .select('companyName contactPerson email mobile projectName projectType budget deadline')
+                    .limit(10)
+                    .lean();
+            }
+
+            if (isClientOrMilestoneQuery && models.Milestone) {
+                let mQuery = { ...tenantFilter };
+                if (keywords.length > 0) {
+                    mQuery.$or = keywords.map(kw => ({
+                        $or: [
+                            { title: { $regex: escapeRegex(kw), $options: 'i' } },
+                            { clientName: { $regex: escapeRegex(kw), $options: 'i' } },
+                            { status: { $regex: escapeRegex(kw), $options: 'i' } }
+                        ]
+                    })).map(c => c.$or).flat();
+                }
+                context.milestones = await models.Milestone.find(mQuery)
+                    .select('clientName title description dueDate status amount invoiced')
+                    .sort({ dueDate: 1 })
+                    .limit(10)
+                    .lean();
+            }
+        }
+
+        // -------------------------------------------------------------
         // 6. BILLS & SALES SEARCH
         // -------------------------------------------------------------
         const isBillQuery = /bill|invoice|receipt|sale|purchase|order|checkout/i.test(qLower);
@@ -407,19 +484,68 @@ async function retrieveTenantContext({ ownerId, tenantId, query, department = 'a
 function formatGroundingContext(context) {
     let sections = [];
 
-    // Products & Stock
+    // Products & Services & Stock
     if (context.products && context.products.length > 0) {
-        const prodList = context.products.map(p => {
-            const sizeStr = p.size ? ` | Size: ${p.size}` : '';
-            const colorStr = p.color ? ` | Color: ${p.color}` : '';
-            const brandStr = p.brand ? ` | Brand: ${p.brand}` : '';
-            const batchStr = p.batchNo ? ` | Batch: ${p.batchNo}` : '';
-            const expStr = p.expiryDate ? ` | Expiry: ${p.expiryDate}` : '';
-            const barcodeStr = p.barcode ? ` | Barcode: ${p.barcode}` : '';
-            const stockStatus = p.quantity <= 0 ? 'OUT OF STOCK (0 units)' : `${p.quantity} ${p.unit || 'units'} in stock`;
-            return `- ${p.name}: ₹${p.price} (${stockStatus}${sizeStr}${colorStr}${brandStr}${batchStr}${expStr}${barcodeStr})`;
+        const ind = String(context.industry || '').toLowerCase().trim();
+        const totalCount = context.totalProductCount || context.products.length;
+
+        if (ind === 'software_development') {
+            const serviceList = context.products.map(p => {
+                const codeStr = p.sku ? ` [Code: ${p.sku}]` : (p.barcode ? ` [Code: ${p.barcode}]` : '');
+                const catStr = p.category ? ` | Category: ${p.category}` : '';
+                const stackStr = p.model ? ` | Platform/Stack: ${p.model}` : '';
+                const leadStr = p.supplier ? ` | Lead: ${p.supplier}` : '';
+                const price = p.salePrice || p.salesPrice || p.price || 0;
+                const rates = [];
+                if (p.hourlyRate) rates.push(`Hourly: ₹${p.hourlyRate}`);
+                if (p.dailyRate) rates.push(`Daily: ₹${p.dailyRate}`);
+                if (p.maintenanceRate) rates.push(`Maintenance: ₹${p.maintenanceRate}`);
+                const rateStr = rates.length > 0 ? ` (${rates.join(', ')})` : '';
+                const clientCount = p.quantity ? ` | Active Clients: ${p.quantity}` : '';
+                return `- Service: "${p.name}"${codeStr}${catStr}${stackStr}${leadStr} | Price: ₹${price}${rateStr}${clientCount}`;
+            }).join('\n');
+            sections.push(`### Live Software Services Catalog (Total Count in Store: ${totalCount}):\n${serviceList}`);
+        } else if (ind === 'academy') {
+            const courseList = context.products.map(p => {
+                const durationStr = p.duration ? ` | Duration: ${p.duration}` : '';
+                const catStr = p.category ? ` | Subject: ${p.category}` : '';
+                const trainerStr = p.supplier ? ` | Trainer: ${p.supplier}` : '';
+                const fee = p.salePrice || p.salesPrice || p.price || 0;
+                return `- Course: "${p.name}" [Code: ${p.sku || p.barcode || 'N/A'}]${catStr}${durationStr}${trainerStr} | Fee: ₹${fee}`;
+            }).join('\n');
+            sections.push(`### Live Academy Courses Catalog (Total Count in Store: ${totalCount}):\n${courseList}`);
+        } else {
+            const prodList = context.products.map(p => {
+                const sizeStr = p.size ? ` | Size: ${p.size}` : '';
+                const colorStr = p.color ? ` | Color: ${p.color}` : '';
+                const brandStr = p.brand ? ` | Brand: ${p.brand}` : '';
+                const batchStr = p.batchNo ? ` | Batch: ${p.batchNo}` : '';
+                const expStr = p.expiryDate ? ` | Expiry: ${p.expiryDate}` : '';
+                const barcodeStr = p.barcode ? ` | Barcode: ${p.barcode}` : '';
+                const stockStatus = p.quantity <= 0 ? 'OUT OF STOCK (0 units)' : `${p.quantity} ${p.unit || 'units'} in stock`;
+                return `- ${p.name}: ₹${p.price} (${stockStatus}${sizeStr}${colorStr}${brandStr}${batchStr}${expStr}${barcodeStr})`;
+            }).join('\n');
+            sections.push(`### Live Inventory / Stock Catalog (Total Count in Store: ${totalCount}):\n${prodList}`);
+        }
+    }
+
+    // Software Development: Clients & Projects
+    if (context.clients && context.clients.length > 0) {
+        const clientList = context.clients.map(c => {
+            const projStr = c.projectName ? ` | Project: ${c.projectName} (${c.projectType || 'General'})` : '';
+            const budgetStr = c.budget ? ` | Budget: ${c.budget}` : '';
+            return `- Client: ${c.companyName || c.contactPerson || 'Client'} (${c.email || c.mobile || 'No contact'})${projStr}${budgetStr}`;
         }).join('\n');
-        sections.push(`### Live Inventory / Stock Catalog:\n${prodList}`);
+        sections.push(`### Software Development Clients & Projects:\n${clientList}`);
+    }
+
+    // Software Development: Project Milestones
+    if (context.milestones && context.milestones.length > 0) {
+        const mList = context.milestones.map(m => {
+            const invStr = m.invoiced ? ' [Invoiced]' : ' [Pending Invoice]';
+            return `- Milestone: "${m.title}" (${m.clientName || 'Client'}) | Status: ${m.status}${invStr} | Due: ${m.dueDate || 'TBD'} | Amount: ₹${m.amount || 0}`;
+        }).join('\n');
+        sections.push(`### Software Development Milestones:\n${mList}`);
     }
 
     // Pet Shop: Pets & Passports
@@ -488,6 +614,23 @@ function formatGroundingContext(context) {
  * Deterministic Industry Heuristic Fallback (Zero Downtime during API spikes)
  */
 function buildHeuristicFallback(userQuery, context, industry = 'general', department = 'general') {
+    const ind = String(industry).toLowerCase().trim();
+
+    // 0. Software Development Services
+    if (ind === 'software_development' && context.products && context.products.length > 0) {
+        const total = context.totalProductCount || context.products.length;
+        let reply = `You currently have ${total} software service${total === 1 ? '' : 's'} registered in your catalog:\n\n`;
+        context.products.forEach((p, idx) => {
+            const code = p.sku ? ` (${p.sku})` : '';
+            const cat = p.category ? ` - ${p.category}` : '';
+            const stack = p.model ? ` | Stack: ${p.model}` : '';
+            const lead = p.supplier ? ` | Lead: ${p.supplier}` : '';
+            const price = (p.salePrice || p.price) ? ` | ₹${p.salePrice || p.price}` : '';
+            reply += `${idx + 1}. 💻 ${p.name}${code}${cat}${stack}${lead}${price}\n`;
+        });
+        return reply;
+    }
+
     // 1. Pet Shop details
     if (context.pets && context.pets.length > 0) {
         let reply = `Here are the matching Pet records:\n\n`;
@@ -572,7 +715,7 @@ async function answerTenantQuery({
     // 1. CROSS-INDUSTRY BOUNDARY SHIELD (Zero Cross-Industry Leakage Guarantee)
     const cleanQ = userQuery.toLowerCase();
     const ind = String(industry).toLowerCase().trim();
-    const friendlyName = ind === 'grocery' ? 'Grocery Store' : (ind === 'clothing' ? 'Clothing' : (ind === 'petshop' ? 'Pet Shop' : (ind === 'pharmacy' ? 'Pharmacy' : ind)));
+    const friendlyName = ind === 'grocery' ? 'Grocery Store' : (ind === 'clothing' ? 'Clothing' : (ind === 'petshop' ? 'Pet Shop' : (ind === 'pharmacy' ? 'Pharmacy' : (ind === 'software_development' ? 'Software Development' : ind))));
 
     const isAskingAboutClothing = /\b(cloth|clothes|clothing|cloth shop|clothing shop|apparel|garment|garments|textile|boutique|alteration|alterations|tailor|tailoring|stitching|pant|pants|shirt|shirts|saree|sarees|dress|dresses|jeans|trousers|kurti|lehenga|suit|blazer|size matrix|fabric)\b/i.test(cleanQ);
     const isAskingAboutPets = /\b(pet|pets|pet shop|dog|dogs|cat|cats|puppy|puppies|kitten|kittens|grooming|pet spa|vaccination|vaccinations|deworming|pet passport|pedigree|royal canin|whiskas|microchip)\b/i.test(cleanQ);
@@ -635,6 +778,7 @@ async function answerTenantQuery({
             reply: cleanAiResponse(fallbackReply),
             sources: {
                 productsFound: context.products.length,
+                totalProducts: context.totalProductCount,
                 knowledgeDocsFound: context.knowledgeDocs.length,
                 petsFound: context.pets.length,
                 petServicesFound: context.petServices.length,
@@ -648,17 +792,20 @@ async function answerTenantQuery({
     }
 
     // 4. Construct Grounded Prompt tailored to the exact industry
-    const systemPrompt = `You are SwordNexi, an intelligent assistant for this ${industry} business.
-Current department: "${department}".
+    const friendlyInd = String(industry).replace(/_/g, ' ');
+    const systemPrompt = `You are SwordNexi, an intelligent assistant for this ${friendlyInd} business.
+Current screen / department: "${department}".
 
 RULES FOR ACCURACY & ZERO LEAKAGE:
-1. Ground your answers strictly in the LIVE STORE DATA provided below. Never guess or hallucinate data from any other business.
-2. If this is a Pet Shop, answer pet questions with owner name, breed, vaccination schedule, food refills, and grooming appointment status.
-3. If this is Clothing, answer with garment size, color, stock, and alteration ticket delivery status.
-4. If this is Pharmacy, include batch numbers and expiry dates if available.
-5. If this is Mobile Shop, include device model, IMEI, and repair ticket status.
-6. If an item or record was not found, state clearly that it was not found in the records.
-7. Tone: Friendly, concise, professional, with natural emojis (🐾, 📦, ✂️, 📱, 🧾). No markdown asterisks (**bold**).
+1. Ground your answers strictly in the LIVE STORE DATA provided below. Never guess or invent data.
+2. If this is Software Development, items in the catalog are Software Services and solutions (managed by leads/resources with specific tech stacks). When asked how many services or to list services, state the exact total count from the live data and detail them clearly (Service Name, Code, Category, Stack/Platform, Lead).
+3. If this is Pet Shop, answer pet questions with owner name, breed, vaccination schedule, food refills, and grooming appointment status.
+4. If this is Clothing, answer with garment size, color, stock, and alteration ticket delivery status.
+5. If this is Pharmacy, include batch numbers and expiry dates if available.
+6. If this is Mobile Shop, include device model, IMEI, and repair ticket status.
+7. If this is Academy, items are courses and training programs.
+8. If an item or record was truly not found in the live data, state clearly that it was not found.
+9. Tone: Friendly, concise, professional, with natural emojis (💻, 🐾, 📦, ✂️, 📱, 🧾). No markdown asterisks (**bold**). Always identify yourself with the current workspace (${friendlyInd}), never misidentify yourself with an unrelated department.
 
 LIVE STORE DATA:
 ${groundingText}
@@ -710,6 +857,7 @@ USER QUESTION: "${userQuery}"`;
             reply: aiResponse.reply,
             sources: {
                 productsFound: context.products.length,
+                totalProducts: context.totalProductCount,
                 knowledgeDocsFound: context.knowledgeDocs.length,
                 petsFound: context.pets.length,
                 petServicesFound: context.petServices.length,
@@ -728,6 +876,7 @@ USER QUESTION: "${userQuery}"`;
             reply: cleanAiResponse(fallbackReply),
             sources: {
                 productsFound: context.products.length,
+                totalProducts: context.totalProductCount,
                 knowledgeDocsFound: context.knowledgeDocs.length,
                 petsFound: context.pets.length,
                 petServicesFound: context.petServices.length,

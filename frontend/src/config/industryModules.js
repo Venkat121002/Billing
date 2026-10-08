@@ -15,7 +15,8 @@ import {
   Scissors,
   AlertTriangle,
   Milestone,
-  Shirt
+  Shirt,
+  Sparkles
 } from "lucide-react";
 
 export const MODULES = {
@@ -40,6 +41,7 @@ export const MODULES = {
   pet_services: { label: "Grooming & Spa", path: "/pet-services", icon: Scissors },
   expiry_alerts: { label: "Expiry Alerts", path: "/expiry-alerts", icon: AlertTriangle },
   milestones: { label: "Milestones", path: "/milestones", icon: Milestone },
+  ai_proposal: { label: "AI Proposals", path: "/ai-proposal", icon: Sparkles },
   alterations: { label: "Tailoring & Alterations", path: "/alterations", icon: Scissors },
   clothing_hub: { label: "Clothing Automation", path: "/clothing-hub", icon: Shirt },
 };
@@ -50,7 +52,7 @@ export const INDUSTRY_MODULES = {
   restaurant: ["dashboard", "billing", "reports", "staff_records"],
   mobile_shop: ["dashboard", "inventory", "barcodes", "billing", "record", "reports", "gst", "cashbook", "credit", "repair_tickets", "imei_lookup", "staff_records"],
   academy: ["dashboard", "inventory", "billing", "record", "credit", "cashbook", "gst", "students", "trainers", "staff_records",],
-  software_development: ["dashboard", "inventory", "billing", "record", "clients", "milestones", "gst", "cashbook", "staff_records"],
+  software_development: ["dashboard", "inventory", "billing", "record", "clients", "milestones", "ai_proposal", "gst", "cashbook", "staff_records"],
   clothing: ["dashboard", "inventory", "barcodes", "billing", "clothing_hub", "alterations", "record", "gst", "cashbook", "staff_records"],
   garments: ["dashboard", "inventory", "barcodes", "billing", "clothing_hub", "alterations", "record", "gst", "cashbook", "staff_records"],
   garment: ["dashboard", "inventory", "barcodes", "billing", "clothing_hub", "alterations", "record", "gst", "cashbook", "staff_records"],

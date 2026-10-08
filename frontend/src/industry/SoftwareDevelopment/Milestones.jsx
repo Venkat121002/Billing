@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import API_URL from "../../config/api";
 import { useAuth } from "../../contexts/AuthContext";
@@ -13,6 +14,10 @@ import {
   Briefcase,
   Calendar,
   FileText,
+  Sparkles,
+  Receipt,
+  Loader2,
+  CheckCircle2,
 } from "lucide-react";
 
 const STATUS_OPTIONS = ["Not Started", "In Progress", "Completed", "Blocked"];
@@ -36,17 +41,51 @@ const emptyForm = {
 
 const Milestones = () => {
   const { currentUser } = useAuth();
+  const navigate = useNavigate();
 
   const [milestones, setMilestones] = useState([]);
   const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+  const [invoicingId, setInvoicingId] = useState(null);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [viewMilestone, setViewMilestone] = useState(null);
   const [editingMilestoneId, setEditingMilestoneId] = useState(null);
   const [formData, setFormData] = useState(emptyForm);
   const [clientSearchTerm, setClientSearchTerm] = useState("");
+
+  const handleAutoInvoice = async (milestone) => {
+    const token = sessionStorage.getItem("token");
+    if (!token) return;
+    setInvoicingId(milestone.id);
+    try {
+      const res = await axios.post(`${API_URL}/v2/software/auto-invoice-milestone`, {
+        milestoneId: milestone.id,
+        paymentMethod: "Bank Transfer",
+      }, {
+        headers: { "x-auth-token": token }
+      });
+      if (res.data.success) {
+        toast.success(res.data.message || "Tax Invoice generated successfully!");
+        fetchData();
+        if (viewMilestone && viewMilestone.id === milestone.id) {
+          setViewMilestone((prev) => ({
+            ...prev,
+            invoiced: true,
+            invoiceNumber: res.data.invoice?.billNumber || res.data.invoice?.billNo || "INV-CREATED"
+          }));
+        }
+      } else {
+        toast.error(res.data.message || "Failed to generate invoice");
+      }
+    } catch (err) {
+      console.error("Auto invoice error:", err);
+      toast.error(err.response?.data?.message || "Failed to generate invoice");
+    } finally {
+      setInvoicingId(null);
+    }
+  };
 
   const fetchData = useCallback(async () => {
     const token = sessionStorage.getItem("token");
@@ -185,18 +224,27 @@ const Milestones = () => {
                 Track project milestones and billing status per client.
               </p>
             </div>
-            <button
-              onClick={() => {
-                setEditingMilestoneId(null);
-                setFormData(emptyForm);
-                setClientSearchTerm("");
-                setIsModalOpen(true);
-              }}
-              className="inline-flex items-center gap-2 px-6 py-3 bg-green-600 text-white rounded-xl shadow-lg shadow-green-100 hover:shadow-xl hover:bg-green-700 transition-all font-semibold text-sm"
-            >
-              <PlusCircle className="w-4 h-4" />
-              New Milestone
-            </button>
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                onClick={() => navigate("/ai-proposal")}
+                className="inline-flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-emerald-600 via-teal-600 to-green-600 text-white rounded-xl shadow-lg shadow-teal-100 hover:shadow-xl hover:opacity-95 transition-all font-semibold text-sm"
+              >
+                <Sparkles className="w-4 h-4 text-emerald-200" />
+                AI Scope & Proposal
+              </button>
+              <button
+                onClick={() => {
+                  setEditingMilestoneId(null);
+                  setFormData(emptyForm);
+                  setClientSearchTerm("");
+                  setIsModalOpen(true);
+                }}
+                className="inline-flex items-center gap-2 px-6 py-3 bg-green-600 text-white rounded-xl shadow-lg shadow-green-100 hover:shadow-xl hover:bg-green-700 transition-all font-semibold text-sm"
+              >
+                <PlusCircle className="w-4 h-4" />
+                New Milestone
+              </button>
+            </div>
           </div>
         </div>
 
@@ -259,6 +307,24 @@ const Milestones = () => {
                         </td>
                         <td className={tdClass}>
                           <div className="flex items-center gap-2">
+                            <button
+                              title={m.invoiced ? `Invoiced: ${m.invoiceNumber || 'Done'}` : "Auto-Invoice (18% GST SAC:998314)"}
+                              disabled={invoicingId === m.id || m.invoiced}
+                              onClick={() => handleAutoInvoice(m)}
+                              className={`${iconBtnClass} ${
+                                m.invoiced
+                                  ? "text-emerald-600 bg-emerald-50 cursor-default"
+                                  : "text-blue-600 hover:bg-blue-50"
+                              }`}
+                            >
+                              {invoicingId === m.id ? (
+                                <Loader2 size={16} className="animate-spin text-blue-600" />
+                              ) : m.invoiced ? (
+                                <CheckCircle2 size={16} />
+                              ) : (
+                                <Receipt size={16} />
+                              )}
+                            </button>
                             <button title="View" onClick={() => setViewMilestone(m)} className={`${iconBtnClass} text-gray-500 hover:bg-gray-100`}>
                               <Search size={16} />
                             </button>
@@ -334,7 +400,27 @@ const Milestones = () => {
                 </div>
               </div>
 
-              <div className="p-6 bg-gray-50 border-t border-gray-100 flex justify-end">
+              <div className="p-6 bg-gray-50 border-t border-gray-100 flex items-center justify-between">
+                <div>
+                  {!viewMilestone.invoiced ? (
+                    <button
+                      disabled={invoicingId === viewMilestone.id}
+                      onClick={() => handleAutoInvoice(viewMilestone)}
+                      className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-xs uppercase tracking-wider transition-all shadow-md shadow-blue-100 disabled:opacity-50"
+                    >
+                      {invoicingId === viewMilestone.id ? (
+                        <Loader2 size={14} className="animate-spin" />
+                      ) : (
+                        <Receipt size={14} />
+                      )}
+                      Generate 18% GST Invoice
+                    </button>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-200">
+                      <CheckCircle2 size={14} className="text-emerald-600" /> Invoiced ({viewMilestone.invoiceNumber || "Done"})
+                    </span>
+                  )}
+                </div>
                 <button
                   onClick={() => setViewMilestone(null)}
                   className="px-8 py-3 bg-white border border-gray-200 text-gray-700 rounded-2xl font-bold hover:bg-gray-100 transition-all text-sm uppercase tracking-wider"
