@@ -15,8 +15,12 @@ import { resolveDepartment } from "./knowledge/departmentKnowledge";
 import { generateSwordNexiResponse } from "./engine/swordNexiEngine";
 
 export default function SwordNexi() {
-  const { currentUser } = useAuth();
+  const { currentUser, hasCapability, planCapabilitiesLoading } = useAuth();
   const location = useLocation();
+
+  if (planCapabilitiesLoading || (typeof hasCapability === "function" && !hasCapability("aiAssistant"))) {
+    return null;
+  }
 
   const [isOpen, setIsOpen] = useState(false);
   const [inputMessage, setInputMessage] = useState("");
@@ -130,20 +134,20 @@ export default function SwordNexi() {
 
   return (
     <div className="fixed bottom-6 right-6 z-50 print:hidden font-sans">
-      {/* Floating Toggle Button */}
+      {/* Floating Toggle Button (Compact by default, reveals 'SwordNexi' label on hover) */}
       {!isOpen && (
         <button
           onClick={() => setIsOpen(true)}
-          className="group flex items-center gap-2.5 px-4 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-full shadow-lg hover:shadow-emerald-500/25 hover:scale-105 active:scale-95 transition-all duration-200 border border-emerald-400/30"
+          className="group flex items-center justify-center bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-full shadow-lg hover:shadow-emerald-500/30 hover:scale-105 active:scale-95 transition-all duration-300 border border-emerald-400/30 p-3 h-12 min-w-[3rem]"
           aria-label="Open SwordNexi Chatbot"
+          title="SwordNexi AI Assistant"
         >
-          <div className="relative">
-            <Bot className="w-5 h-5 text-white animate-pulse" />
-            <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-green-300 rounded-full ring-2 ring-emerald-600" />
+          <div className="relative shrink-0 flex items-center justify-center">
+            <Bot className="w-6 h-6 text-white" />
+            <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-green-300 rounded-full ring-2 ring-emerald-600" />
           </div>
-          <span className="font-semibold text-sm tracking-wide">SwordNexi</span>
-          <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-700/60 text-emerald-100 hidden sm:inline-block">
-            {profile.label}
+          <span className="max-w-0 overflow-hidden whitespace-nowrap opacity-0 group-hover:max-w-[120px] group-hover:opacity-100 group-hover:ml-2.5 font-semibold text-sm tracking-wide transition-all duration-300 ease-in-out">
+            SwordNexi
           </span>
         </button>
       )}

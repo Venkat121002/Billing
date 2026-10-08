@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Circle, Crown, Info, Save, Shield, Zap } from "lucide-react";
 import toast from "react-hot-toast";
-import { CAPABILITIES, capabilitiesToMap } from "../../config/planCapabilities";
+import { CAPABILITIES, CAPABILITY_MAP, capabilitiesToMap } from "../../config/planCapabilities";
 import { Card, ErrorBox, PageHeader, Spinner, buttonClass, inputClass, saRequest } from "./shared";
 
 const STYLE_BY_KEY = {
@@ -14,6 +14,7 @@ const STYLE_BY_KEY = {
 // a select, numeric limits a number input with an "Unlimited" checkbox.
 const CapabilityRow = ({ def, value, onChange }) => {
   const unlimited = def.type === "limit" && (value?.limit === null || value?.limit === undefined);
+  const isEnabled = Boolean(value?.enabled);
 
   return (
     <div className="flex items-start justify-between gap-3 py-2 min-w-0">
@@ -23,7 +24,7 @@ const CapabilityRow = ({ def, value, onChange }) => {
       </div>
       {def.type === "toggle" ? (
         <select
-          value={value?.enabled ? "enabled" : "disabled"}
+          value={isEnabled ? "enabled" : "disabled"}
           onChange={(e) => onChange({ key: def.key, enabled: e.target.value === "enabled" })}
           className={`${inputClass} shrink-0 py-1.5`}
         >
@@ -63,18 +64,74 @@ const PlanCard = ({ plan, onSaved }) => {
   useEffect(() => setForm(plan), [plan]);
 
   const set = (patch) => setForm((f) => ({ ...f, ...patch }));
-  const setCapability = (row) =>
-    setForm((f) => ({ ...f, capabilities: [...(f.capabilities || []).filter((c) => c.key !== row.key), row] }));
+  const setCapability = async (row) => {
+    const existing = (form.capabilities || []).filter((c) => c.key !== row.key);
+    const newCapabilities = [...existing, row];
+    setForm((f) => ({ ...f, capabilities: newCapabilities }));
+
+    const def = CAPABILITY_MAP[row.key];
+    if (def?.type === "toggle") {
+      try {
+        const capLookup = capabilitiesToMap(newCapabilities);
+        const fullCapabilities = CAPABILITIES.map((d) => {
+          const found = capLookup[d.key];
+          if (d.type === "toggle") {
+            return { key: d.key, enabled: Boolean(found?.enabled) };
+          }
+          return { key: d.key, limit: found?.limit ?? null };
+        });
+
+        const payload = {
+          name: form.name,
+          tagline: form.tagline,
+          badge: form.badge,
+          capabilities: fullCapabilities,
+        };
+        if (!isFree) {
+          payload.monthly = Number(form.monthly) || 0;
+          payload.yearly = Number(form.yearly) || 0;
+        }
+        const data = await saRequest(`plans/${plan.key}`, { method: "put", body: payload });
+        try {
+          localStorage.setItem("swordnex_plans_updated_at", Date.now().toString());
+          window.dispatchEvent(new Event("plans-updated"));
+        } catch { /* ignore */ }
+        onSaved(data);
+        toast.success(`${plan.name}: ${def.label} set to ${row.enabled ? "Enabled" : "Disabled"}`);
+      } catch (err) {
+        toast.error(`Could not save change: ${err.message}`);
+      }
+    }
+  };
 
   const save = async () => {
     setSaving(true);
     try {
-      const payload = { name: form.name, tagline: form.tagline, badge: form.badge, capabilities: form.capabilities };
+      // Ensure every capability in the catalog is explicitly present in the payload
+      const capLookup = capabilitiesToMap(form.capabilities);
+      const fullCapabilities = CAPABILITIES.map((def) => {
+        const found = capLookup[def.key];
+        if (def.type === "toggle") {
+          return { key: def.key, enabled: Boolean(found?.enabled) };
+        }
+        return { key: def.key, limit: found?.limit ?? null };
+      });
+
+      const payload = {
+        name: form.name,
+        tagline: form.tagline,
+        badge: form.badge,
+        capabilities: fullCapabilities,
+      };
       if (!isFree) {
         payload.monthly = Number(form.monthly) || 0;
         payload.yearly = Number(form.yearly) || 0;
       }
       const data = await saRequest(`plans/${plan.key}`, { method: "put", body: payload });
+      try {
+        localStorage.setItem("swordnex_plans_updated_at", Date.now().toString());
+        window.dispatchEvent(new Event("plans-updated"));
+      } catch { /* ignore */ }
       onSaved(data);
       toast.success(`${data.name} plan saved`);
     } catch (err) {
@@ -139,6 +196,12 @@ const PlanCard = ({ plan, onSaved }) => {
         {CAPABILITIES.map((def) => (
           <CapabilityRow key={def.key} def={def} value={capMap[def.key]} onChange={setCapability} />
         ))}
+      </div>
+
+      <div className="pt-3 border-t border-gray-100 sa-dark:border-slate-800 flex justify-end">
+        <button onClick={save} disabled={saving} className={buttonClass.primary}>
+          <Save className="w-4 h-4" /> {saving ? "Saving..." : `Save ${plan.name} Plan`}
+        </button>
       </div>
     </Card>
   );
