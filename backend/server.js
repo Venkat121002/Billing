@@ -66,7 +66,16 @@ app.use(
 app.use(helmet());
 app.use(morgan('dev'));
 
-// Keep the raw body: Razorpay webhook signatures are computed over the exact bytes.
+// API responses depend on who is signed in, but the Firebase Hosting CDN in front
+// of this function caches by URL only, and without an explicit header it caches
+// error responses (e.g. 404s) for 10 minutes: one store's "not found" would then
+// be served to every store asking for that URL. Never let a cache store them.
+app.use((req, res, next) => {
+    res.set('Cache-Control', 'no-store');
+    next();
+});
+
+// Keep the raw body: Cashfree webhook signatures are computed over the exact bytes.
 app.use(express.json({ verify: (req, _res, buf) => { req.rawBody = buf; } }));
 app.use(express.urlencoded({ extended: true }));
 
@@ -215,17 +224,6 @@ app.use(
     require('./routes/firestoreTrainerRoutes')
 );
 
-// Import
-app.use(
-    '/api/v2/import',
-    require('./routes/importRoutes')
-);
-
-app.use(
-    '/v2/import',
-    require('./routes/importRoutes')
-);
-
 // Returns
 app.use(
     '/api/v2/returns',
@@ -342,6 +340,15 @@ app.use('/v2/pay', require('./routes/paymentRoutes'));
 const { razorpayWebhook } = require('./controllers/paymentController');
 app.post('/api/v2/webhooks/razorpay', razorpayWebhook);
 app.post('/v2/webhooks/razorpay', razorpayWebhook);
+// Payments: public pay-link endpoints (token-authenticated) + Cashfree webhook
+app.use('/api/v2/pay', require('./routes/paymentRoutes'));
+app.use('/v2/pay', require('./routes/paymentRoutes'));
+
+const { cashfreeWebhook } = require('./controllers/paymentController');
+app.post('/api/v2/webhooks/cashfree', cashfreeWebhook);
+app.post('/v2/webhooks/cashfree', cashfreeWebhook);
+app.post('/api/v2/webhooks/razorpay', cashfreeWebhook);
+app.post('/v2/webhooks/razorpay', cashfreeWebhook);
 
 // Super Admin (platform-level, cross-tenant)
 app.use(

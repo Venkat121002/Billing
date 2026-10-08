@@ -103,7 +103,7 @@ const AddBox = ({ placeholder, onAdd }) => {
  * and saves it in one go. Owners only (the Settings row is hidden for
  * sub-users and the API rejects them).
  */
-const ItemCategoriesManager = ({ categories, onSave, profileKey, onClose }) => {
+const ItemCategoriesManager = ({ categories, onSave, profileKey, onClose, onDirtyChange }) => {
   const [draft, setDraft] = useState(categories);
   const [selected, setSelected] = useState(() => Object.keys(categories).sort()[0] || null);
   const [saving, setSaving] = useState(false);
@@ -117,6 +117,10 @@ const ItemCategoriesManager = ({ categories, onSave, profileKey, onClose }) => {
   const names = Object.keys(draft).sort((a, b) => a.localeCompare(b));
   const products = selected ? [...(draft[selected] || [])].sort((a, b) => a.localeCompare(b)) : [];
   const dirty = JSON.stringify(draft) !== JSON.stringify(categories);
+  // Lets the Settings page warn before switching tabs with unsaved edits.
+  useEffect(() => {
+    onDirtyChange?.(dirty);
+  }, [dirty, onDirtyChange]);
 
   const validate = (name, existing, current) => {
     if (!name) return false;
@@ -226,9 +230,11 @@ const ItemCategoriesManager = ({ categories, onSave, profileKey, onClose }) => {
           >
             {saving ? "Saving..." : "Save"}
           </button>
-          <button onClick={close} className="text-gray-400 hover:text-gray-600 transition-colors ml-1" aria-label="Close">
-            <X className="w-5 h-5" />
-          </button>
+          {onClose && (
+            <button onClick={close} className="text-gray-400 hover:text-gray-600 transition-colors ml-1" aria-label="Close">
+              <X className="w-5 h-5" />
+            </button>
+          )}
         </div>
       </div>
       <p className="text-xs text-gray-500 mb-5">

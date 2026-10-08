@@ -6,7 +6,6 @@ const auth = require('../middleware/firestoreAuth');
 const roleAuth = require('../middleware/roleAuth');
 const subAuth = require('../middleware/subscriptionAuth');
 const { enforceCombinedLimit, requireCapability } = require('../utils/planEnforcement');
-const { Bill, GstBill } = require('../models/mongodb');
 
 // Public — the pricing page reads plan names/prices/features here, logged in or not
 router.get('/plans', planController.getPublicPlans);
@@ -15,7 +14,7 @@ router.get('/plans', planController.getPublicPlans);
 router.use(auth);
 
 // POS bills + GST bills share one "bills" limit (see planCapabilities.js).
-const enforceBillLimit = enforceCombinedLimit('bills', [Bill, GstBill]);
+const enforceBillLimit = enforceCombinedLimit('bills', ['bills', 'gstBills']);
 
 // Billing actions (Require Active Subscription)
 router.get('/bills', subAuth, billingController.getBills);

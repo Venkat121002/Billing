@@ -1,4 +1,5 @@
 import scrollbar from 'tailwind-scrollbar';
+import plugin from 'tailwindcss/plugin';
 
 /** @type {import('tailwindcss').Config} */
 export default {
@@ -62,5 +63,9 @@ export default {
     },
     plugins: [
         scrollbar,
+        // Super admin console theme: its dark styles are written as `sa-dark:`
+        // and apply inside a .sa-dark wrapper (see components/SuperAdmin/theme.jsx),
+        // independent of the app-wide `dark` class.
+        plugin(({ addVariant }) => addVariant('sa-dark', '.sa-dark &')),
     ],
 }

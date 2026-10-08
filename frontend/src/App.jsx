@@ -18,15 +18,9 @@ import Pricing from "./components/Auth/Pricing";
 
 import { SuperAdminAuthProvider } from "./contexts/SuperAdminAuthContext";
 import SuperAdminPrivateRoute from "./contexts/SuperAdminPrivateRoute";
-import SuperAdminLayout from "./pages/SuperAdmin/SuperAdminLayout";
 import SuperAdminLogin from "./pages/SuperAdmin/SuperAdminLogin";
-import SuperAdminDashboard from "./pages/SuperAdmin/SuperAdminDashboard";
-import SuperAdminTenants from "./pages/SuperAdmin/SuperAdminTenants";
-import SuperAdminTenantDetail from "./pages/SuperAdmin/SuperAdminTenantDetail";
-import SuperAdminSubUsers from "./pages/SuperAdmin/SuperAdminSubUsers";
-import SuperAdminSupportRequests from "./pages/SuperAdmin/SuperAdminSupportRequests";
-import SuperAdminPlans from "./pages/SuperAdmin/SuperAdminPlans";
-import SuperAdminSettings from "./pages/SuperAdmin/SuperAdminSettings";
+import SuperAdminConsole from "./components/SuperAdmin/SuperAdminConsole";
+import { ThemeScope } from "./components/SuperAdmin/theme";
 
 import EmployerDashboard from "./components/Auth/EmployerDashboard";
 import Login from "./components/Auth/Login";
@@ -150,66 +144,21 @@ function App() {
                 path="/superadmin/*"
                 element={
                   <SuperAdminAuthProvider>
-                    <Routes>
-                      <Route path="login" element={<SuperAdminLogin />} />
-                      <Route
-                        path="dashboard"
-                        element={
-                          <SuperAdminPrivateRoute>
-                            <SuperAdminLayout><SuperAdminDashboard /></SuperAdminLayout>
-                          </SuperAdminPrivateRoute>
-                        }
-                      />
-                      <Route
-                        path="tenants"
-                        element={
-                          <SuperAdminPrivateRoute>
-                            <SuperAdminLayout><SuperAdminTenants /></SuperAdminLayout>
-                          </SuperAdminPrivateRoute>
-                        }
-                      />
-                      <Route
-                        path="tenants/:id"
-                        element={
-                          <SuperAdminPrivateRoute>
-                            <SuperAdminLayout><SuperAdminTenantDetail /></SuperAdminLayout>
-                          </SuperAdminPrivateRoute>
-                        }
-                      />
-                      <Route
-                        path="subusers"
-                        element={
-                          <SuperAdminPrivateRoute>
-                            <SuperAdminLayout><SuperAdminSubUsers /></SuperAdminLayout>
-                          </SuperAdminPrivateRoute>
-                        }
-                      />
-                      <Route
-                        path="support"
-                        element={
-                          <SuperAdminPrivateRoute>
-                            <SuperAdminLayout><SuperAdminSupportRequests /></SuperAdminLayout>
-                          </SuperAdminPrivateRoute>
-                        }
-                      />
-                      <Route
-                        path="plans"
-                        element={
-                          <SuperAdminPrivateRoute>
-                            <SuperAdminLayout><SuperAdminPlans /></SuperAdminLayout>
-                          </SuperAdminPrivateRoute>
-                        }
-                      />
-                      <Route
-                        path="settings"
-                        element={
-                          <SuperAdminPrivateRoute>
-                            <SuperAdminLayout><SuperAdminSettings /></SuperAdminLayout>
-                          </SuperAdminPrivateRoute>
-                        }
-                      />
-                      <Route path="*" element={<Navigate to="/superadmin/dashboard" />} />
-                    </Routes>
+                    <ThemeScope>
+                      <Routes>
+                        <Route path="login" element={<SuperAdminLogin />} />
+                        <Route
+                          index
+                          element={
+                            <SuperAdminPrivateRoute>
+                              <SuperAdminConsole />
+                            </SuperAdminPrivateRoute>
+                          }
+                        />
+                        {/* Old page URLs (dashboard, tenants, plans, ...) land on the console. */}
+                        <Route path="*" element={<Navigate to="/superadmin" replace />} />
+                      </Routes>
+                    </ThemeScope>
                   </SuperAdminAuthProvider>
                 }
               />

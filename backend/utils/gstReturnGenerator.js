@@ -5,9 +5,9 @@
  * Compiles and generates official GSTR-1 and GSTR-3B monthly/quarterly summaries
  * directly from GstBill invoices, with ready-to-file multi-sheet Excel export.
  */
-const { GstBill } = require('../models/mongodb');
 const XLSX = require('xlsx');
 const platformStore = require('./platformStore');
+const { listStoreRecords } = require('./storeRecords');
 
 /**
  * Parses date filter bounds from month/year or explicit range

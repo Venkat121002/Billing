@@ -38,9 +38,9 @@ export const CAPABILITIES = [
   },
   {
     key: "payLinks",
-    label: "Online payment links for dues (Razorpay)",
+    label: "Online payment links for dues (Cashfree)",
     type: "toggle",
-    describe: () => "Online payment links (Razorpay) for dues",
+    describe: () => "Online payment links (Cashfree) for dues",
   },
   {
     key: "whatsappInvoices",

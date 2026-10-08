@@ -160,7 +160,10 @@ const BillingLayout = ({ children, hideHeader = false, hideSidebar = false }) =>
           <div className={`mt-auto ${sidebarExpanded ? "p-4" : "p-2"} border-t border-green-100 bg-white/50 backdrop-blur-sm`}>
             <Link
               to="/settings"
-              className={`flex items-center ${sidebarExpanded ? "px-4" : "px-2 justify-center"} py-3 rounded-xl text-gray-600 hover:bg-green-50 hover:text-green-600 transition`}
+              className={`flex items-center ${sidebarExpanded ? "px-4" : "px-2 justify-center"} py-3 rounded-xl transition ${location.pathname === "/settings"
+                ? "bg-green-100 text-green-700 font-semibold border-l-4 border-green-600"
+                : "text-gray-600 hover:bg-green-50 hover:text-green-600"
+                }`}
             >
               <Settings className={`w-5 h-5 ${sidebarExpanded ? "mr-3" : ""}`} />
               <span className={`${sidebarExpanded ? "text-sm font-medium inline" : "hidden"}`}>Settings</span>

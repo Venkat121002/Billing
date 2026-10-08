@@ -1,15 +1,15 @@
 /**
- * Data access for online payments (Razorpay) against customer dues ("credit" records).
+ * Data access for online payments (Cashfree) against customer dues ("credit" records).
  * Works with MongoDB or Firestore, chosen by DB_TYPE, and returns plain objects.
  *
  * Firestore layout (under SwordNexBillingSoftware/{TENANT_ID}):
  *   owner/{ownerId}/credit_customers/{id}                      owner's dues
  *   owner/{ownerId}/subuser/{subId}/subusercredit/{id}         sub-user's dues
- *   payments/{orderId}                                         one doc per Razorpay order
+ *   payments/{orderId}                                         one doc per Cashfree order
  *
  * Every credit returned carries `_id`, `ownerId`, `tenantId` and (Firestore) `_path`.
  */
-const { db } = require('../config/firebase');
+const { db, admin } = require('../config/firebase');
 const { Credit, Payment } = require('../models/mongodb');
 
 const isMongo = () => (process.env.DB_TYPE || 'mongodb') === 'mongodb';
@@ -72,11 +72,42 @@ exports.getCreditForPayment = async (payment) => {
 // Read-modify-write the credit's ledger atomically. `compute(credit)` returns the fields to set.
 exports.updateCreditLedger = async (payment, compute) => {
     if (isMongo()) {
-        const credit = await Credit.findById(payment.creditId).lean();
-        if (!credit) return null;
-        const update = compute(credit);
-        const updated = await Credit.findByIdAndUpdate(credit._id, { $set: update }, { new: true }).lean();
-        return { credit: updated, update };
+        for (let attempt = 0; attempt < 5; attempt++) {
+            const credit = await Credit.findById(payment.creditId).lean();
+            if (!credit) return null;
+            if ((credit.appliedPaymentOrders || []).includes(payment.orderId)) {
+                const entry = (credit.history || []).find((item) => item.orderId === payment.orderId);
+                return {
+                    credit,
+                    alreadyApplied: true,
+                    update: {
+                        balance: credit.balance,
+                        appliedAmount: Number(entry?.appliedAmount || 0),
+                        unappliedAmount: Number(entry?.unappliedAmount || 0)
+                    }
+                };
+            }
+
+            const update = compute(credit);
+            const versionFilter = credit.__v == null
+                ? { __v: { $exists: false } }
+                : { __v: credit.__v };
+            const updated = await Credit.findOneAndUpdate(
+                {
+                    _id: credit._id,
+                    ...versionFilter,
+                    appliedPaymentOrders: { $ne: payment.orderId }
+                },
+                {
+                    $set: update,
+                    $addToSet: { appliedPaymentOrders: payment.orderId },
+                    $inc: { __v: 1 }
+                },
+                { new: true }
+            ).lean();
+            if (updated) return { credit: updated, update };
+        }
+        throw new Error(`Could not safely update credit ledger for Cashfree order ${payment.orderId}`);
     }
     if (!payment.creditPath) return null;
     const ref = db.doc(payment.creditPath);
@@ -84,8 +115,23 @@ exports.updateCreditLedger = async (payment, compute) => {
         const snap = await t.get(ref);
         if (!snap.exists) return null;
         const credit = fsCredit(snap);
+        if ((credit.appliedPaymentOrders || []).includes(payment.orderId)) {
+            const entry = (credit.history || []).find((item) => item.orderId === payment.orderId);
+            return {
+                credit,
+                alreadyApplied: true,
+                update: {
+                    balance: credit.balance,
+                    appliedAmount: Number(entry?.appliedAmount || 0),
+                    unappliedAmount: Number(entry?.unappliedAmount || 0)
+                }
+            };
+        }
         const update = compute(credit);
-        t.update(ref, update);
+        t.update(ref, {
+            ...update,
+            appliedPaymentOrders: admin.firestore.FieldValue.arrayUnion(payment.orderId)
+        });
         return { credit: { ...credit, ...update }, update };
     });
 };
@@ -94,8 +140,11 @@ exports.updateCreditLedger = async (payment, compute) => {
 
 exports.createPayment = async (data) => {
     if (isMongo()) return (await Payment.create(data)).toObject();
-    const record = { status: 'created', currency: 'INR', kind: 'credit', createdAt: new Date().toISOString(), ...data };
-    await paymentsCol().doc(data.orderId).set(record);
+    const record = Object.fromEntries(
+        Object.entries({ status: 'created', currency: 'INR', kind: 'credit', createdAt: new Date().toISOString(), ...data })
+            .filter(([, value]) => value !== undefined)
+    );
+    await paymentsCol().doc(data.orderId).create(record);
     return { _id: data.orderId, ...record };
 };
 

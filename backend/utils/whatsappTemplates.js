@@ -68,7 +68,7 @@ const templates = {
 
     // invoice_created: DOCUMENT header (the bill PDF, uploaded first -> document_id);
     // body customer_name, invoice_number, invoice_date, amount.
-    INVOICE_CREATED: ({ customer_name = 'Customer', invoice_number = '', invoice_date = '', amount = '', document_id = '' }) => ({
+    INVOICE_CREATED: ({ customer_name = 'Customer', invoice_number = '', invoice_date = '', amount = '', document_id = '', document_filename = '' }) => ({
         textFallback: `Hello ${customer_name}, your invoice has been created successfully. Invoice Number: ${invoice_number}. Invoice Date: ${invoice_date}. Amount: ${amount}. [PDF attached]`,
         metaTemplate: {
             name: 'invoice_created',
@@ -78,10 +78,33 @@ const templates = {
                     type: 'header',
                     parameters: [{
                         type: 'document',
-                        document: { id: document_id, filename: `Invoice_${invoice_number || 'bill'}.pdf` }
+                        document: { id: document_id, filename: document_filename || `Bill_${invoice_number || 'receipt'}.pdf` }
                     }]
                 },
                 { type: 'body', parameters: named({ customer_name, invoice_number, invoice_date, amount }) }
+            ]
+        }
+    }),
+
+    // NOT APPROVED YET. Replaces invoice_created for POS bills once approved
+    // (WHATSAPP_BILL_CREATED_ENABLED=true): it names the shop and says "bill".
+    // Create "bill_created" in WhatsApp Manager: category UTILITY, language
+    // English (US), DOCUMENT header, named body params customer_name, business_name,
+    // bill_number, bill_date, amount, footer "Sent via SwordNex Billing".
+    BILL_CREATED: ({ customer_name = 'Customer', business_name = 'our store', bill_number = '', bill_date = '', amount = '', document_id = '', document_filename = '' }) => ({
+        textFallback: `Hello ${customer_name}, thank you for shopping at ${business_name}. Your bill is attached. Bill No: ${bill_number}. Date: ${bill_date}. Amount: ${amount}. [PDF attached]`,
+        metaTemplate: {
+            name: 'bill_created',
+            languageCode: 'en_US',
+            components: [
+                {
+                    type: 'header',
+                    parameters: [{
+                        type: 'document',
+                        document: { id: document_id, filename: document_filename || `Bill_${bill_number || 'receipt'}.pdf` }
+                    }]
+                },
+                { type: 'body', parameters: named({ customer_name, business_name, bill_number, bill_date, amount }) }
             ]
         }
     }),

@@ -40,42 +40,62 @@ const PayPage = () => {
     }
     setBusy(true);
     try {
-      const loaded = await loadScript("https://checkout.razorpay.com/v1/checkout.js");
+      // Load Cashfree SDK
+      const scriptUrl = info.environment === 'sandbox'
+        ? "https://sdk.cashfree.com/js/v3/cashfree.sandbox.js"
+        : "https://sdk.cashfree.com/js/v3/cashfree.js";
+
+      const loaded = await loadScript(scriptUrl);
       if (!loaded) throw new Error("Could not load the payment window. Check your internet connection.");
 
+      // Create order
       const { data: order } = await axios.post(`${API_URL}/pay/${token}/order`, { amount: value });
 
-      const rzp = new window.Razorpay({
-        key: order.keyId,
-        amount: order.amount,
-        currency: order.currency,
-        order_id: order.orderId,
-        name: info.business,
-        description: `Payment for dues${info.description ? ` - ${info.description}` : ""}`,
-        prefill: order.prefill,
-        theme: { color: "#059669" },
-        modal: { ondismiss: () => setBusy(false) },
-        handler: async (response) => {
-          try {
-            const { data } = await axios.post(`${API_URL}/pay/${token}/verify`, response);
-            setResult(data);
-          } catch (err) {
-            // Money may have moved; the webhook reconciles it even if this call failed.
-            setError(
-              (err.response?.data?.msg || "We could not confirm the payment yet.") +
-                ` Payment ID: ${response.razorpay_payment_id}`
-            );
-            load();
-          } finally {
-            setBusy(false);
-          }
-        },
+      // Initialize Cashfree
+      const cashfree = window.Cashfree({
+        mode: order.environment === 'sandbox' ? 'sandbox' : 'production'
       });
-      rzp.on("payment.failed", (r) => {
-        setError(r.error?.description || "Payment failed. Please try again.");
+
+      // Checkout options
+      const checkoutOptions = {
+        paymentSessionId: order.paymentSessionId,
+        returnUrl: `${window.location.origin}/pay/${token}?order_id=${order.orderId}`,
+      };
+
+      // Open checkout
+      cashfree.checkout(checkoutOptions).then(async (result) => {
+        if (result.error) {
+          setError(result.error.message || "Payment failed. Please try again.");
+          setBusy(false);
+          return;
+        }
+
+        if (result.redirect) {
+          // Payment redirect happened
+          console.log("Payment redirect initiated");
+        }
+
+        // Verify payment on return
+        try {
+          const { data } = await axios.post(`${API_URL}/pay/${token}/verify`, {
+            orderId: order.orderId
+          });
+          setResult(data);
+        } catch (err) {
+          // Money may have moved; the webhook reconciles it even if this call failed.
+          setError(
+            (err.response?.data?.msg || "We could not confirm the payment yet.") +
+              ` Order ID: ${order.orderId}`
+          );
+          load();
+        } finally {
+          setBusy(false);
+        }
+      }).catch((err) => {
+        setError(err.message || "Payment failed. Please try again.");
         setBusy(false);
       });
-      rzp.open();
+
     } catch (err) {
       setError(err.response?.data?.msg || err.message || "Could not start the payment.");
       setBusy(false);
@@ -100,6 +120,11 @@ const PayPage = () => {
               <div className="mx-auto mb-3 h-14 w-14 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-3xl">✓</div>
               <h2 className="text-lg font-bold text-gray-900">Payment successful</h2>
               <p className="text-gray-600 mt-1">{inr(result.amount)} received. Thank you!</p>
+              {Number(result.unappliedAmount) > 0 && (
+                <p className="text-sm text-amber-700 bg-amber-50 rounded-lg p-3 mt-3">
+                  {inr(result.unappliedAmount)} was not applied to this bill because it exceeds the remaining balance. Please contact the business to reconcile it.
+                </p>
+              )}
               <p className="text-xs text-gray-400 mt-3">Payment ID: {result.paymentId}</p>
               <p className="text-sm text-gray-600 mt-3">
                 Remaining balance: <b>{inr(result.balance)}</b>
@@ -148,7 +173,7 @@ const PayPage = () => {
               >
                 {busy ? "Processing…" : `Pay ${inr(amount)}`}
               </button>
-              <p className="text-center text-xs text-gray-400 mt-3">Secured by Razorpay · UPI, cards, netbanking, wallets</p>
+              <p className="text-center text-xs text-gray-400 mt-3">Secured by Cashfree · UPI, cards, netbanking, wallets</p>
             </>
           )}
 

@@ -2,13 +2,13 @@
  * Daily Sales Summary Generator & Dispatcher
  * Feature 5 of Phase 1 Automation.
  */
-const { Bill, Credit, Product } = require('../models/mongodb');
 const platformStore = require('./platformStore');
 const wa = require('./whatsappService');
 const { sendEmail } = require('./emailService');
 const emailTemplates = require('./emailTemplates');
 const { money } = require('./paymentService');
 const { generateDailyReportPDF } = require('./reportPdfGenerator');
+const { listStoreRecords } = require('./storeRecords');
 
 /**
  * Returns Start & End of day in IST (Asia/Kolkata)
@@ -31,6 +31,7 @@ async function generateDailySalesSummary({ ownerId, date = new Date() }) {
         if (!owner) return { skipped: true, reason: 'Owner not found' };
 
         const { start, end, displayDate } = getDayBoundsIST(date);
+        const today = { since: start, until: end };
         const storeName = owner.companyDetails?.name || owner.businessName || 'Your Store';
         const ownerName = owner.firstName || owner.name || 'Store Owner';
         const ownerMobile = owner.mobile || owner.phone;
@@ -190,7 +191,8 @@ async function runAllOwnersDailySalesSummary(date = new Date()) {
     try {
         const owners = await platformStore.listOwners();
         for (const owner of owners) {
-            const ownerId = owner.id || owner.uid || owner._id?.toString();
+            // Business records carry the owner's userId, not the Mongo _id.
+            const ownerId = owner.userId || owner._id?.toString();
             const res = await generateDailySalesSummary({ ownerId, date });
             summary.processed += 1;
             if (res.whatsappSent) summary.whatsappSent += 1;

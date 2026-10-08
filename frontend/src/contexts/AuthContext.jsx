@@ -13,6 +13,29 @@ const api = axios.create({
   baseURL: API_URL.endsWith('/') ? API_URL : `${API_URL}/`,
 });
 
+// "Remember me": the app reads the token from sessionStorage everywhere, so a
+// remembered token (localStorage) is copied back in when a new browser session
+// starts. Runs at import time, before anything reads the token.
+const REMEMBER_KEY = "rememberedToken";
+try {
+  if (!sessionStorage.getItem("token")) {
+    const remembered = localStorage.getItem(REMEMBER_KEY);
+    if (remembered) sessionStorage.setItem("token", remembered);
+  }
+} catch { /* storage blocked: fall back to per-tab sessions */ }
+
+// The POS keeps an unfinished cart in localStorage (shared by every account on
+// this browser), so it is dropped whenever the signed-in account changes.
+const POS_DRAFT_KEYS = ["pos-cart", "pos-cash", "pos-cash-edited"];
+
+const clearToken = () => {
+  sessionStorage.removeItem("token");
+  try {
+    localStorage.removeItem(REMEMBER_KEY);
+    POS_DRAFT_KEYS.forEach((key) => localStorage.removeItem(key));
+  } catch { /* ignore */ }
+};
+
 // Add token to headers
 api.interceptors.request.use((config) => {
   const token = sessionStorage.getItem("token");
@@ -49,7 +72,7 @@ export function AuthProvider({ children }) {
             setCurrentUser(userData);
           } catch (e) {
             console.error("❌ Backend fetch failed:", e);
-            sessionStorage.removeItem("token");
+            clearToken();
             setCurrentUser(null);
           }
         }
@@ -65,20 +88,25 @@ export function AuthProvider({ children }) {
   }, []);
 
   // LOGIN
-  async function employerLogin(email, password, loginType = 'admin') {
+  async function employerLogin(email, password, loginType = 'admin', remember = false) {
     try {
       console.log("🚀 Logging in via Backend API...");
 
       const res = await api.post("auth/login", {
         email,
         password,
-        loginType // Backend might use this or ignore it
+        loginType, // Backend might use this or ignore it
+        remember
       });
 
       console.log("✅ Login Success:", res.data);
 
       const { token, user } = res.data;
+      clearToken();
       sessionStorage.setItem("token", token);
+      if (remember) {
+        try { localStorage.setItem(REMEMBER_KEY, token); } catch { /* ignore */ }
+      }
       setCurrentUser(user);
 
       // Straight to the dashboard; only an expired owner plan goes to the plans page.
@@ -148,6 +176,7 @@ export function AuthProvider({ children }) {
       console.log("✅ Signup Success:", res.data);
       const { token, user } = res.data;
 
+      clearToken();
       sessionStorage.setItem("token", token);
       // The register response is minimal; load the full profile (incl. the auto-started
       // trial) so the dashboard guard sees an active subscription.
@@ -370,7 +399,7 @@ export function AuthProvider({ children }) {
       await api.delete("auth/delete-account");
 
       // 2. Cleanup Local State
-      sessionStorage.removeItem("token");
+      clearToken();
       setCurrentUser(null);
     } catch (err) {
       console.error("Backend Delete Failed:", err);
@@ -387,7 +416,7 @@ export function AuthProvider({ children }) {
       console.error("Backend Logout Failed (Session time not recorded):", err);
     }
 
-    sessionStorage.removeItem("token");
+    clearToken();
     setCurrentUser(null);
   }
 

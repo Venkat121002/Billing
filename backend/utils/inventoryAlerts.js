@@ -2,11 +2,11 @@
  * Low Stock Inventory Alerts & Summaries
  * Feature 3 of Phase 1 Automation.
  */
-const { Product, Owner } = require('../models/mongodb');
 const platformStore = require('./platformStore');
 const wa = require('./whatsappService');
 const { sendEmail } = require('./emailService');
 const emailTemplates = require('./emailTemplates');
+const { listStoreRecords } = require('./storeRecords');
 
 /**
  * Check if a product has dropped below its minimum stock threshold after a sale,
@@ -24,7 +24,6 @@ async function checkAndAlertLowStock({ productDoc, updatedQuantity, ownerId, pro
             : (productDoc.reorderLevel || 5));
 
         const qty = Number(updatedQuantity);
-        const docId = productDoc.id || productDoc._id;
 
         // If restocked above threshold, re-arm the alert
         if (qty > threshold) {
@@ -36,9 +35,6 @@ async function checkAndAlertLowStock({ productDoc, updatedQuantity, ownerId, pro
                     await productDoc.save();
                 } else if (productDoc.update) {
                     await productDoc.update({ lowStockAlertSent: false });
-                }
-                if (docId) {
-                    await Product.findByIdAndUpdate(docId, { lowStockAlertSent: false }).catch(() => {});
                 }
             }
             return;
@@ -80,9 +76,6 @@ async function checkAndAlertLowStock({ productDoc, updatedQuantity, ownerId, pro
             } else if (productDoc.update) {
                 await productDoc.update({ lowStockAlertSent: true });
             }
-            if (docId) {
-                await Product.findByIdAndUpdate(docId, { lowStockAlertSent: true }).catch(() => {});
-            }
         }
     } catch (err) {
         console.error('[inventoryAlerts] Error in checkAndAlertLowStock:', err.message);
@@ -90,18 +83,23 @@ async function checkAndAlertLowStock({ productDoc, updatedQuantity, ownerId, pro
 }
 
 /**
- * Runs a daily scan of low-stock products across owners and emails them a summary.
+ * Runs a daily scan of low-stock products and emails each owner a summary of
+ * their own store. `ownerId` limits the run to that one store (the owner's
+ * manual trigger); without it every store is processed (the scheduled job).
  */
-async function runDailyLowStockSummary(now = new Date()) {
+async function runDailyLowStockSummary(now = new Date(), { ownerId: onlyOwnerId } = {}) {
     const summary = { ownersChecked: 0, emailsSent: 0, skippedNoEmail: 0, lowStockTotal: 0 };
     const dateStr = now.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' });
 
     try {
-        const owners = await platformStore.listOwners();
+        const owners = onlyOwnerId
+            ? [await platformStore.getOwner(onlyOwnerId)].filter(Boolean)
+            : await platformStore.listOwners();
 
         for (const owner of owners) {
             summary.ownersChecked += 1;
-            const ownerId = owner.id || owner.uid || owner._id?.toString();
+            // Business records carry the owner's userId, not the Mongo _id.
+            const ownerId = owner.userId || owner._id?.toString();
             const email = owner.email;
             const storeName = owner.companyDetails?.name || owner.businessName || 'Your Store';
             const ownerName = owner.firstName || owner.name || 'Owner';

@@ -16,8 +16,9 @@ const CreditSchema = new mongoose.Schema({
     balance: { type: Number, default: 0 },
     status: { type: String, default: 'Pending' },
     history: { type: Array, default: [] },
+    appliedPaymentOrders: { type: [String], default: [] },
     notes: { type: String, default: '' },
-    payToken: { type: String, index: true, sparse: true }, // public pay-link token (Razorpay)
+    payToken: { type: String, index: true, sparse: true }, // public pay-link token (Cashfree)
     date: { type: String },
     remindersSent: { type: [String], default: [] },
     lastReminderSentAt: { type: String, default: null },

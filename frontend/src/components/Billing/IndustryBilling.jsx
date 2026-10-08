@@ -1,6 +1,10 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useLocation, Link } from "react-router-dom";
 import axios from "axios";
+import { previewInvoiceNumber } from "../../utils/invoiceNumber";
+import { printReceipt } from "../../utils/printReceipt";
+import GstInvoice from "./GstInvoice";
+import ThermalReceipt from "./ThermalReceipt";
 import API_URL from "../../config/api";
 import {
   Search,
@@ -819,10 +823,8 @@ const IndustryBilling = () => {
   const submit = async (dueBill = false) => {
     if (!currentUser) { alert("Error: Not logged in."); return; }
     const time = new Date();
-    const receiptPrefix = userData?.invoiceSettings?.prefix || userData?.businessName?.substring(0, 3).toUpperCase() || "INV";
-    let receiptSequence = userData?.invoiceSettings?.sequence;
-    if (!receiptSequence) receiptSequence = Date.now().toString().slice(-6);
-    setReceiptNo(`${receiptPrefix}-${receiptSequence}`);
+    // Likely number; the server assigns the real one when the bill is saved.
+    setReceiptNo(previewInvoiceNumber(userData));
     setReceiptDate(dateFormat(time));
     setIsDueBill(dueBill);
     setIsShowModalReceipt(true);
@@ -869,12 +871,16 @@ const IndustryBilling = () => {
         const pdfWidth = format.width;
         pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: [pdfWidth, pdfWidth * ratio] });
         pdf.addImage(imgData, imgType, 0, 0, pdfWidth, pdfWidth * ratio);
-      } else if (formatStr.includes('a5')) {
-        pdf = new jsPDF('p', 'mm', 'a5');
-        pdf.addImage(imgData, imgType, 0, 0, 148, 148 * ratio);
       } else {
-        pdf = new jsPDF('p', 'mm', 'a4');
-        pdf.addImage(imgData, imgType, 0, 0, 210, 210 * ratio);
+        const isA5Pdf = formatStr.includes('a5');
+        const [pageW, pageH] = isA5Pdf ? [148, 210] : [210, 297];
+        pdf = new jsPDF('p', 'mm', isA5Pdf ? 'a5' : 'a4');
+        const imgH = pageW * ratio;
+        // Long bills continue on extra pages: the same image, shifted up one page at a time.
+        for (let offset = 0; offset < imgH - 1; offset += pageH) {
+          if (offset > 0) pdf.addPage();
+          pdf.addImage(imgData, imgType, 0, -offset, pageW, imgH);
+        }
       }
       return pdf;
     } finally { document.body.removeChild(container); }
@@ -904,13 +910,7 @@ const IndustryBilling = () => {
   };
 
   const handlePrint = () => {
-    if (!receiptContentRef.current || !printAreaRef.current) return;
-    printAreaRef.current.innerHTML = receiptContentRef.current.innerHTML;
-    const titleBefore = document.title;
-    document.title = receiptNo || "Receipt";
-    window.print();
-    document.title = titleBefore;
-    setTimeout(() => { printAreaRef.current.innerHTML = ""; }, 1000);
+    printReceipt({ format: printerFormat, contentEl: receiptContentRef.current, printAreaEl: printAreaRef.current, title: receiptNo || "Receipt" });
   };
 
   const storeBillingCustomer = async (customer) => {
@@ -1036,12 +1036,19 @@ const IndustryBilling = () => {
       const config = { headers: { 'x-auth-token': token } };
 
       let savedBillId = null;
+      let finalReceiptNo = receiptNo;
       try {
         const billRes = await axios.post(`${API_URL}/billing/bills`, saleData, config);
         savedBillId = billRes.data?.id || null;
+        finalReceiptNo = billRes.data?.receiptNo || receiptNo;
       } catch (err) {
         console.error("Error creating bill via API:", err);
+        alert(`The bill was not saved, so stock and records were not changed. Please try again.\n${err.response?.data?.msg || err.message}`);
+        return;
       }
+      // Re-render the receipt with the real number before it is printed or
+      // turned into the WhatsApp PDF (both copy the rendered receipt).
+      flushSync(() => setReceiptNo(finalReceiptNo));
 
       if (savedBillId && canWhatsappBill && sendWhatsappBill && customerForm.phone) {
         await sendBillOnWhatsapp(savedBillId, token);
@@ -1125,25 +1132,13 @@ const IndustryBilling = () => {
 
       if (customerId) await processCustomerUpdates(customerId, grandTotal);
 
-      printAreaRef.current.innerHTML = receiptContentRef.current.innerHTML;
-      const titleBefore = document.title;
-      document.title = receiptNo;
-      window.print();
+      // Settings → Printing → "Print automatically on Finalize" (on unless turned off).
+      if (userData?.Tenant?.print_on_finalize !== false) {
+        printReceipt({ format: printerFormat, contentEl: receiptContentRef.current, printAreaEl: printAreaRef.current, title: finalReceiptNo });
+      }
 
       setIsShowModalReceipt(false);
       setIsDueBill(false);
-      printAreaRef.current.innerHTML = "";
-      document.title = titleBefore;
-
-      if (userData?.Tenant?.printer_auto_print) {
-        setTimeout(() => {
-          handlePrint();
-        }, 500);
-      }
-
-      if (userData?.invoiceSettings?.sequence) {
-        try { await updateProfile({ invoiceSettings: { ...userData.invoiceSettings, sequence: Number(userData.invoiceSettings.sequence) + 1 } }); } catch (e) { }
-      }
       clear();
 
       window.location.reload();
@@ -1209,15 +1204,14 @@ const IndustryBilling = () => {
     const businessEmail = currentUser?.email || userData?.email || "";
 
     const formatStr = (printerFormat || "A4").toLowerCase();
-    const isThermal = formatStr.includes("thermal") || formatStr.includes("80mm") || formatStr.includes("58mm") || formatStr === "a4" || formatStr === "a5";
-    const isA5 = formatStr.includes("a5");
+    const isThermalFormat = formatStr.includes("thermal") || formatStr.includes("80mm") || formatStr.includes("58mm");
+    const totals = getTotals();
+    const manualDiscount = Number(discount) || 0;
+    const business = { name: businessName, ...businessAddress, phone: businessPhone, email: businessEmail, gstin: businessGstin };
+    const inclusive = userData?.Tenant?.sales_tax_type === "inclusive";
 
-    if (isThermal) {
-      let thermalClass = "receipt-thermal-80";
-      if (formatStr.includes("58mm")) thermalClass = "receipt-thermal-58";
-      else if (formatStr === "a5") thermalClass = "receipt-a5";
-      else if (formatStr === "a4") thermalClass = "receipt-a4";
-
+    // "Thermal 80mm" / "Thermal 58mm"
+    if (isThermalFormat) {
       return (
         <div className={`${thermalClass} text-gray-800 bg-white`}>
           <div className="text-center mb-6">
@@ -1272,8 +1266,9 @@ const IndustryBilling = () => {
         </div>
       );
     }
-    const isDotMatrix = formatStr.includes("dotmatrix");
-    const containerClass = isDotMatrix ? "receipt-dotmatrix font-mono" : (isA5 ? "receipt-a5 font-arial" : "receipt-a4 font-arial");
+
+    // "A4" / "A5" → full-page receipt; "A4 GST Invoice" / "A5 GST Invoice" → GST invoice
+    const isGstFormat = formatStr.includes("gst");
     return (
       <div className={`${containerClass} w-full bg-white text-black text-sm`}>
         <div className="flex justify-between border-b-2 border-black pb-4 mb-4">
@@ -2211,11 +2206,11 @@ const IndustryBilling = () => {
     .animate-modal-in { animation: modal-in 0.25s ease-out; }
 
     .receipt-thermal-80 {
-      width: 80mm; padding: 4mm;
+      width: 72mm; margin: 0 auto; padding: 3mm 0;
       font-family: inherit; font-size: 10pt;
     }
     .receipt-thermal-58 {
-      width: 58mm; padding: 2mm;
+      width: 48mm; margin: 0 auto; padding: 2mm 0;
       font-family: inherit; font-size: 8pt;
     }
     .receipt-a4 {

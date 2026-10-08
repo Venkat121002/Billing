@@ -254,13 +254,13 @@ exports.payLink = ({ business, customerName, amount, url }) => ({
             p(`Hi ${esc(customerName || 'there')},`),
             p(`<b>${esc(business)}</b> has requested a payment of <b>${esc(amount)}</b>.`),
             button(url, `Pay ${amount} securely`),
-            note('Payments are processed by Razorpay (UPI, cards, net banking, wallets).')
+            note('Payments are processed by Cashfree (UPI, cards, net banking, wallets).')
         ].join('')
     })
 });
 
 /** Online dues payment received. audience: 'customer' (payer) or 'owner' (the business). */
-exports.paymentReceipt = ({ audience, business, customerName, amount, paymentId, method, remaining }) => {
+exports.paymentReceipt = ({ audience, business, customerName, amount, paymentId, method, remaining, unapplied }) => {
     const toCustomer = audience === 'customer';
     return {
         subject: toCustomer
@@ -273,12 +273,13 @@ exports.paymentReceipt = ({ audience, business, customerName, amount, paymentId,
             body: [
                 p(toCustomer
                     ? `Hi ${esc(customerName || 'there')}, thank you. <b>${esc(business)}</b> received your payment.`
-                    : `<b>${esc(customerName || 'A customer')}</b> paid online via Razorpay. The dues record has been updated.`),
+                    : `<b>${esc(customerName || 'A customer')}</b> paid online via Cashfree. The dues record has been updated.`),
                 detailsTable([
                     ['Amount paid', amount, { bold: true }],
                     ['Payment ID', paymentId || '-'],
                     ['Method', method || 'Online'],
-                    ['Remaining balance', remaining, { bold: true }]
+                    ['Remaining balance', remaining, { bold: true }],
+                    ...(unapplied ? [['Excess amount to reconcile', unapplied, { bold: true }]] : [])
                 ])
             ].join('')
         })

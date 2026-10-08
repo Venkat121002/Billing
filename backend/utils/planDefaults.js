@@ -1,8 +1,8 @@
 // Seed content for the three plan rows, used to create them the first time
 // /billing/plans (or /superadmin/plans) is read and the collection is empty.
-// Prices are left at the existing test placeholders — the superadmin Plans
-// page is where real prices get set; nothing here should be treated as a
-// business decision except the capability values, which were:
+// Paid plans start unpriced (0): checkout refuses them ("not available for
+// purchase yet") until the super admin sets real prices on the Plans screen.
+// Nothing else here is a business decision except the capability values, which were:
 //
 //   - Products: Trial 500, Standard 1,000, Premium unlimited.
 //   - Bills & invoices: Trial 300, Standard/Premium unlimited (billing itself
@@ -42,8 +42,8 @@ module.exports = {
         name: 'Standard',
         tagline: 'Run the daily business',
         badge: '',
-        monthly: 10,
-        yearly: 1,
+        monthly: 0,
+        yearly: 0,
         capabilities: [
             cap('products', 1000),
             cap('bills', null),
@@ -62,8 +62,8 @@ module.exports = {
         name: 'Premium',
         tagline: 'Grow and automate',
         badge: 'Best Value',
-        monthly: 10,
-        yearly: 1,
+        monthly: 0,
+        yearly: 0,
         capabilities: [
             cap('products', null),
             cap('bills', null),

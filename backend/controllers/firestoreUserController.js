@@ -10,20 +10,6 @@ const DB_TYPE = process.env.DB_TYPE || 'mongodb';
 // Helper: Generate Secure ID (matches firestoreAuthController.js)
 const generateId = () => crypto.randomBytes(16).toString('hex');
 
-// Plan limits for sub-users — Firestore mode only. MongoDB mode reads the
-// staffLogins capability from the superadmin-editable Plan collection instead
-// (see planEnforcement.js); Plan docs are Mongo-only, so Firestore mode keeps
-// this hardcoded fallback table.
-const PLAN_LIMITS = {
-    'Trial': 1,
-    'Standard': 3,
-    'Premium': 6,
-    'Free': 0,
-    'Basic': 2,
-    'Pro': 10,
-    'Enterprise': 50
-};
-
 // @desc    Create a sub-user
 // @route   POST /api/v2/users/create
 exports.createSubUser = async (req, res) => {
@@ -40,6 +26,9 @@ exports.createSubUser = async (req, res) => {
             return res.status(500).json({ msg: "Server Configuration Error: TENANT_ID not set" });
         }
 
+        if (typeof email !== 'string' || typeof password !== 'string') {
+            return res.status(400).json({ msg: "Please enter all required fields" });
+        }
         if (!firstName || !lastName || !email || !password) {
             return res.status(400).json({ msg: "Please enter all required fields" });
         }
@@ -72,7 +61,8 @@ exports.createSubUser = async (req, res) => {
                 });
             }
 
-            const existing = await SubUserModel.findOne({ email, tenantId });
+            // Unique across owners and staff (login looks up owners first).
+            const existing = (await SubUserModel.findOne({ email, tenantId })) || (await OwnerModel.findOne({ email, tenantId }));
             if (existing) {
                 return res.status(400).json({ msg: "User with this email already exists" });
             }
@@ -121,12 +111,13 @@ exports.createSubUser = async (req, res) => {
             return res.status(404).json({ msg: "Owner record not found" });
         }
 
+        // Same superadmin-editable staffLogins limit as MongoDB mode (null = unlimited).
         const ownerData = ownerDoc.data();
-        const rawPlan = ownerData.subscription?.plan || 'Free';
-        const plan = rawPlan.charAt(0).toUpperCase() + rawPlan.slice(1).toLowerCase();
-        const limit = PLAN_LIMITS[plan] || 0;
+        const { caps, planName } = await getOwnerPlan(ownerId);
+        const configuredLimit = caps.staffLogins?.limit;
+        const limit = configuredLimit == null ? Number.MAX_SAFE_INTEGER : configuredLimit;
         const additionalUsers = ownerData.additionalSubUsers || 0;
-        const totalLimit = limit + additionalUsers;
+        const totalLimit = limit === Number.MAX_SAFE_INTEGER ? limit : limit + additionalUsers;
 
         // 2. Count existing sub-users (Production Path: billingSoftware/{tenantId}/owner/{ownerId}/subuser)
         const subuserRef = ownerDocRef.collection('subuser');
@@ -135,7 +126,7 @@ exports.createSubUser = async (req, res) => {
 
         if (currentCount >= totalLimit) {
             return res.status(403).json({
-                msg: "Sub-user limit reached for your plan",
+                msg: `Your ${planName} plan allows up to ${totalLimit} staff logins. Upgrade your plan or buy extra logins to add more.`,
                 limit: limit,
                 additional: additionalUsers,
                 total: totalLimit,
@@ -289,7 +280,8 @@ exports.updateSubUser = async (req, res) => {
             }
 
             if (email && email !== subUser.email) {
-                const existing = await SubUserModel.findOne({ email, tenantId, userId: { $ne: subUserId } });
+                if (typeof email !== 'string') return res.status(400).json({ msg: "Invalid email" });
+                const existing = (await SubUserModel.findOne({ email, tenantId, userId: { $ne: subUserId } })) || (await OwnerModel.findOne({ email, tenantId }));
                 if (existing) {
                     return res.status(400).json({ msg: "Email already in use" });
                 }

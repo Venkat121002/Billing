@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Building2,
   Users,
@@ -27,94 +27,36 @@ import { handleEnterToNext } from '../utils/formUtils';
 import BillingLayout from '../Layout/BillingLayout/AdminLayout';
 import { resolveIndustryProfile, hasChosenIndustry, getSelectableProfiles } from '../config/industryProfiles';
 import useItemCategories from '../hooks/useItemCategories';
+import { formatInvoiceNumber } from '../utils/invoiceNumber';
+import { DEFAULT_INVOICE_TERMS } from '../components/Billing/GstInvoice';
 import ItemCategoriesManager from '../components/Settings/ItemCategoriesManager';
 
-const ACCENTS = {
-  emerald: {
-    cardIcon: "bg-gradient-to-br from-emerald-500 to-emerald-600 text-white shadow-lg shadow-emerald-200",
-    rowIconBg: "bg-emerald-50 text-emerald-600",
-    activeBg: "bg-emerald-50",
-    activeBorder: "border-emerald-200",
-    activeText: "text-emerald-700",
-    chevron: "text-emerald-500",
-  },
-  red: {
-    cardIcon: "bg-gradient-to-br from-red-500 to-rose-600 text-white shadow-lg shadow-red-200",
-    rowIconBg: "bg-red-50 text-red-600",
-    activeBg: "bg-red-50",
-    activeBorder: "border-red-200",
-    activeText: "text-red-700",
-    chevron: "text-red-500",
-  },
-  orange: {
-    cardIcon: "bg-gradient-to-br from-orange-500 to-amber-600 text-white shadow-lg shadow-orange-200",
-    rowIconBg: "bg-orange-50 text-orange-600",
-    activeBg: "bg-orange-50",
-    activeBorder: "border-orange-200",
-    activeText: "text-orange-700",
-    chevron: "text-orange-500",
-  },
-};
-
-const SettingsCard = ({ accent, icon: Icon, title, description, rows, activeSection, toggleSection }) => {
-  const a = ACCENTS[accent];
-  return (
-    <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm hover:shadow-lg transition-shadow duration-300 relative overflow-hidden group">
-      <div className="absolute -top-8 -right-8 w-28 h-28 bg-gray-50 rounded-full blur-2xl opacity-0 group-hover:opacity-100 transition-opacity" />
-      <div className="relative flex items-center gap-3">
-        <div className={`w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 ${a.cardIcon}`}>
-          <Icon className="w-5 h-5" />
-        </div>
-        <div>
-          <h3 className="font-bold text-gray-900">{title}</h3>
-          <p className="text-[11px] text-gray-400">{description}</p>
-        </div>
-      </div>
-      <ul className="relative mt-5 space-y-1.5">
-        {rows.map((row) => {
-          const RowIcon = row.icon;
-          const isActive = activeSection === row.id;
-          return (
-            <li key={row.id}>
-              <button
-                onClick={() => toggleSection(row.id)}
-                className={`w-full flex items-center gap-3 p-2.5 rounded-xl border transition-all text-left ${isActive ? `${a.activeBg} ${a.activeBorder}` : "border-transparent hover:bg-gray-50"
-                  }`}
-              >
-                <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${a.rowIconBg}`}>
-                  <RowIcon className="w-4 h-4" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className={`text-sm font-semibold truncate ${isActive ? a.activeText : "text-gray-700"}`}>
-                    {row.label}
-                  </p>
-                  {row.subtitle && (
-                    <p className="text-[11px] text-gray-400 truncate">{row.subtitle}</p>
-                  )}
-                </div>
-                <ChevronRight
-                  className={`w-4 h-4 flex-shrink-0 transition-transform ${isActive ? `rotate-90 ${a.chevron}` : "text-gray-300"
-                    }`}
-                />
-              </button>
-            </li>
-          );
-        })}
-      </ul>
-    </div>
-  );
-};
-
-const SettingsModal = ({ maxWidth = "max-w-2xl", children }) => (
-  <div className="fixed inset-0 bg-black/50 flex justify-center items-center p-4 z-50 animate-fadeIn">
-    <div className={`bg-white rounded-2xl shadow-2xl w-full ${maxWidth} max-h-[85vh] overflow-y-auto`}>
-      {children}
-    </div>
-  </div>
+// Each settings section renders inline as a card under the active tab
+// (it used to open as a popup from a launcher card).
+const SettingsPanel = ({ children }) => (
+  <div className="bg-white rounded-2xl border border-gray-100 shadow-sm">{children}</div>
 );
 
+// Old `?section=` links (sidebar, nudge banner) → the tab that now holds it.
+const SECTION_TO_TAB = {
+  profile: 'profile',
+  account_stats: 'profile',
+  subscriptions: 'subscription',
+  support: 'support',
+  invoice: 'billing',
+  tax_rates: 'billing',
+  printer: 'printing',
+  item_categories: 'products',
+  sub_users: 'team',
+  security: 'security',
+};
+
+// Tabs that show the plan / account summary column on the right.
+const TABS_WITH_SUMMARY = ['profile', 'billing', 'printing', 'security', 'subscription', 'support'];
+
 const Settings = () => {
-  const [activeSection, setActiveSection] = useState(null);
+  const [activeTab, setActiveTab] = useState('profile');
+  const currentTabRef = useRef('profile');
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [profileForm, setProfileForm] = useState({});
   const [savingProfile, setSavingProfile] = useState(false);
@@ -123,7 +65,7 @@ const Settings = () => {
   const { currentUser, updateProfile, selectIndustry, createSupportRequest, getMySupportRequests, getSubUsers, createSubUser, deleteSubUser, updateSubUser, createSubscriptionOrder, verifySubscriptionPayment } = useAuth();
   const userData = currentUser;
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   // Industry (Company Profile) — one-time selection, locked once set.
   const industryChosen = hasChosenIndustry(userData);
@@ -236,7 +178,8 @@ const Settings = () => {
   const [isEditingInvoice, setIsEditingInvoice] = useState(false);
   const [invoiceForm, setInvoiceForm] = useState({
     prefix: userData?.Tenant?.invoice_prefix || 'INV',
-    sequence: userData?.Tenant?.next_invoice_number || 1
+    sequence: userData?.Tenant?.next_invoice_number || 1,
+    terms: userData?.Tenant?.invoice_terms ?? DEFAULT_INVOICE_TERMS
   });
   const [savingInvoice, setSavingInvoice] = useState(false);
   const [isEditingTax, setIsEditingTax] = useState(false);
@@ -252,22 +195,93 @@ const Settings = () => {
   const PRINTER_FORMATS = ["A4", "A5", "A4 GST Invoice", "A5 GST Invoice", "Thermal 80mm", "Thermal 58mm"];
   const [printerForm, setPrinterForm] = useState({
     format: userData?.Tenant?.printer_format || 'A4',
-    autoPrint: userData?.Tenant?.printer_auto_print || false
+    autoPrint: userData?.Tenant?.print_on_finalize !== false
   });
   const [savingPrinter, setSavingPrinter] = useState(false);
   const { categories: itemCategories, save: saveItemCategories } = useItemCategories(userData);
   const categoryNames = Object.keys(itemCategories).sort((a, b) => a.localeCompare(b));
 
-  const toggleSection = (section) => {
-    setActiveSection(prev => prev === section ? null : section);
+  // ── Unsaved-changes guard ──
+  // Forms filled from the saved values, so "dirty" means the user actually
+  // changed something, not just that an Edit button is open.
+  const savedInvoiceForm = () => ({
+    prefix: userData?.Tenant?.invoice_prefix || 'INV',
+    sequence: userData?.Tenant?.next_invoice_number || 1,
+    terms: userData?.Tenant?.invoice_terms ?? DEFAULT_INVOICE_TERMS,
+  });
+  const savedTaxForm = () => ({
+    purchaseGst: userData?.Tenant?.purchase_gst || 0,
+    purchaseInclusive: userData?.Tenant?.purchase_tax_type === 'inclusive',
+    salesGst: userData?.Tenant?.sales_gst || 0,
+    salesInclusive: userData?.Tenant?.sales_tax_type === 'inclusive',
+  });
+  const savedPrinterForm = () => ({
+    format: userData?.Tenant?.printer_format || 'A4',
+    autoPrint: userData?.Tenant?.print_on_finalize !== false,
+  });
+  // Compares loosely (as strings) so "5" typed in an input equals a saved 5.
+  const differs = (a, b) => Object.keys(b).some((k) => String(a[k] ?? '') !== String(b[k] ?? ''));
+
+  const [profileSnapshot, setProfileSnapshot] = useState({});
+  const [categoriesDirty, setCategoriesDirty] = useState(false);
+
+  const hasUnsavedChanges =
+    (isEditingProfile && differs(profileForm, profileSnapshot)) ||
+    (isEditingInvoice && differs(invoiceForm, savedInvoiceForm())) ||
+    (isEditingTax && differs(taxForm, savedTaxForm())) ||
+    (isEditingPrinter && differs(printerForm, savedPrinterForm())) ||
+    (isAddingSubUser && Object.values(subUserForm).some((v) => String(v).trim() !== '')) ||
+    categoriesDirty;
+
+  const confirmDiscard = () =>
+    !hasUnsavedChanges || window.confirm("You have unsaved changes. Discard them?");
+
+  // Browser refresh / closing the tab.
+  useEffect(() => {
+    if (!hasUnsavedChanges) return;
+    const warn = (e) => { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [hasUnsavedChanges]);
+
+  // Links outside the tab bar (app sidebar, header, logo) leave the page
+  // without going through selectTab. BrowserRouter has no navigation blocker,
+  // so catch those clicks before React Router handles them.
+  useEffect(() => {
+    if (!hasUnsavedChanges) return;
+    const onClick = (e) => {
+      const link = e.target.closest?.("a[href]");
+      if (!link || link.target === "_blank") return;
+      if (window.confirm("You have unsaved changes. Discard them?")) return;
+      e.preventDefault();
+      e.stopPropagation();
+    };
+    document.addEventListener("click", onClick, true);
+    return () => document.removeEventListener("click", onClick, true);
+  }, [hasUnsavedChanges]);
+
+  const selectTab = (tab) => {
+    if (tab === currentTabRef.current) return;
+    if (!confirmDiscard()) return;
+    setActiveTab(tab);
     setIsEditingProfile(false);
     setIsEditingInvoice(false);
     setIsEditingTax(false);
     setIsEditingPrinter(false);
+    setIsAddingSubUser(false);
+    // Throw away the discarded edits so the next Edit starts from saved values.
+    setInvoiceForm(savedInvoiceForm());
+    setTaxForm(savedTaxForm());
+    setPrinterForm(savedPrinterForm());
+    setIsEditingSubUser(false);
+    setEditingSubUserId(null);
+    setSubUserForm({ firstName: '', lastName: '', email: '', password: '', confirmPassword: '', branch: '', location: '', subbranchName: '', subbranchLocation: '', subbranchAddress: '', city: '', state: '', pincode: '', employee_id: '' });
+    setCategoriesDirty(false);
+    setSearchParams({ tab }, { replace: true });
   };
 
   const startEditProfile = () => {
-    setProfileForm({
+    const initialProfile = {
       firstName: userData?.firstName || '',
       lastName: userData?.lastName || '',
       mobile: userData?.mobile || '',
@@ -281,7 +295,9 @@ const Settings = () => {
       city: userData?.address?.city || '',
       state: userData?.address?.state || '',
       pincode: userData?.address?.pincode || '',
-    });
+    };
+    setProfileForm(initialProfile);
+    setProfileSnapshot(initialProfile);
     setIsEditingProfile(true);
   };
 
@@ -309,7 +325,8 @@ const Settings = () => {
       setSavingInvoice(true);
       await updateProfile({
         invoice_prefix: invoiceForm.prefix,
-        next_invoice_number: parseInt(invoiceForm.sequence)
+        next_invoice_number: parseInt(invoiceForm.sequence),
+        invoice_terms: invoiceForm.terms
       });
       setIsEditingInvoice(false);
     } catch (err) {
@@ -343,7 +360,7 @@ const Settings = () => {
       setSavingPrinter(true);
       await updateProfile({
         printer_format: printerForm.format,
-        printer_auto_print: printerForm.autoPrint
+        print_on_finalize: printerForm.autoPrint
       });
       setIsEditingPrinter(false);
       import('react-hot-toast').then(({ default: toast }) => toast.success('Printer settings updated!'));
@@ -453,55 +470,59 @@ const Settings = () => {
       const { default: toast } = await import('react-hot-toast');
       const { loadScript } = await import('../components/Auth/loadScript');
 
-      const res = await loadScript("https://checkout.razorpay.com/v1/checkout.js");
-      if (!res) {
-        toast.error("Razorpay SDK failed to load.");
-        return;
-      }
-
       const orderData = await createSubscriptionOrder({
         plan: 'additional_users',
         count: additionalUserCount
       });
 
-      const { orderId, amount, currency, keyId } = orderData;
+      const { orderId, paymentSessionId, amount, currency, environment } = orderData;
 
-      const options = {
-        key: keyId,
-        amount: amount,
-        currency: currency,
-        name: "SwordNex Billing",
-        description: `Additional ${additionalUserCount} Sub-Users`,
-        image: "https://nexusjobs.in/logo.png",
-        order_id: orderId,
-        handler: async function (response) {
-          try {
-            await verifySubscriptionPayment({
-              paymentId: response.razorpay_payment_id,
-              orderId: response.razorpay_order_id,
-              signature: response.razorpay_signature,
-              plan: 'additional_users',
-              count: additionalUserCount,
-              amount: amount
-            });
-            toast.success(`${additionalUserCount} users added successfully!`);
-            setAdditionalUserCount(0);
-          } catch (err) {
-            console.error("Verification error:", err);
-            toast.error("Payment successful but verification failed.");
-          }
-        },
-        prefill: {
-          name: userData?.businessName || "",
-          email: userData?.email || "",
-        },
-        theme: {
-          color: "#f97316"
-        }
+      // Load Cashfree SDK
+      const scriptUrl = environment === 'sandbox'
+        ? "https://sdk.cashfree.com/js/v3/cashfree.sandbox.js"
+        : "https://sdk.cashfree.com/js/v3/cashfree.js";
+
+      const res = await loadScript(scriptUrl);
+      if (!res) {
+        toast.error("Cashfree SDK failed to load.");
+        return;
+      }
+
+      // Initialize Cashfree
+      const cashfree = window.Cashfree({
+        mode: environment === 'sandbox' ? 'sandbox' : 'production'
+      });
+
+      // Checkout options
+      const checkoutOptions = {
+        paymentSessionId: paymentSessionId,
+        returnUrl: `${window.location.origin}/settings?order_id=${orderId}`,
       };
 
-      const paymentObject = new window.Razorpay(options);
-      paymentObject.open();
+      // Open checkout
+      cashfree.checkout(checkoutOptions).then(async (result) => {
+        if (result.error) {
+          toast.error(result.error.message || "Payment failed. Please try again.");
+          return;
+        }
+
+        // Verify payment on return
+        try {
+          await verifySubscriptionPayment({
+            orderId: orderId,
+            plan: 'additional_users',
+            count: additionalUserCount,
+            amount: amount
+          });
+          toast.success(`${additionalUserCount} users added successfully!`);
+          setAdditionalUserCount(0);
+        } catch (err) {
+          console.error("Verification error:", err);
+          toast.error("Payment successful but verification failed.");
+        }
+      }).catch((err) => {
+        toast.error(err.message || "Payment failed. Please try again.");
+      });
 
     } catch (err) {
       console.error("Buy additional users error:", err);
@@ -518,22 +539,18 @@ const Settings = () => {
   };
 
   useEffect(() => {
-    if (activeSection === 'sub_users') {
+    if (activeTab === 'team') {
       fetchSubUsers();
     }
-    if (activeSection === 'profile') {
+    if (activeTab === 'profile') {
       refreshMyRequests();
     }
-  }, [activeSection]);
+  }, [activeTab]);
 
+  // ?tab=team, or the older ?section=sub_users form.
   useEffect(() => {
-    const section = searchParams.get('section');
-    if (section) {
-      setActiveSection(section);
-      if (section === 'sub_users') {
-        fetchSubUsers();
-      }
-    }
+    const tab = searchParams.get('tab') || SECTION_TO_TAB[searchParams.get('section')];
+    if (tab) setActiveTab(tab);
   }, [searchParams]);
 
   const pf = (key) => profileForm[key] ?? '';
@@ -546,110 +563,70 @@ const Settings = () => {
   const salesGst = userData?.Tenant?.sales_gst || 0;
   const isOwnerOrAdmin = userData.role === 'owner' || userData.role === 'TenantAdmin';
 
-  const organisationRows = [
-    { id: 'profile', label: 'Profile', subtitle: businessName || 'Business & account details', icon: User },
-    ...(isOwnerOrAdmin ? [{ id: 'subscriptions', label: 'Subscriptions', subtitle: `${planLabel} Plan${isTrial ? ' · Trial' : ''}`, icon: CreditCard }] : []),
-    { id: 'support', label: 'Support', subtitle: 'Get help from our team', icon: Mail },
-    { id: 'account_stats', label: 'Account Status', subtitle: isVerified ? 'Verified' : 'Verification pending', icon: FileText },
-    ...(isOwnerOrAdmin ? [{ id: 'invoice', label: 'Invoice', subtitle: `Prefix: ${invoicePrefix}`, icon: FileText }] : []),
-  ];
+  const daysLeft = userData?.Tenant?.subscription_expiry
+    ? Math.max(0, Math.ceil((new Date(userData.Tenant.subscription_expiry) - new Date()) / 86400000))
+    : null;
 
-  const securityRows = [
-    { id: 'security', label: 'Security Settings', subtitle: 'Password & account protection', icon: Shield },
+  const tabs = [
+    { id: 'profile', label: 'Business profile', icon: Building2 },
+    ...(isOwnerOrAdmin || userData.role === 'subuser' ? [{ id: 'billing', label: 'Billing & tax', icon: FileText }] : []),
+    ...(isOwnerOrAdmin ? [{ id: 'products', label: 'Products', icon: Tags }] : []),
+    { id: 'printing', label: 'Printing', icon: Printer },
+    ...(isOwnerOrAdmin ? [{ id: 'team', label: 'Team', icon: Users }] : []),
+    ...(isOwnerOrAdmin ? [{ id: 'subscription', label: 'Subscription', icon: CreditCard }] : []),
+    { id: 'security', label: 'Security', icon: Shield },
+    { id: 'support', label: 'Support', icon: Mail },
   ];
-
-  const configurationRows = [
-    ...(userData.role === 'owner' || userData.role === 'subuser' ? [{ id: 'tax_rates', label: 'Tax Rates', subtitle: `GST ${salesGst}% on sales`, icon: FileText }] : []),
-    { id: 'printer', label: 'Printer', subtitle: `Default format: ${userData?.Tenant?.printer_format || 'A4'}`, icon: Printer },
-    ...(isOwnerOrAdmin ? [{ id: 'item_categories', label: 'Categories & Products', subtitle: `${categoryNames.length} categories`, icon: Tags }] : []),
-    ...(isOwnerOrAdmin ? [{ id: 'sub_users', label: 'Sub-Users', subtitle: 'Team access & permissions', icon: Users }] : []),
-  ];
+  // A link to a tab this user can't see (e.g. a sub-user opening ?tab=team) falls back to the profile.
+  const currentTab = tabs.some((t) => t.id === activeTab) ? activeTab : 'profile';
+  currentTabRef.current = currentTab;
+  const showSummary = TABS_WITH_SUMMARY.includes(currentTab);
 
   return (
-    <BillingLayout hideSidebar={true}>
-      <div className="min-h-screen bg-gray-50 p-8 font-sans -m-4">
-        <button
-          onClick={() => navigate(-1)}
-          className="flex items-center gap-2 text-gray-500 hover:text-gray-900 transition-colors mb-6 group"
-        >
-          <div className="w-8 h-8 rounded-lg bg-white border border-gray-200 flex items-center justify-center group-hover:bg-gray-50 shadow-sm">
-            <ArrowLeft className="w-4 h-4" />
-          </div>
-          <span className="text-sm font-medium">Back</span>
-        </button>
-
-        {/* Header Banner */}
-        <div className="mb-8 rounded-2xl bg-gradient-to-br from-emerald-600 to-green-700 p-6 sm:p-8 text-white shadow-lg shadow-emerald-100 relative overflow-hidden">
-          <div className="absolute -top-16 -right-16 w-56 h-56 bg-white/10 rounded-full blur-3xl" />
-          <div className="absolute -bottom-10 left-1/3 w-40 h-40 bg-white/5 rounded-full blur-2xl" />
-          <div className="relative flex flex-col sm:flex-row sm:items-center justify-between gap-6">
-            <div className="flex items-center gap-4">
-              <div className="w-16 h-16 rounded-2xl bg-white/15 backdrop-blur-sm border border-white/20 flex items-center justify-center text-2xl font-black flex-shrink-0">
-                {(businessName || 'S').charAt(0).toUpperCase()}
-              </div>
-              <div>
-                <h1 className="text-2xl font-extrabold tracking-tight">{businessName || 'Your Business'}</h1>
-                <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                  <span className="text-xs font-semibold bg-white/15 px-2.5 py-1 rounded-full backdrop-blur-sm">
-                    {industryProfile.label}
-                  </span>
-                  <span className="text-xs font-semibold bg-white/15 px-2.5 py-1 rounded-full backdrop-blur-sm capitalize">
-                    {planLabel} Plan
-                  </span>
-                  {isTrial && (
-                    <span className="text-xs font-semibold bg-amber-400/90 text-amber-900 px-2.5 py-1 rounded-full">
-                      Trial
-                    </span>
-                  )}
-                </div>
-              </div>
+    <BillingLayout>
+      <div className="min-h-screen bg-gray-50 p-4 sm:p-8 font-sans -m-4">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-11 h-11 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center text-lg font-bold flex-shrink-0">
+              {(businessName || 'S').charAt(0).toUpperCase()}
             </div>
-            <div className="text-left sm:text-right">
-              <p className="text-[11px] font-semibold text-white/70 uppercase tracking-widest">Signed in as</p>
-              <p className="text-sm font-bold">{userData?.firstName} {userData?.lastName}</p>
-              <p className="text-xs text-white/70 capitalize">{userData?.role}</p>
+            <div className="min-w-0">
+              <h1 className="text-xl font-bold text-gray-900">Settings</h1>
+              <p className="text-sm text-gray-500 truncate">
+                {businessName || 'Your business'} · <span className="capitalize">{userData?.role}</span> · {industryProfile.label}
+              </p>
             </div>
           </div>
+          <span className="self-start sm:self-auto inline-flex items-center gap-1.5 text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 px-3 py-1.5 rounded-full">
+            <span className="capitalize">{planLabel}</span> plan{isTrial ? ' · Trial' : ''}{daysLeft !== null ? ` · ${daysLeft} day${daysLeft === 1 ? '' : 's'} left` : ''}
+          </span>
         </div>
 
-        {/* Organisation Settings Section */}
-        <section className="mb-10">
-          <h2 className="text-2xl font-semibold text-gray-900 mb-6">Organisation Settings</h2>
+        {/* Tab bar */}
+        <div className="border-b border-gray-200 mb-6">
+          <nav className="-mb-px flex gap-6 overflow-x-auto">
+            {tabs.map(({ id, label, icon: Icon }) => (
+              <button
+                key={id}
+                onClick={() => selectTab(id)}
+                className={`flex items-center gap-2 py-3 border-b-2 text-sm font-medium whitespace-nowrap shrink-0 transition-colors ${currentTab === id
+                  ? 'border-emerald-600 text-emerald-700'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+              >
+                <Icon className="w-4 h-4" />
+                {label}
+              </button>
+            ))}
+          </nav>
+        </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            <SettingsCard
-              accent="emerald"
-              icon={Building2}
-              title="Organisation"
-              description="Profile, plan & billing details"
-              rows={organisationRows}
-              activeSection={activeSection}
-              toggleSection={toggleSection}
-            />
-            <SettingsCard
-              accent="red"
-              icon={Shield}
-              title="Security"
-              description="Keep your account protected"
-              rows={securityRows}
-              activeSection={activeSection}
-              toggleSection={toggleSection}
-            />
-            <SettingsCard
-              accent="orange"
-              icon={Settings2}
-              title="Configuration"
-              description="Tax, printing & team access"
-              rows={configurationRows}
-              activeSection={activeSection}
-              toggleSection={toggleSection}
-            />
-          </div>
-        </section>
-
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+          <div className={`space-y-6 ${showSummary ? 'lg:col-span-2' : 'lg:col-span-3'}`}>
         {/* ── Inline Section Panel ── */}
-        {activeSection === 'profile' && (
-          <SettingsModal maxWidth="max-w-3xl">
+        {currentTab === 'profile' && (
+          <SettingsPanel>
             <div className="p-6">
               {/* Header */}
               <div className="flex items-center justify-between mb-6">
@@ -687,12 +664,6 @@ const Settings = () => {
                       </button>
                     </>
                   )}
-                  <button
-                    onClick={() => { setActiveSection(null); setIsEditingProfile(false); }}
-                    className="text-gray-400 hover:text-gray-600 transition-colors ml-1"
-                  >
-                    <X className="w-5 h-5" />
-                  </button>
                 </div>
               </div>
 
@@ -843,12 +814,12 @@ const Settings = () => {
                 </div>
               </div>
             </div>
-          </SettingsModal>
+          </SettingsPanel>
         )}
 
         {/* ── Subscriptions Inline Section ── */}
-        {activeSection === 'subscriptions' && (
-          <SettingsModal maxWidth="max-w-md">
+        {currentTab === 'subscription' && (
+          <SettingsPanel>
             <div className="p-5 md:p-6">
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-2.5">
@@ -859,12 +830,6 @@ const Settings = () => {
                     Subscription
                   </h3>
                 </div>
-                <button
-                  onClick={() => setActiveSection(null)}
-                  className="text-gray-400 hover:text-gray-600 transition-colors"
-                >
-                  <X className="w-5 h-5" />
-                </button>
               </div>
 
               <div className="mb-6">
@@ -898,12 +863,12 @@ const Settings = () => {
                 Upgrade Plan
               </button>
             </div>
-          </SettingsModal>
+          </SettingsPanel>
         )}
 
         {/* ── Security Inline Section ── */}
-        {activeSection === 'security' && (
-          <SettingsModal maxWidth="max-w-md">
+        {currentTab === 'security' && (
+          <SettingsPanel>
             <div className="p-5 md:p-6">
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-2.5">
@@ -912,12 +877,6 @@ const Settings = () => {
                   </div>
                   <h3 className="font-semibold text-gray-900">Security</h3>
                 </div>
-                <button
-                  onClick={() => setActiveSection(null)}
-                  className="text-gray-400 hover:text-gray-600 transition-colors"
-                >
-                  <X className="w-5 h-5" />
-                </button>
               </div>
 
               <div className="flex justify-between items-center p-3 rounded-lg bg-gray-50/80 border border-gray-100">
@@ -935,12 +894,12 @@ const Settings = () => {
                 </button>
               </div>
             </div>
-          </SettingsModal>
+          </SettingsPanel>
         )}
 
         {/* ── Support Inline Section ── */}
-        {activeSection === 'support' && (
-          <SettingsModal maxWidth="max-w-2xl">
+        {currentTab === 'support' && (
+          <SettingsPanel>
             <div className="p-5 md:p-6">
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-2.5">
@@ -949,12 +908,6 @@ const Settings = () => {
                   </div>
                   <h3 className="font-semibold text-gray-900">Support</h3>
                 </div>
-                <button
-                  onClick={() => setActiveSection(null)}
-                  className="text-gray-400 hover:text-gray-600 transition-colors"
-                >
-                  <X className="w-5 h-5" />
-                </button>
               </div>
 
               <form onSubmit={handleSupportSubmit} className="space-y-4">
@@ -1018,71 +971,12 @@ const Settings = () => {
                 </div>
               </form>
             </div>
-          </SettingsModal>
-        )}
-
-        {/* ── Account Status Inline Section ── */}
-        {activeSection === 'account_stats' && (
-          <SettingsModal maxWidth="max-w-md">
-            <div className="p-5 md:p-6">
-              <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-10 h-10 rounded-lg bg-emerald-50 flex items-center justify-center">
-                    <FileText className="w-5 h-5 text-emerald-600" />
-                  </div>
-                  <h3 className="font-semibold text-gray-900">Account Status</h3>
-                </div>
-                <button
-                  onClick={() => setActiveSection(null)}
-                  className="text-gray-400 hover:text-gray-600 transition-colors"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-              <div className="space-y-3">
-                {[
-                  {
-                    label: "Verification",
-                    value: userData.gstin && userData.pan ? "Verified" : "Pending",
-                    color: userData.gstin && userData.pan ? "text-emerald-600" : "text-amber-600",
-                    bg: userData.gstin && userData.pan ? "bg-emerald-50" : "bg-amber-50",
-                  },
-                  {
-                    label: "Created",
-                    value: new Date(userData.createdAt).toLocaleDateString(),
-                    color: "text-gray-700",
-                  },
-                  {
-                    label: "Last Login",
-                    value: new Date(userData.lastLogin).toLocaleString(),
-                    color: "text-gray-700",
-                  },
-                ].map((item, i) => (
-                  <div
-                    key={i}
-                    className="flex justify-between items-center py-2 border-b border-gray-50 last:border-0"
-                  >
-                    <span className="text-xs font-medium text-gray-500">
-                      {item.label}
-                    </span>
-                    <span
-                      className={`text-xs font-semibold ${item.color} ${item.bg
-                        ? `${item.bg} px-2 py-0.5 rounded-md`
-                        : ""
-                        }`}
-                    >
-                      {item.value}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </SettingsModal>
+          </SettingsPanel>
         )}
 
         {/* ── Sub-Users Inline Section ── */}
-        {activeSection === 'sub_users' && (
-          <SettingsModal maxWidth="max-w-5xl">
+        {currentTab === 'team' && (
+          <SettingsPanel>
             <div className="p-6">
               <div className="flex items-center justify-between mb-8">
                 <div className="flex items-center gap-3">
@@ -1101,12 +995,6 @@ const Settings = () => {
                       {subUsers.length} / {getSubUserLimit()}
                     </span>
                   </div>
-                  <button
-                    onClick={() => { setActiveSection(null); setIsAddingSubUser(false); }}
-                    className="text-gray-400 hover:text-gray-600 transition-colors"
-                  >
-                    <X className="w-5 h-5" />
-                  </button>
                 </div>
               </div>
 
@@ -1287,19 +1175,19 @@ const Settings = () => {
                       </div>
                       <h5 className="text-sm font-bold text-gray-700">Access Control</h5>
                       <p className="text-[11px] text-gray-400 mt-2 leading-relaxed">
-                        Sub-users can log in via the <span className="font-bold text-orange-600">Team</span> tab on the login page using their email and the password you set.
+                        Sub-users sign in on the <span className="font-bold text-orange-600">Team sign in</span> page (login page → “Team member? Sign in here”) with their email and the password you set.
                       </p>
                     </div>
                   )}
                 </div>
               </div>
             </div>
-          </SettingsModal>
+          </SettingsPanel>
         )}
 
         {/* ── Invoice Settings Inline Section ── */}
-        {activeSection === 'invoice' && (
-          <SettingsModal maxWidth="max-w-lg">
+        {currentTab === 'billing' && isOwnerOrAdmin && (
+          <SettingsPanel>
             <div className="p-5 md:p-6">
               <div className="flex justify-between items-center mb-5">
                 <div className="flex items-center gap-2.5">
@@ -1321,7 +1209,7 @@ const Settings = () => {
                   ) : (
                     <>
                       <button
-                        onClick={() => setIsEditingInvoice(false)}
+                        onClick={() => { setIsEditingInvoice(false); setInvoiceForm(savedInvoiceForm()); }}
                         className="text-xs font-medium text-gray-500 hover:text-gray-700 px-3 py-1.5 rounded-lg hover:bg-gray-50 transition-colors"
                       >
                         Cancel
@@ -1335,12 +1223,6 @@ const Settings = () => {
                       </button>
                     </>
                   )}
-                  <button
-                    onClick={() => { setActiveSection(null); setIsEditingInvoice(false); }}
-                    className="text-gray-400 hover:text-gray-600 transition-colors ml-1"
-                  >
-                    <X className="w-5 h-5" />
-                  </button>
                 </div>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1394,13 +1276,37 @@ const Settings = () => {
                   )}
                 </div>
               </div>
+              <p className="mt-3 text-xs text-gray-500">
+                Each saved bill takes the next number automatically, e.g. <span className="font-medium text-gray-700">{formatInvoiceNumber(isEditingInvoice ? invoiceForm.prefix : userData?.Tenant?.invoice_prefix, isEditingInvoice ? invoiceForm.sequence : (userData?.Tenant?.next_invoice_number || 1))}</span>. Setting the number lower than one already used will repeat invoice numbers.
+              </p>
+
+              <div className="mt-5">
+                <label className="block text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">
+                  Terms on invoice
+                </label>
+                {isEditingInvoice ? (
+                  <textarea
+                    rows={4}
+                    maxLength={1000}
+                    className="w-full p-3 text-sm bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-400 transition-all text-gray-900 resize-y"
+                    value={invoiceForm.terms}
+                    placeholder="One term per line"
+                    onChange={(e) => setInvoiceForm({ ...invoiceForm, terms: e.target.value })}
+                  />
+                ) : (
+                  <div className="px-3 py-2.5 text-sm rounded-lg bg-gray-50 border border-gray-100 whitespace-pre-line text-gray-800">
+                    {(userData?.Tenant?.invoice_terms ?? DEFAULT_INVOICE_TERMS) || <span className="text-gray-400">No terms printed</span>}
+                  </div>
+                )}
+                <p className="mt-1.5 text-xs text-gray-500">Printed at the bottom of A4 / A5 GST invoices, one term per line. Leave empty to print none.</p>
+              </div>
             </div>
-          </SettingsModal>
+          </SettingsPanel>
         )}
 
         {/* ── Tax Rates Inline Section ── */}
-        {activeSection === 'tax_rates' && (
-          <SettingsModal maxWidth="max-w-3xl">
+        {currentTab === 'billing' && (userData.role === 'owner' || userData.role === 'subuser') && (
+          <SettingsPanel>
             <div className="p-5 md:p-6">
               <div className="flex justify-between items-center mb-5">
                 <div className="flex items-center gap-2.5">
@@ -1422,7 +1328,7 @@ const Settings = () => {
                   ) : (
                     <>
                       <button
-                        onClick={() => setIsEditingTax(false)}
+                        onClick={() => { setIsEditingTax(false); setTaxForm(savedTaxForm()); }}
                         className="text-xs font-medium text-gray-500 hover:text-gray-700 px-3 py-1.5 rounded-lg hover:bg-gray-50 transition-colors"
                       >
                         Cancel
@@ -1436,12 +1342,6 @@ const Settings = () => {
                       </button>
                     </>
                   )}
-                  <button
-                    onClick={() => { setActiveSection(null); setIsEditingTax(false); }}
-                    className="text-gray-400 hover:text-gray-600 transition-colors ml-1"
-                  >
-                    <X className="w-5 h-5" />
-                  </button>
                 </div>
               </div>
 
@@ -1603,12 +1503,12 @@ const Settings = () => {
                 </div>
               </div>
             </div>
-          </SettingsModal>
+          </SettingsPanel>
         )}
 
         {/* ── Printer Settings Inline Section ── */}
-        {activeSection === 'printer' && (
-          <SettingsModal maxWidth="max-w-2xl">
+        {currentTab === 'printing' && (
+          <SettingsPanel>
             <div className="p-5 md:p-6">
               <div className="flex justify-between items-center mb-5">
                 <div className="flex items-center gap-2.5">
@@ -1630,7 +1530,7 @@ const Settings = () => {
                   ) : (
                     <>
                       <button
-                        onClick={() => setIsEditingPrinter(false)}
+                        onClick={() => { setIsEditingPrinter(false); setPrinterForm(savedPrinterForm()); }}
                         className="text-xs font-medium text-gray-500 hover:text-gray-700 px-3 py-1.5 rounded-lg hover:bg-gray-50 transition-colors"
                       >
                         Cancel
@@ -1644,12 +1544,6 @@ const Settings = () => {
                       </button>
                     </>
                   )}
-                  <button
-                    onClick={() => { setActiveSection(null); setIsEditingPrinter(false); }}
-                    className="text-gray-400 hover:text-gray-600 transition-colors ml-1"
-                  >
-                    <X className="w-5 h-5" />
-                  </button>
                 </div>
               </div>
 
@@ -1686,8 +1580,8 @@ const Settings = () => {
                     <Printer className="w-5 h-5 text-orange-600" />
                   </div>
                   <div>
-                    <h4 className="text-sm font-bold text-gray-900">Auto-Print on Sale</h4>
-                    <p className="text-xs text-gray-500">Automatically trigger print dialog after completing a sale</p>
+                    <h4 className="text-sm font-bold text-gray-900">Print automatically on Finalize</h4>
+                    <p className="text-xs text-gray-500">Opens the print dialog when a sale is finalized. Turn off to only save the bill; you can still press Print in the receipt preview or reprint from Records.</p>
                   </div>
                 </div>
                 {isEditingPrinter ? (
@@ -1702,28 +1596,102 @@ const Settings = () => {
                     />
                   </button>
                 ) : (
-                  <span className={`text-xs font-bold ${userData?.Tenant?.printer_auto_print ? 'text-orange-600' : 'text-gray-400'}`}>
-                    {userData?.Tenant?.printer_auto_print ? 'ENABLED' : 'DISABLED'}
+                  <span className={`text-xs font-bold ${userData?.Tenant?.print_on_finalize !== false ? 'text-orange-600' : 'text-gray-400'}`}>
+                    {userData?.Tenant?.print_on_finalize !== false ? 'ON' : 'OFF'}
                   </span>
                 )}
               </div>
             </div>
-          </SettingsModal>
+          </SettingsPanel>
         )}
 
         {/* ── Categories & Products ── */}
-        {activeSection === 'item_categories' && isOwnerOrAdmin && (
-          <SettingsModal maxWidth="max-w-3xl">
+        {currentTab === 'products' && isOwnerOrAdmin && (
+          <SettingsPanel>
             <ItemCategoriesManager
               categories={itemCategories}
               onSave={saveItemCategories}
               profileKey={industryProfile.key}
-              onClose={() => setActiveSection(null)}
+              onDirtyChange={setCategoriesDirty}
             />
-          </SettingsModal>
+          </SettingsPanel>
         )}
 
-        {/* ── Industry Change Request (opens above the Profile popup) ── */}
+          </div>
+
+          {/* Summary column */}
+          {showSummary && (
+            <aside className="space-y-6">
+              <SettingsPanel>
+                <div className="p-5">
+                  <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Current plan</p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-lg font-extrabold text-gray-900 capitalize">{planLabel}</p>
+                    {isTrial && (
+                      <span className="text-[10px] font-semibold bg-amber-50 text-amber-700 px-2 py-0.5 rounded-md">Trial</span>
+                    )}
+                  </div>
+                  {userData.Tenant?.subscription_expiry && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      {daysLeft > 0 ? `${daysLeft} day${daysLeft === 1 ? '' : 's'} left` : 'Expired'} · ends {new Date(userData.Tenant.subscription_expiry).toLocaleDateString()}
+                    </p>
+                  )}
+                  {isOwnerOrAdmin && (
+                    <button
+                      onClick={() => navigate('/pricing')}
+                      className="mt-4 w-full h-9 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition-colors"
+                    >
+                      Upgrade plan
+                    </button>
+                  )}
+                </div>
+              </SettingsPanel>
+
+              <SettingsPanel>
+                <div className="p-5">
+                  <p className="text-sm font-semibold text-gray-900 mb-3">Account status</p>
+                  <div className="space-y-2.5 text-xs">
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-500">Verification</span>
+                      <span className={`font-semibold px-2 py-0.5 rounded-md ${isVerified ? 'text-emerald-700 bg-emerald-50' : 'text-amber-700 bg-amber-50'}`}>
+                        {isVerified ? 'Verified' : 'Pending'}
+                      </span>
+                    </div>
+                    {userData.createdAt && (
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">Created</span>
+                        <span className="font-medium text-gray-700">{new Date(userData.createdAt).toLocaleDateString()}</span>
+                      </div>
+                    )}
+                    {userData.lastLogin && (
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">Last login</span>
+                        <span className="font-medium text-gray-700">{new Date(userData.lastLogin).toLocaleString()}</span>
+                      </div>
+                    )}
+                  </div>
+                  {!isVerified && (
+                    <p className="text-[11px] text-gray-400 mt-3">Add your GSTIN and PAN in the business profile to get verified.</p>
+                  )}
+                </div>
+              </SettingsPanel>
+
+              {currentTab !== 'support' && (
+                <SettingsPanel>
+                  <button onClick={() => selectTab('support')} className="w-full p-5 flex items-center justify-between text-left group">
+                    <div>
+                      <p className="text-sm font-semibold text-gray-900">Need help?</p>
+                      <p className="text-xs text-gray-500">Send a message to our support team</p>
+                    </div>
+                    <ArrowLeft className="w-4 h-4 rotate-180 text-emerald-600 group-hover:translate-x-0.5 transition-transform" />
+                  </button>
+                </SettingsPanel>
+              )}
+            </aside>
+          )}
+        </div>
+
+        {/* ── Industry Change Request ── */}
         {showIndustryRequest && (
           <div className="fixed inset-0 bg-black/60 flex justify-center items-center p-4 z-[60] animate-fadeIn">
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
