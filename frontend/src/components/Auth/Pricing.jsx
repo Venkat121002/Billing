@@ -161,12 +161,6 @@ function Pricing() {
       {/* Hero */}
       <div className="bg-green-600 text-white pt-14 pb-24">
         <div className="container mx-auto px-4 text-center relative">
-          <button
-            onClick={() => navigate(-1)}
-            className="absolute left-4 top-0 inline-flex items-center gap-1.5 text-sm text-green-100 hover:text-white"
-          >
-            <ArrowLeft size={15} /> Back
-          </button>
           {currentUser && (
             <button
               onClick={() => logout()}
