@@ -15,7 +15,18 @@ function initScheduler() {
 
     console.log('⏰ [Scheduler] Initializing automated daily cron jobs (Asia/Kolkata)...');
 
-    // Night 9:00 PM (21:00) IST: Overall Daily Closing Report (Sales, Collections, Top Items, Low Stock & PDF)
+    // 1. Morning Stock & Low Stock Summary: 08:30 AM IST
+    cron.schedule('30 8 * * *', async () => {
+        console.log('⏰ [Scheduler] Running 08:30 AM Morning Stock Summary job...');
+        try {
+            const res = await runDailyLowStockSummary();
+            console.log('✅ [Scheduler] Morning stock summary finished:', res);
+        } catch (err) {
+            console.error('❌ [Scheduler] Morning stock summary error:', err.message);
+        }
+    }, {
+        timezone: 'Asia/Kolkata'
+    });
 
     // 2. Automated Due Payment Reminders: 11:00 AM IST
     cron.schedule('0 11 * * *', async () => {
@@ -43,7 +54,7 @@ function initScheduler() {
         timezone: 'Asia/Kolkata'
     });
 
-    console.log('✅ [Scheduler] Automated jobs active: 11:00 AM Dues Reminders, 09:00 PM Overall Daily Report (Sales + Low Stock + PDF).');
+    console.log('✅ [Scheduler] Automated jobs active: 08:30 AM Morning Stock, 11:00 AM Dues Reminders, 09:00 PM Overall Daily Report (Sales + Low Stock + PDF).');
 }
 
 module.exports = {

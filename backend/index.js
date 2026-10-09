@@ -8,6 +8,14 @@ const { runDailyLowStockSummary } = require('./utils/inventoryAlerts');
 const { runDuePaymentReminders } = require('./utils/dueReminders');
 const { runAllOwnersDailySalesSummary } = require('./utils/salesSummary');
 
+const { connectMongoDB } = require('./config/mongodb');
+
+async function ensureDbConnected() {
+    if ((process.env.DB_TYPE || 'mongodb') === 'mongodb') {
+        await connectMongoDB().catch(err => console.error('Cloud Function MongoDB init failed:', err.message));
+    }
+}
+
 exports.billingApi = onRequest(
     { region: 'asia-south1', memory: '512MiB', timeoutSeconds: 120, maxInstances: 10 },
     app
@@ -17,6 +25,7 @@ exports.billingApi = onRequest(
 exports.billingReminders = onSchedule(
     { schedule: 'every day 10:00', timeZone: 'Asia/Kolkata', region: 'asia-south1', timeoutSeconds: 300 },
     async () => {
+        await ensureDbConnected();
         await runSubscriptionReminders();
     }
 );
@@ -25,6 +34,7 @@ exports.billingReminders = onSchedule(
 exports.lowStockSummaryJob = onSchedule(
     { schedule: 'every day 08:30', timeZone: 'Asia/Kolkata', region: 'asia-south1', timeoutSeconds: 300 },
     async () => {
+        await ensureDbConnected();
         await runDailyLowStockSummary();
     }
 );
@@ -33,6 +43,7 @@ exports.lowStockSummaryJob = onSchedule(
 exports.duePaymentRemindersJob = onSchedule(
     { schedule: 'every day 11:00', timeZone: 'Asia/Kolkata', region: 'asia-south1', timeoutSeconds: 300 },
     async () => {
+        await ensureDbConnected();
         await runDuePaymentReminders();
     }
 );
@@ -41,6 +52,7 @@ exports.duePaymentRemindersJob = onSchedule(
 exports.dailySalesSummaryJob = onSchedule(
     { schedule: 'every day 21:00', timeZone: 'Asia/Kolkata', region: 'asia-south1', timeoutSeconds: 300 },
     async () => {
+        await ensureDbConnected();
         await runAllOwnersDailySalesSummary();
     }
 );
