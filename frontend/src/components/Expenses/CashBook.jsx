@@ -24,8 +24,12 @@ import {
   X,
   SlidersHorizontal,
   Sparkles,
-  Camera
+  Camera,
+  Download
 } from "lucide-react";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
+import toast from "react-hot-toast";
 import ReceiptScannerModal from "../AI/ReceiptScannerModal";
 
 import {
@@ -273,6 +277,402 @@ const CashBook = () => {
       } catch (err) {
         alert(`Error: ${err.message}`);
       }
+    }
+  };
+
+  // Helper: Sanitize string to standard ASCII printable characters for jsPDF
+  const sanitizePdfText = (str) => {
+    if (!str) return "";
+    return String(str)
+      .replace(/[₹\u20B9]/g, "Rs. ")
+      .replace(/[\u2018\u2019]/g, "'")
+      .replace(/[\u201C\u201D]/g, '"')
+      .replace(/[\u2013\u2014]/g, "-")
+      .replace(/[^\x20-\x7E\t\n]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  };
+
+  // Helper: Number to Words for Bill Voucher
+  const numberToWords = (num) => {
+    if (!num || isNaN(num)) return "Zero Only";
+    let amount = Math.abs(Math.round(num));
+    if (amount === 0) return "Zero Only";
+
+    const ones = [
+      "", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine",
+      "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen",
+      "Seventeen", "Eighteen", "Nineteen",
+    ];
+    const tens = [
+      "", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety",
+    ];
+
+    function convertLessThanThousand(n) {
+      if (n === 0) return "";
+      if (n < 20) return ones[n];
+      if (n < 100) return tens[Math.floor(n / 10)] + (n % 10 !== 0 ? " " + ones[n % 10] : "");
+      return (
+        ones[Math.floor(n / 100)] +
+        " Hundred" +
+        (n % 100 !== 0 ? " " + convertLessThanThousand(n % 100) : "")
+      );
+    }
+
+    let words = "";
+    if (amount >= 10000000) {
+      words += convertLessThanThousand(Math.floor(amount / 10000000)) + " Crore ";
+      amount %= 10000000;
+    }
+    if (amount >= 100000) {
+      words += convertLessThanThousand(Math.floor(amount / 100000)) + " Lakh ";
+      amount %= 100000;
+    }
+    if (amount >= 1000) {
+      words += convertLessThanThousand(Math.floor(amount / 1000)) + " Thousand ";
+      amount %= 1000;
+    }
+    if (amount > 0) {
+      words += convertLessThanThousand(amount);
+    }
+
+    return (words.trim() + " Only").replace(/\s+/g, " ");
+  };
+
+  // Handler: Generate and Download Bill / Voucher as PDF
+  const handleDownloadBill = (transaction) => {
+    if (!transaction) return;
+
+    try {
+      const doc = new jsPDF("p", "mm", "a4");
+      const isIncome = transaction.type === "income" || transaction.type === "cash_in";
+      const primaryColor = isIncome ? [16, 185, 129] : [239, 68, 68]; // Emerald or Rose
+      const darkColor = [30, 41, 59]; // Slate 800
+
+      const businessName = sanitizePdfText(
+        currentUser?.companyDetails?.name ||
+        currentUser?.businessName ||
+        currentUser?.companyName ||
+        currentUser?.displayName ||
+        currentUser?.name ||
+        "Swordnex Billing"
+      );
+
+      const businessPhone = sanitizePdfText(
+        currentUser?.companyDetails?.phone ||
+        currentUser?.phone ||
+        currentUser?.mobile ||
+        ""
+      );
+
+      const businessGstin = sanitizePdfText(
+        currentUser?.companyDetails?.gstin ||
+        currentUser?.gstin ||
+        ""
+      );
+
+      const businessAddress = sanitizePdfText(
+        [
+          currentUser?.companyDetails?.street || currentUser?.address?.street,
+          currentUser?.companyDetails?.city || currentUser?.address?.city,
+          currentUser?.companyDetails?.state || currentUser?.address?.state,
+          currentUser?.companyDetails?.pincode || currentUser?.address?.pincode,
+        ]
+          .filter(Boolean)
+          .join(", ")
+      );
+
+      const voucherId = sanitizePdfText(
+        transaction.id
+          ? `VCH-${transaction.id.toString().slice(-8).toUpperCase()}`
+          : `VCH-${Date.now().toString().slice(-8)}`
+      );
+
+      const invoiceRef = sanitizePdfText(
+        transaction.metadata?.invoiceNumber ||
+        (transaction.description?.match(/#([A-Za-z0-9\-_/]+)/)?.[1] || null)
+      );
+
+      // --- Header Banner ---
+      doc.setFillColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+      doc.rect(0, 0, 210, 10, "F");
+
+      // --- Business Details (Left) ---
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(18);
+      doc.setTextColor(darkColor[0], darkColor[1], darkColor[2]);
+      doc.text(doc.splitTextToSize(businessName, 110), 14, 25);
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      doc.setTextColor(100, 116, 139);
+
+      let businessY = 31;
+      if (businessAddress) {
+        const splitAddr = doc.splitTextToSize(businessAddress, 110);
+        doc.text(splitAddr, 14, businessY);
+        businessY += splitAddr.length * 4 + 2;
+      }
+      if (businessPhone) {
+        doc.text(`Phone: ${businessPhone}`, 14, businessY);
+        businessY += 5;
+      }
+      if (businessGstin) {
+        doc.text(`GSTIN: ${businessGstin}`, 14, businessY);
+        businessY += 5;
+      }
+
+      // --- Document Title & Meta (Right) ---
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(16);
+      doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+      doc.text(isIncome ? "INCOME RECEIPT" : "EXPENSE BILL", 196, 25, { align: "right" });
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      doc.setTextColor(darkColor[0], darkColor[1], darkColor[2]);
+      doc.text(`Voucher #: ${voucherId}`, 196, 32, { align: "right" });
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      doc.setTextColor(100, 116, 139);
+      doc.text(`Date: ${transaction.date || new Date().toISOString().split("T")[0]}`, 196, 38, { align: "right" });
+      if (invoiceRef) {
+        doc.text(`Ref Invoice #: ${invoiceRef}`, 196, 44, { align: "right" });
+      }
+
+      // --- Divider Line ---
+      const startSectionY = Math.max(businessY + 4, invoiceRef ? 50 : 46);
+      doc.setDrawColor(226, 232, 240);
+      doc.setLineWidth(0.5);
+      doc.line(14, startSectionY, 196, startSectionY);
+
+      // --- Transaction Meta Box (Grid of 4 fields) ---
+      const boxY = startSectionY + 6;
+      doc.setFillColor(248, 250, 252);
+      doc.roundedRect(14, boxY, 182, 26, 3, 3, "F");
+      doc.setDrawColor(226, 232, 240);
+      doc.roundedRect(14, boxY, 182, 26, 3, 3, "S");
+
+      // Field 1: Transaction Type
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.setTextColor(100, 116, 139);
+      doc.text("TRANSACTION TYPE", 20, boxY + 8);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+      doc.text(isIncome ? "Income (Cash In)" : "Expense (Cash Out)", 20, boxY + 16);
+
+      // Field 2: Category
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.setTextColor(100, 116, 139);
+      doc.text("CATEGORY", 70, boxY + 8);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      doc.setTextColor(darkColor[0], darkColor[1], darkColor[2]);
+      doc.text(sanitizePdfText(transaction.category || "General"), 70, boxY + 16);
+
+      // Field 3: Payment Method
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.setTextColor(100, 116, 139);
+      doc.text("PAYMENT METHOD", 120, boxY + 8);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      doc.setTextColor(darkColor[0], darkColor[1], darkColor[2]);
+      doc.text(sanitizePdfText((transaction.paymentMode || "Cash / Direct").toUpperCase()), 120, boxY + 16);
+
+      // Field 4: Source / Channel
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.setTextColor(100, 116, 139);
+      doc.text("SOURCE / CHANNEL", 165, boxY + 8);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      doc.setTextColor(darkColor[0], darkColor[1], darkColor[2]);
+      doc.text(sanitizePdfText(transaction.source || "Manual Entry"), 165, boxY + 16);
+
+      // --- Items / Details Table ---
+      const tableStartY = boxY + 32;
+      const tableHeaders = [
+        ["#", "Particulars / Description", "Category", "Type", "Amount (Rs.)"]
+      ];
+
+      const amountNum = Math.abs(parseFloat(transaction.amount) || 0);
+      const formattedAmount = `Rs. ${amountNum.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+      const cleanItemDesc = sanitizePdfText(
+        transaction.description || (isIncome ? "Income entry" : "Expense entry")
+      );
+      const cleanItemCat = sanitizePdfText(transaction.category || "-");
+
+      const tableRows = [
+        [
+          "1",
+          cleanItemDesc,
+          cleanItemCat,
+          isIncome ? "Income" : "Expense",
+          formattedAmount
+        ]
+      ];
+
+      autoTable(doc, {
+        startY: tableStartY,
+        head: tableHeaders,
+        body: tableRows,
+        theme: "plain",
+        headStyles: {
+          fillColor: primaryColor,
+          textColor: 255,
+          fontStyle: "bold",
+          fontSize: 9,
+          halign: "left",
+          cellPadding: 4,
+        },
+        styles: {
+          fontSize: 9,
+          cellPadding: 4,
+          textColor: [51, 65, 85],
+          lineColor: [226, 232, 240],
+          lineWidth: 0.1,
+        },
+        columnStyles: {
+          0: { cellWidth: 12, halign: "center" },
+          1: { cellWidth: 85 },
+          2: { cellWidth: 35 },
+          3: { cellWidth: 25 },
+          4: { cellWidth: 25, halign: "right", fontStyle: "bold" },
+        },
+        alternateRowStyles: {
+          fillColor: [248, 250, 252],
+        },
+      });
+
+      const currentY = (doc.lastAutoTable?.finalY || tableStartY + 25) + 8;
+
+      // --- Amount in Words & Totals Summary ---
+      const summaryBoxY = currentY;
+
+      // Amount in Words (Left)
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(8);
+      doc.setTextColor(100, 116, 139);
+      doc.text("AMOUNT IN WORDS:", 14, summaryBoxY);
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      doc.setTextColor(darkColor[0], darkColor[1], darkColor[2]);
+      const amountInWords = numberToWords(Math.round(amountNum));
+      const splitWords = doc.splitTextToSize(`Indian Rupees ${amountInWords}`, 105);
+      doc.text(splitWords, 14, summaryBoxY + 5);
+
+      // Totals Box (Right)
+      const totBoxX = 125;
+      doc.setFillColor(248, 250, 252);
+      doc.roundedRect(totBoxX, summaryBoxY - 4, 71, 24, 2, 2, "F");
+      doc.setDrawColor(226, 232, 240);
+      doc.roundedRect(totBoxX, summaryBoxY - 4, 71, 24, 2, 2, "S");
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      doc.setTextColor(100, 116, 139);
+      doc.text("Total Amount:", totBoxX + 6, summaryBoxY + 5);
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(12);
+      doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+      doc.text(formattedAmount, totBoxX + 65, summaryBoxY + 5, { align: "right" });
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.setTextColor(148, 163, 184);
+      doc.text("Status:", totBoxX + 6, summaryBoxY + 14);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(16, 185, 129);
+      doc.text("PAID / SETTLED", totBoxX + 65, summaryBoxY + 14, { align: "right" });
+
+      let postSummaryY = summaryBoxY + 28;
+
+      // Additional Remarks / Audit Information
+      let rawNotes = transaction.notes || "";
+      if (
+        transaction.metadata?.vendorGstin &&
+        !rawNotes.includes(transaction.metadata.vendorGstin)
+      ) {
+        rawNotes = rawNotes
+          ? `${rawNotes} | Vendor GSTIN: ${transaction.metadata.vendorGstin}`
+          : `Vendor GSTIN: ${transaction.metadata.vendorGstin}`;
+      }
+      const cleanNotes = sanitizePdfText(rawNotes);
+
+      if (cleanNotes) {
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(8);
+        const splitNotes = doc.splitTextToSize(cleanNotes, 168);
+        const lineSpacing = 4;
+        const textBlockHeight = splitNotes.length * lineSpacing;
+        const boxHeight = Math.max(14, 10 + textBlockHeight);
+
+        doc.setFillColor(248, 250, 252);
+        doc.roundedRect(14, postSummaryY, 182, boxHeight, 2, 2, "F");
+        doc.setDrawColor(226, 232, 240);
+        doc.roundedRect(14, postSummaryY, 182, boxHeight, 2, 2, "S");
+
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(8);
+        doc.setTextColor(100, 116, 139);
+        doc.text("REMARKS / AUDIT INFO:", 18, postSummaryY + 6);
+
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(8);
+        doc.setTextColor(51, 65, 85);
+        doc.text(splitNotes, 18, postSummaryY + 11);
+
+        postSummaryY += boxHeight + 8;
+      }
+
+      // --- Signatures & Footer ---
+      const pageHeight = 297;
+      const footerY = Math.max(postSummaryY + 16, pageHeight - 45);
+
+      doc.setDrawColor(203, 213, 225);
+      doc.setLineWidth(0.5);
+      doc.line(14, footerY + 15, 60, footerY + 15);
+      doc.line(150, footerY + 15, 196, footerY + 15);
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.setTextColor(100, 116, 139);
+      doc.text("Prepared By", 37, footerY + 20, { align: "center" });
+      doc.text("Authorized Signatory", 173, footerY + 20, { align: "center" });
+
+      // Bottom note
+      doc.setFontSize(7.5);
+      doc.setTextColor(148, 163, 184);
+      doc.text(
+        "This is a computer-generated transaction bill/voucher recorded in Swordnex Billing.",
+        105,
+        pageHeight - 12,
+        { align: "center" }
+      );
+      doc.text(
+        `Generated on ${new Date().toLocaleString("en-IN")}`,
+        105,
+        pageHeight - 8,
+        { align: "center" }
+      );
+
+      const safeDesc = cleanItemDesc
+        .replace(/[^a-zA-Z0-9]/g, "_")
+        .slice(0, 15);
+      const fileName = `${isIncome ? "Income" : "Expense"}_Bill_${transaction.date || "record"}_${safeDesc || "voucher"}.pdf`;
+      doc.save(fileName);
+      toast.success("Bill downloaded successfully!");
+    } catch (err) {
+      console.error("Error generating bill PDF:", err);
+      toast.error("Failed to generate bill download.");
     }
   };
 
@@ -575,11 +975,30 @@ const CashBook = () => {
                           <td className={`px-6 py-4 text-right font-mono text-sm font-semibold ${t.type === 'income' ? 'text-green-600' : 'text-red-500'}`}>
                             {t.type === 'income' ? '+' : '-'}₹{t.amount.toLocaleString('en-IN')}
                           </td>
-                          <td className="px-6 py-4 text-right space-x-1">
-                            <button onClick={() => openModal(t)} className="p-2 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-blue-600 transition-colors">
+                          <td className="px-6 py-4 text-right space-x-1 whitespace-nowrap">
+                            <button
+                              onClick={() => handleDownloadBill(t)}
+                              title="Download Bill"
+                              aria-label="Download Bill"
+                              className="p-2 hover:bg-emerald-50 rounded-lg text-slate-400 hover:text-emerald-600 transition-colors inline-flex items-center justify-center"
+                            >
+                              <Download size={16} />
+                              <span className="sr-only">Download Bill</span>
+                            </button>
+                            <button
+                              onClick={() => openModal(t)}
+                              title="Edit Entry"
+                              aria-label="Edit Entry"
+                              className="p-2 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-blue-600 transition-colors"
+                            >
                               <Edit3 size={16} />
                             </button>
-                            <button onClick={() => handleDelete(t.id)} className="p-2 hover:bg-red-50 rounded-lg text-slate-400 hover:text-red-600 transition-colors">
+                            <button
+                              onClick={() => handleDelete(t.id)}
+                              title="Delete Entry"
+                              aria-label="Delete Entry"
+                              className="p-2 hover:bg-red-50 rounded-lg text-slate-400 hover:text-red-600 transition-colors"
+                            >
                               <Trash2 size={16} />
                             </button>
                           </td>
