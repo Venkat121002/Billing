@@ -9,6 +9,7 @@ const emailTemplates = require('./emailTemplates');
 const { money } = require('./paymentService');
 const { generateDailyReportPDF } = require('./reportPdfGenerator');
 const { listStoreRecords } = require('./storeRecords');
+const { Bill, Credit, Product, EmailLog } = require('../models/mongodb');
 
 /**
  * Returns Start & End of day in IST (Asia/Kolkata)
@@ -37,11 +38,28 @@ async function generateDailySalesSummary({ ownerId, date = new Date() }) {
         const ownerMobile = owner.mobile || owner.phone;
         const ownerEmail = owner.email;
 
-        // Fetch all bills generated today strictly for this owner
-        const bills = await Bill.find({
-            ownerId,
-            createdAt: { $gte: start, $lte: end }
-        }).lean();
+        // Fetch all bills, credits, and products strictly for this owner (Dual-mode support)
+        let bills = [];
+        let todayCredits = [];
+        let products = [];
+
+        if (process.env.DB_TYPE === 'firestore') {
+            bills = await listStoreRecords(ownerId, 'bills', { since: start, until: end });
+            todayCredits = await listStoreRecords(ownerId, 'credit_customers', { since: start, until: end });
+            products = await listStoreRecords(ownerId, 'products');
+        } else {
+            bills = await Bill.find({
+                ownerId,
+                createdAt: { $gte: start, $lte: end }
+            }).lean();
+            todayCredits = await Credit.find({
+                ownerId,
+                createdAt: { $gte: start, $lte: end }
+            }).lean();
+            products = await Product.find({
+                ownerId
+            }).lean();
+        }
 
         let totalRevenue = 0;
         let cashTotal = 0;
@@ -80,18 +98,7 @@ async function generateDailySalesSummary({ ownerId, date = new Date() }) {
             .sort((a, b) => b.qty - a.qty)
             .slice(0, 5);
 
-        // Fetch dues created today strictly for this owner
-        const todayCredits = await Credit.find({
-            ownerId,
-            createdAt: { $gte: start, $lte: end }
-        }).lean();
-
         const duesIncurred = todayCredits.reduce((sum, c) => sum + Number(c.balance || c.amount || 0), 0);
-
-        // Fetch low-stock products strictly for this owner
-        const products = await Product.find({
-            ownerId
-        }).lean();
 
         const lowStockItems = (products || []).filter((p) => {
             const threshold = Number(p.minStockThreshold !== undefined ? p.minStockThreshold : (p.reorderLevel || 5));
@@ -168,12 +175,38 @@ async function generateDailySalesSummary({ ownerId, date = new Date() }) {
         // 2. Send Email Summary to Owner (with attached PDF)
         if (ownerEmail && /^\S+@\S+\.\S+$/.test(ownerEmail)) {
             const emailTemplate = emailTemplates.dailySalesSummary(summaryData);
-            await sendEmail({
-                to: ownerEmail,
-                ...emailTemplate,
-                attachment: pdfAttachment ? [pdfAttachment] : []
-            }).then(() => { result.emailSent = true; })
-              .catch((err) => console.error(`[salesSummary] Email failed for ${ownerEmail}:`, err.message));
+            try {
+                await sendEmail({
+                    to: ownerEmail,
+                    ...emailTemplate,
+                    attachment: pdfAttachment ? [pdfAttachment] : []
+                });
+                result.emailSent = true;
+                if (EmailLog) {
+                    await EmailLog.create({
+                        tenantId: owner.tenantId || process.env.TENANT_ID || 'SwordNexBilling-4pzp8',
+                        ownerId,
+                        recipient: ownerEmail,
+                        subject: emailTemplate.subject,
+                        type: 'daily_closing_summary',
+                        status: 'sent',
+                        metadata: { storeName, totalSales: summaryData.totalSales, totalBills: bills.length }
+                    }).catch((e) => console.error('[salesSummary] EmailLog error:', e.message));
+                }
+            } catch (err) {
+                console.error(`[salesSummary] Email failed for ${ownerEmail}:`, err.message);
+                if (EmailLog) {
+                    await EmailLog.create({
+                        tenantId: owner.tenantId || process.env.TENANT_ID || 'SwordNexBilling-4pzp8',
+                        ownerId,
+                        recipient: ownerEmail,
+                        subject: emailTemplate.subject,
+                        type: 'daily_closing_summary',
+                        status: 'failed',
+                        error: err.message
+                    }).catch(() => {});
+                }
+            }
         }
 
         return result;

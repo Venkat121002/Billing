@@ -24,9 +24,13 @@ const OtpVerification = require('./OtpVerification');
 const Plan = require('./Plan');
 const PlatformSetting = require('./PlatformSetting');
 const DepartmentKnowledge = require('./DepartmentKnowledge');
+const EmailLog = require('./EmailLog');
 
 // Collection name to Mongoose Model mapping
 const modelMap = {
+    'email_logs': EmailLog,
+    'emaillog': EmailLog,
+    'emaillogs': EmailLog,
     'owner': Owner,
     'owners': Owner,
     'subuser': SubUser,
@@ -99,6 +103,7 @@ module.exports = {
     OtpVerification,
     Plan,
     DepartmentKnowledge,
+    EmailLog,
     getModel,
     modelMap
 };
