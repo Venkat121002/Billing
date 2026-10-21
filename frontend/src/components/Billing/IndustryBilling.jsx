@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
+import { flushSync } from "react-dom";
 import { useLocation, Link } from "react-router-dom";
 import axios from "axios";
 import { previewInvoiceNumber } from "../../utils/invoiceNumber";
@@ -1205,6 +1206,11 @@ const IndustryBilling = () => {
 
     const formatStr = (printerFormat || "A4").toLowerCase();
     const isThermalFormat = formatStr.includes("thermal") || formatStr.includes("80mm") || formatStr.includes("58mm");
+    const isA5 = formatStr.includes("a5");
+    const is58 = formatStr.includes("58mm");
+    const isDotMatrix = formatStr.includes("dotmatrix");
+    const thermalClass = is58 ? "receipt-thermal-58" : "receipt-thermal-80";
+    const containerClass = isDotMatrix ? "receipt-dotmatrix font-mono" : (isA5 ? "receipt-a5 font-arial" : "receipt-a4 font-arial");
     const totals = getTotals();
     const manualDiscount = Number(discount) || 0;
     const business = { name: businessName, ...businessAddress, phone: businessPhone, email: businessEmail, gstin: businessGstin };

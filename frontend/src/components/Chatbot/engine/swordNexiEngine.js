@@ -124,6 +124,13 @@ export async function generateSwordNexiResponse(userQuery, currentUser, currentP
       }
     }
   } catch (backendErr) {
+    if (backendErr?.response?.status === 403 || backendErr?.response?.data?.code === 'PLAN_FEATURE_LOCKED') {
+      return {
+        reply: backendErr?.response?.data?.msg || "⚠️ The AI Assistant / Chatbot is disabled for your subscription plan. Please contact your store administrator or upgrade your plan to access this feature.",
+        industry: { key: industryKey, label: profile.label, emoji: industryData.emoji },
+        department,
+      };
+    }
     console.warn("⚠️ Live assistant query fell back to offline engine:", backendErr?.message);
   }
 

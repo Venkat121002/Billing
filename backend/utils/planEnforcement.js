@@ -9,13 +9,13 @@ const planStore = require('./planStore');
 const { countStoreRecords } = require('./storeRecords');
 const { CAPABILITY_MAP } = require('./planCapabilities');
 
-const effectiveOwnerId = (user) => (user.role === 'owner' ? user.userId : user.ownerId);
+const effectiveOwnerId = (user) => (user ? (user.role === 'owner' || user.role === 'TenantAdmin' ? (user.userId || user.ownerId) : (user.ownerId || user.userId)) : null);
 
 /** Resolve which plan an owner is on and that plan's configured capabilities. */
 async function getOwnerPlan(ownerId) {
     const owner = await platformStore.getOwner(ownerId);
-    const rawKey = String(owner?.subscription?.plan || 'trial').toLowerCase();
-    const planKey = planStore.KEYS.includes(rawKey) ? rawKey : 'trial';
+    const raw = String(owner?.subscription?.plan || 'trial').trim().toLowerCase();
+    const planKey = (raw === 'free' || raw === 'trial') ? 'trial' : (planStore.KEYS.includes(raw) ? raw : 'trial');
     const plan = await planStore.getPlan(planKey);
 
     const caps = {};
@@ -74,16 +74,25 @@ function requireCapability(capKey) {
         try {
             const ownerId = effectiveOwnerId(req.user);
             const { caps, planName } = await getOwnerPlan(ownerId);
-            if (caps[capKey]?.enabled) return next();
+            if (caps[capKey]?.enabled === true) return next();
 
             const def = CAPABILITY_MAP[capKey];
             return res.status(403).json({
-                msg: `${def?.label || capKey} isn't included in your ${planName} plan. Upgrade to use it.`,
+                success: false,
+                msg: `${def?.label || capKey} is not enabled for your ${planName} plan. Please contact your administrator or upgrade.`,
                 code: 'PLAN_FEATURE_LOCKED',
                 capability: capKey
             });
         } catch (err) {
             console.error(`[planEnforcement] requireCapability(${capKey}) error:`, err.message);
+            if (capKey === 'aiAssistant') {
+                return res.status(403).json({
+                    success: false,
+                    msg: 'AI Assistant / Chatbot is disabled for your subscription plan.',
+                    code: 'PLAN_FEATURE_LOCKED',
+                    capability: capKey
+                });
+            }
             next();
         }
     };

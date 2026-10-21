@@ -206,7 +206,9 @@ export function AuthProvider({ children }) {
   // GET SUBSCRIPTION PLANS (public — works logged out too; superadmin-controlled)
   async function getPlans() {
     try {
-      const res = await api.get("billing/plans");
+      const res = await api.get(`billing/plans?_t=${Date.now()}`, {
+        headers: { 'Cache-Control': 'no-cache, no-store' },
+      });
       return res.data;
     } catch (err) {
       throw err.response ? err.response.data : err;
@@ -214,9 +216,29 @@ export function AuthProvider({ children }) {
   }
 
   // Refetch the current owner's plan capabilities whenever their plan changes
-  // (or on login / logout). Never throws — a failed fetch just leaves
-  // capabilities permissive (see hasCapability/getCapabilityLimit below).
-  const currentPlanKey = currentUser?.Tenant?.subscription_plan;
+  // (or on login / logout, or when Super Admin saves changes).
+  const rawPlanKey = currentUser?.Tenant?.subscription_plan || currentUser?.subscription?.plan || currentUser?.subscription_plan || (currentUser ? 'trial' : null);
+  const normalizedPlanKey = rawPlanKey ? String(rawPlanKey).trim().toLowerCase() : null;
+  const currentPlanKey = normalizedPlanKey === 'free' ? 'trial' : normalizedPlanKey;
+
+  const [plansSyncCounter, setPlansSyncCounter] = useState(0);
+  const refreshPlanCapabilities = () => setPlansSyncCounter((c) => c + 1);
+
+  // Cross-tab & window focus dynamic capability sync:
+  useEffect(() => {
+    const handleSync = () => {
+      refreshPlanCapabilities();
+    };
+    window.addEventListener("storage", handleSync);
+    window.addEventListener("plans-updated", handleSync);
+    window.addEventListener("focus", handleSync);
+    return () => {
+      window.removeEventListener("storage", handleSync);
+      window.removeEventListener("plans-updated", handleSync);
+      window.removeEventListener("focus", handleSync);
+    };
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     if (!currentUser || !currentPlanKey) {
@@ -228,7 +250,7 @@ export function AuthProvider({ children }) {
     (async () => {
       try {
         const plans = await getPlans();
-        const key = String(currentPlanKey).toLowerCase();
+        const key = currentPlanKey;
         const match = plans.find((p) => p.key === key) || plans.find((p) => p.key === "trial");
         const map = {};
         (match?.capabilities || []).forEach((c) => { map[c.key] = c; });
@@ -242,12 +264,17 @@ export function AuthProvider({ children }) {
     })();
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentUser?.userId, currentPlanKey]);
+  }, [currentUser?.userId || currentUser?._id || currentUser?.id || currentUser?.email, currentPlanKey, plansSyncCounter]);
 
-  // Permissive by default (true/unlimited) while loading or on fetch failure —
-  // a locked screen should never flash open-then-closed, and a backend hiccup
-  // here should never lock someone out of something they're actually allowed.
-  const hasCapability = (key) => planCapabilities?.[key]?.enabled !== false;
+  // Strict check for aiAssistant (must be loaded and explicitly enabled: true).
+  // Permissive by default for other non-security limits so screens don't flash.
+  const hasCapability = (key) => {
+    if (key === 'aiAssistant') {
+      if (planCapabilitiesLoading || !planCapabilities) return false;
+      return Boolean(planCapabilities[key]?.enabled === true);
+    }
+    return planCapabilities?.[key]?.enabled !== false;
+  };
   const getCapabilityLimit = (key) => (planCapabilities ? planCapabilities[key]?.limit ?? null : null);
 
   // CREATE SUBSCRIPTION ORDER
@@ -427,6 +454,7 @@ export function AuthProvider({ children }) {
     sendSignupOtp,
     verifySignupOtp,
     getPlans,
+    refreshPlanCapabilities,
     planCapabilities,
     planCapabilitiesLoading,
     hasCapability,

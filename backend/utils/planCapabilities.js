@@ -62,6 +62,13 @@ const CAPABILITIES = [
         help: 'Shows the "Send bill on WhatsApp" option at POS checkout. Each message is billed to SwordNex by Meta.',
     },
     {
+        key: 'aiAssistant',
+        label: 'AI Assistant / Chatbot (SwordNexi)',
+        type: 'toggle',
+        enforced: true,
+        help: 'Turns the intelligent AI Assistant / Chatbot on or off for stores on this plan.',
+    },
+    {
         key: 'dataExport',
         label: 'Data export (Excel / PDF)',
         type: 'toggle',
