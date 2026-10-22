@@ -1,5 +1,5 @@
 const { getCollection, fetchUnifiedData } = require('../utils/dbUtils');
-const { sendDirectText } = require('../utils/whatsappService');
+const { whatsappLink, manualMessage } = require('../utils/customerWhatsApp');
 const platformStore = require('../utils/platformStore');
 
 const getAlterationTicketsCollection = (req) => {
@@ -100,17 +100,16 @@ exports.createAlterationTicket = async (req, res) => {
         const colRef = getAlterationTicketsCollection(req);
         const docRef = await colRef.add(ticketData);
 
-        // Send initial WhatsApp confirmation if phone exists
+        // Confirmation message for the store to send from its own WhatsApp (see utils/customerWhatsApp.js)
+        let link = null;
         if (ticketData.customerPhone) {
             const owner = await platformStore.getOwner(effectiveOwnerId).catch(() => null);
             const storeName = owner?.companyDetails?.name || owner?.businessName || req.user.businessName || "Our Clothing Store";
             const text = `Hi ${ticketData.customerName},\n\nWe have received your garment "${ticketData.garmentName}" for alteration at ${storeName}.\n\nTicket No: ${ticketData.ticketNo}\nAlterations: ${ticketData.alterationTypes.join(', ')}\nPromised Date: ${ticketData.promisedDate || 'Soon'}\nCharge: Rs. ${ticketData.charge}\n\nWe will notify you immediately once your fitting is ready for pickup!\n- Team ${storeName}`;
-
-            sendDirectText({ to: ticketData.customerPhone, text })
-                .catch(err => console.log('[Alteration WhatsApp Note]:', err.message));
+            link = whatsappLink(ticketData.customerPhone, text);
         }
 
-        res.status(201).json({ id: docRef.id, ...ticketData });
+        res.status(201).json({ id: docRef.id, ...ticketData, whatsappLink: link });
     } catch (err) {
         console.error("Create Alteration Ticket Error:", err.message);
         res.status(500).json({ msg: "Server Error", error: err.message });
@@ -144,19 +143,17 @@ exports.updateAlterationTicket = async (req, res) => {
         const garment = updateData.garmentName || prevData.garmentName || 'garment';
         const ticketNo = updateData.ticketNo || prevData.ticketNo || id.slice(-6);
 
+        let link = null;
         if (newStatus === 'Ready for Pickup' && prevData.status !== 'Ready for Pickup' && targetPhone) {
             const effectiveOwnerId = req.user.role === 'owner' ? req.user.userId : (req.user.ownerId || req.user.userId);
             const owner = await platformStore.getOwner(effectiveOwnerId).catch(() => null);
             const storeName = owner?.companyDetails?.name || owner?.businessName || req.user.businessName || "Our Clothing Store";
 
             const readyText = `Hello ${customerName},\n\nGreat news! Your altered ${garment} (Ticket #${ticketNo}) is READY for pickup at ${storeName}! ✨\n\nPlease visit our store at your convenience to collect and try it on.\n\nThank you for shopping with us!\n- Team ${storeName}`;
-
-            sendDirectText({ to: targetPhone, text: readyText })
-                .then(() => console.log(`[WhatsApp] Ready alert sent to ${targetPhone} for ${ticketNo}`))
-                .catch(err => console.error('[WhatsApp Ready Alert Error]:', err.message));
+            link = whatsappLink(targetPhone, readyText);
         }
 
-        res.json({ id: doc.id, ...prevData, ...updateData });
+        res.json({ id: doc.id, ...prevData, ...updateData, whatsappLink: link });
     } catch (err) {
         console.error("Update Alteration Ticket Error:", err.message);
         res.status(500).json({ msg: "Server Error", error: err.message });
@@ -187,8 +184,7 @@ exports.notifyCustomer = async (req, res) => {
 
         const text = `Hello ${data.customerName || 'Customer'},\n\nReminder: Your altered ${data.garmentName || 'garment'} (Ticket #${data.ticketNo}) is READY for pickup at ${storeName}.\n\nRemaining Balance: Rs. ${data.isPaid ? '0 (Paid)' : (data.charge || 0)}\n\nLooking forward to seeing you!\n- Team ${storeName}`;
 
-        const waRes = await sendDirectText({ to: data.customerPhone, text });
-        res.json({ success: true, msg: "WhatsApp notification dispatched successfully", waRes });
+        res.json(manualMessage(data.customerPhone, text));
     } catch (err) {
         console.error("Notify Alteration Customer Error:", err.message);
         res.status(500).json({ msg: "Failed to dispatch WhatsApp alert", error: err.message });

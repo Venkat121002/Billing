@@ -11,10 +11,11 @@ const planStore = require('../utils/planStore');
 // Determine which database to use
 const DB_TYPE = process.env.DB_TYPE || 'mongodb';
 
-// Per-seat add-on price is not part of the Free/Standard/Premium plan config
-// (superadmin doesn't manage it yet) — Standard/Premium prices themselves
-// come from the Plan collection, set on the superadmin Plans page.
-const ADDITIONAL_USER_UNIT_PRICE = 15;
+// Price of one extra staff login: a platform setting the super admin edits
+// (Platform settings). Standard/Premium prices come from the plans store.
+const extraStaffLoginPrice = async () =>
+    Number((await platformStore.getPlatformSettings()).extraStaffLoginPrice) || 0;
+const MAX_EXTRA_LOGINS_PER_ORDER = 500;
 
 // @desc    Create Cashfree Order for Subscription
 // @route   POST /api/v2/billing/create-order
@@ -31,10 +32,10 @@ exports.createSubscriptionOrder = async (req, res) => {
         let count = 0;
         if (plan === 'additional_users') {
             count = req.body.count == null ? 1 : Number(req.body.count);
-            if (!Number.isSafeInteger(count) || count < 1) {
+            if (!Number.isSafeInteger(count) || count < 1 || count > MAX_EXTRA_LOGINS_PER_ORDER) {
                 return res.status(400).json({ msg: "Enter a valid number of additional users." });
             }
-            amount = ADDITIONAL_USER_UNIT_PRICE * count;
+            amount = (await extraStaffLoginPrice()) * count;
         } else {
             if (!['standard', 'premium'].includes(plan)) {
                 return res.status(400).json({ msg: "Invalid plan selected" });
@@ -189,7 +190,8 @@ exports.settleSubscriptionOrder = async (orderId, order, successfulPayment) => {
         const billingCycle = tags.billingCycle || 'one-time';
         const count = Number(tags.count || 0);
         const amount = Number(order.order_amount);
-        if ((tags.plan === 'additional_users' && (!Number.isSafeInteger(count) || count < 1 || amount !== ADDITIONAL_USER_UNIT_PRICE * count)) ||
+        const unitPrice = await extraStaffLoginPrice();
+        if ((tags.plan === 'additional_users' && (!Number.isSafeInteger(count) || count < 1 || Math.abs(amount - unitPrice * count) >= 0.01)) ||
             (tags.plan !== 'additional_users' && !['monthly', 'yearly'].includes(billingCycle)) ||
             !Number.isFinite(amount) || amount <= 0) return null;
 

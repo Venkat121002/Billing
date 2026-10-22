@@ -141,12 +141,10 @@ const MobileInventory = () => {
     }
 
     setIsLoading(true);
-    console.log("📱 MobileInventory: Fetching products...");
     try {
       const res = await axios.get(`${API_URL}/products`, {
         headers: { "x-auth-token": token },
       });
-      console.log("✅ MobileInventory: Found", res.data?.length || 0, "products");
       setMobiles((res.data || []).map(p => ({
         ...p,
         id: p.id || p._id,

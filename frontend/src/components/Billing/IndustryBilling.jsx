@@ -1051,20 +1051,10 @@ const IndustryBilling = () => {
       // turned into the WhatsApp PDF (both copy the rendered receipt).
       flushSync(() => setReceiptNo(finalReceiptNo));
 
+      // WhatsApp bills go through the approved template (plan capability
+      // `whatsappInvoices`), for every industry including clothing.
       if (savedBillId && canWhatsappBill && sendWhatsappBill && customerForm.phone) {
         await sendBillOnWhatsapp(savedBillId, token);
-      } else if (customerForm.phone && profile.key === 'clothing') {
-        const authToken = localStorage.getItem('token') || token;
-        axios.post(`${API_URL}/clothing/send-bill-whatsapp`, {
-          customerPhone: customerForm.phone,
-          customerName: customerForm.name || 'Valued Customer',
-          billNumber: receiptNo || 'N/A',
-          items: cart,
-          grandTotal: getTotals().grandTotal,
-          discountTotal: discount,
-          paymentMethod,
-          salesmanName: selectedSalesman || ''
-        }, { headers: { Authorization: `Bearer ${authToken}` } }).catch(() => {});
       }
 
 

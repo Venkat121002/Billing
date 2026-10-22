@@ -8,7 +8,6 @@
 const XLSX = require('xlsx');
 const platformStore = require('./platformStore');
 const { listStoreRecords } = require('./storeRecords');
-const { GstBill } = require('../models/mongodb');
 
 /**
  * Parses date filter bounds from month/year or explicit range
@@ -47,25 +46,9 @@ async function generateGstReturnsSummary({ ownerId, tenantId, month, year, start
     const storeGstin = owner?.companyDetails?.gstNumber || owner?.gstin || '';
     const state = owner?.companyDetails?.state || 'Tamil Nadu';
 
-    let bills = [];
-    if (ownerId) {
-        try {
-            bills = await listStoreRecords(ownerId, 'gstBills', { since: start, until: end });
-        } catch (fetchErr) {
-            console.warn('listStoreRecords gstBills fallback:', fetchErr.message);
-        }
-    }
-
-    if ((!bills || bills.length === 0) && GstBill) {
-        const query = {
-            createdAt: { $gte: start, $lte: end }
-        };
-        if (ownerId) query.ownerId = ownerId;
-        if (tenantId) query.tenantId = tenantId;
-        bills = await GstBill.find(query).sort({ createdAt: 1 }).lean();
-    } else if (Array.isArray(bills)) {
-        bills.sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0));
-    }
+    // This store's GST bills only (MongoDB or Firestore); no fallback query.
+    const bills = (await listStoreRecords(ownerId, 'gstBills', { since: start, until: end }))
+        .sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0));
 
     const b2bInvoices = [];
     const b2cSmallMap = {}; // key: `${pos}_${rate}`

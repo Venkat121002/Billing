@@ -1,5 +1,5 @@
 const { getCollection, fetchUnifiedData } = require('../utils/dbUtils');
-const { sendDirectText } = require('../utils/whatsappService');
+const { whatsappLink, manualMessage, storeNameFor } = require('../utils/customerWhatsApp');
 
 // Helper wrapper to get pet services collection reference
 const getPetServicesCollection = (req) => {
@@ -82,9 +82,10 @@ exports.createPetService = async (req, res) => {
         const newTicket = { id: docRef.id, ...serviceData };
 
         // Auto send check-in WhatsApp notification if phone provided
+        // Check-in message for the store to send (see utils/customerWhatsApp.js)
         if (serviceData.customerPhone) {
             try {
-                const storeName = req.user?.businessName || req.user?.name || "Our Pet Care Team";
+                const storeName = await storeNameFor(req);
                 const shortId = docRef.id.slice(-6).toUpperCase();
                 const checkInMsg = `Hi ${serviceData.customerName},
 
@@ -97,9 +98,9 @@ We will send you another update the moment ${serviceData.petName} is fresh, groo
 
 - Team ${storeName}`;
 
-                await sendDirectText({ to: serviceData.customerPhone, text: checkInMsg });
+                newTicket.whatsappLink = whatsappLink(serviceData.customerPhone, checkInMsg);
             } catch (waErr) {
-                console.warn("[pet-service] Check-in WhatsApp notification failed:", waErr.message);
+                console.warn("[pet-service] Check-in WhatsApp message failed:", waErr.message);
             }
         }
 
@@ -168,11 +169,11 @@ exports.sendStatusWhatsApp = async (req, res) => {
         const customerName = ticket.customerName || "Pet Parent";
         const petName = ticket.petName || "your pet";
         const serviceType = ticket.serviceType || "Grooming & Spa";
-        const storeName = req.user?.businessName || req.user?.name || "Our Pet Care Team";
+        const storeName = await storeNameFor(req);
         const shortId = id.slice(-6).toUpperCase();
         const cost = ticket.cost || 0;
 
-        let message = customMessage;
+        let message = typeof customMessage === 'string' ? customMessage.slice(0, 2000) : '';
 
         if (!message) {
             if (status === 'Checked-In' || status === 'Booked') {
@@ -228,29 +229,9 @@ If you have any questions, feel free to reply to this message.
             }
         }
 
-        let waResult = null;
-        if (customerPhone) {
-            try {
-                waResult = await sendDirectText({ to: customerPhone, text: message });
-            } catch (err) {
-                console.warn("[pet-service] Direct WhatsApp send error:", err.message);
-            }
-        }
-
-        const cleanPhone = String(customerPhone || '').replace(/\D/g, '');
-        const webPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
-        const whatsappWebUrl = customerPhone
-            ? `https://wa.me/${webPhone}?text=${encodeURIComponent(message)}`
-            : null;
-
-        res.json({
-            success: true,
-            sent: !!waResult?.messageId,
-            messageId: waResult?.messageId || null,
-            mode: waResult?.mode || 'web-link',
-            whatsappWebUrl,
-            message
-        });
+        const result = manualMessage(customerPhone, message);
+        // whatsappWebUrl / sent kept for the existing PetServices screen.
+        res.json({ ...result, sent: false, whatsappWebUrl: result.whatsappLink });
     } catch (err) {
         console.error("Send Status WhatsApp Error:", err.message);
         res.status(500).json({ msg: "Failed to send WhatsApp message: " + err.message });

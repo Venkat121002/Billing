@@ -17,12 +17,7 @@
  *    - Instant Heuristic Fallback (Zero-Downtime Guarantee during API spikes).
  */
 const { generateWithFallback, isGeminiConfigured, getGeminiClient, DEFAULT_MODELS } = require('../config/gemini');
-const models = require('../models/mongodb');
-
-// Helper to escape regex special characters
-function escapeRegex(text) {
-    return text.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
-}
+const { listStoreRecords } = require('./storeRecords');
 
 // =========================================================================
 // HIGH-CONCURRENCY SCALABILITY INFRASTRUCTURE (500+ Concurrent Users)
@@ -30,12 +25,15 @@ function escapeRegex(text) {
 
 // 1. In-Memory Response Cache with TTL (Absorbs 70-80% of repetitive traffic)
 const responseCache = new Map();
-const CACHE_TTL_MS = 3 * 60 * 1000; // 3 minutes
+// Short on purpose: answers quote live stock/bills, which change with every sale.
+const CACHE_TTL_MS = 30 * 1000;
 const MAX_CACHE_ENTRIES = 1500;
 
 function getCacheKey(ownerId, industry, query) {
+    // Always per store: there is no shared "global" entry another store could read.
+    if (!ownerId) throw new Error('Tenant identification is required.');
     const cleanQ = String(query).toLowerCase().trim().replace(/\s+/g, ' ');
-    return `${ownerId || 'global'}:${industry || 'general'}:${cleanQ}`;
+    return `${ownerId}:${industry || 'general'}:${cleanQ}`;
 }
 
 function getFromCache(key) {
@@ -108,24 +106,44 @@ function extractSearchKeywords(query = '') {
     return rawTokens.filter(t => !STOP_WORDS.has(t) && t.length > 1);
 }
 
-function buildTenantFilter(ownerId) {
-    if (!ownerId) {
-        throw new Error('Owner identification is missing. Access denied.');
-    }
-    // STRICT EMAIL & OWNER ISOLATION:
-    // Every registered business email has a unique ownerId.
-    // Querying strictly by ownerId guarantees zero leakage from any other registered email or industry.
-    return { ownerId: String(ownerId) };
+// Case-insensitive "does any of these fields contain any keyword".
+function matchesAny(record, fields, keywords) {
+    return keywords.some((kw) => fields.some((f) => String(record[f] ?? '').toLowerCase().includes(kw)));
 }
+
+const byNewest = (a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || ''));
+
+// Loads one kind of this store's records (owner + staff) in MongoDB or Firestore.
+// Never throws: a missing collection just means no context for that kind.
+async function loadStore(ownerId, kind) {
+    try {
+        return await listStoreRecords(ownerId, kind);
+    } catch (err) {
+        console.warn(`[Chatbot] could not load ${kind}:`, err.message);
+        return [];
+    }
+}
+
+// Industries whose products must not show up in another industry's answers.
+const INDUSTRY_EXCLUDES = {
+    grocery: ['clothing', 'petshop', 'mobile_shop', 'pharmacy', 'software_development', 'academy'],
+    clothing: ['grocery', 'petshop', 'mobile_shop', 'pharmacy', 'software_development', 'academy'],
+    petshop: ['clothing', 'grocery', 'mobile_shop', 'pharmacy', 'software_development', 'academy'],
+    pharmacy: ['clothing', 'grocery', 'petshop', 'mobile_shop', 'software_development', 'academy'],
+    mobile_shop: ['clothing', 'grocery', 'petshop', 'pharmacy', 'software_development', 'academy'],
+    software_development: ['clothing', 'grocery', 'petshop', 'mobile_shop', 'pharmacy'],
+    academy: ['clothing', 'grocery', 'petshop', 'mobile_shop', 'pharmacy']
+};
 
 /**
  * Universal Industry Context Retriever
- * Extracts grounded live data based on shop industry
+ * Extracts grounded live data for ONE store (ownerId), in MongoDB or Firestore.
  */
-async function retrieveTenantContext({ ownerId, tenantId, query, department = 'all', industry = 'all' }) {
-    const tenantFilter = buildTenantFilter(ownerId, tenantId);
+async function retrieveTenantContext({ ownerId, query, department = 'all', industry = 'all' }) {
+    if (!ownerId) throw new Error('Owner identification is missing. Access denied.');
     const qLower = query.toLowerCase().trim();
     const keywords = extractSearchKeywords(query);
+    const ind = String(industry || '').toLowerCase().trim();
 
     const context = {
         products: [],
@@ -145,332 +163,95 @@ async function retrieveTenantContext({ ownerId, tenantId, query, department = 'a
     };
 
     try {
-        // -------------------------------------------------------------
-        // 1. PRODUCTS & SERVICES INVENTORY SEARCH (Cross-industry)
-        // -------------------------------------------------------------
+        // 1. PRODUCTS & SERVICES
         const isCountOrListQuery = /\b(how\s*many|total|count|list|all|what\s*(?:do\s*we|are|services|products|items)?|catalog)\b/i.test(qLower);
         const isStockOrInventoryQuery = isCountOrListQuery || /\b(stock|inventory|product|products|item|items|service|services|course|courses|project|projects|solution|solutions|price|cost|rate|rates|how much|available|quantity|barcode|sku|food|brand)\b/i.test(qLower);
         const isLowStockQuery = /low\s*stock|out\s*of\s*stock|reorder|shortage|empty/i.test(qLower);
 
-        let productQuery = { ...tenantFilter };
-        const ind = String(industry || '').toLowerCase().trim();
+        const excluded = INDUSTRY_EXCLUDES[ind] || [];
+        const products = (await loadStore(ownerId, 'products')).filter((p) => {
+            if (excluded.includes(p.industry)) return false;
+            if (['grocery', 'petshop', 'pharmacy', 'mobile_shop'].includes(ind) && p.isClothingVariant === true) return false;
+            if (ind === 'grocery' && ['Men', 'Women', 'Kids', 'Medicines', 'Pets'].includes(p.category)) return false;
+            return true;
+        }).sort(byNewest);
+        context.totalProductCount = products.length;
 
-        // Enforce strict industry scoping for inventory
-        if (ind === 'grocery') {
-            productQuery.isClothingVariant = { $ne: true };
-            productQuery.industry = { $nin: ['clothing', 'petshop', 'mobile_shop', 'pharmacy', 'software_development', 'academy'] };
-            productQuery.category = { $nin: ['Men', 'Women', 'Kids', 'Medicines', 'Pets'] };
-        } else if (ind === 'clothing') {
-            productQuery.industry = { $nin: ['grocery', 'petshop', 'mobile_shop', 'pharmacy', 'software_development', 'academy'] };
-        } else if (ind === 'petshop') {
-            productQuery.isClothingVariant = { $ne: true };
-            productQuery.industry = { $nin: ['clothing', 'grocery', 'mobile_shop', 'pharmacy', 'software_development', 'academy'] };
-        } else if (ind === 'pharmacy') {
-            productQuery.isClothingVariant = { $ne: true };
-            productQuery.industry = { $nin: ['clothing', 'grocery', 'petshop', 'mobile_shop', 'software_development', 'academy'] };
-        } else if (ind === 'mobile_shop') {
-            productQuery.isClothingVariant = { $ne: true };
-            productQuery.industry = { $nin: ['clothing', 'grocery', 'petshop', 'pharmacy', 'software_development', 'academy'] };
-        } else if (ind === 'software_development') {
-            productQuery.industry = { $nin: ['clothing', 'grocery', 'petshop', 'mobile_shop', 'pharmacy'] };
-        } else if (ind === 'academy') {
-            productQuery.industry = { $nin: ['clothing', 'grocery', 'petshop', 'mobile_shop', 'pharmacy'] };
-        }
-
-        // Count total registered items/services in this tenant's catalog
-        try {
-            context.totalProductCount = await models.Product.countDocuments(productQuery);
-        } catch (cntErr) {
-            context.totalProductCount = 0;
-        }
-
-        const PRODUCT_FIELDS = 'name price purchasePrice salePrice salesPrice quantity unit category brand size color barcode sku model supplier duration hourlyRate dailyRate maintenanceRate minStockThreshold expiryDate batchNo industry';
-
+        const PRODUCT_SEARCH = ['name', 'category', 'brand', 'barcode', 'sku', 'model', 'supplier', 'size', 'color', 'description', 'batchNo'];
         if (isLowStockQuery) {
-            productQuery.$or = [
-                { quantity: { $lte: 5 } },
-                { $expr: { $lte: ['$quantity', '$minStockThreshold'] } }
-            ];
-            context.products = await models.Product.find(productQuery)
-                .select(PRODUCT_FIELDS)
-                .limit(15)
-                .lean();
+            context.products = products.filter((p) => {
+                const qty = Number(p.quantity || 0);
+                return qty <= 5 || (p.minStockThreshold !== undefined && qty <= Number(p.minStockThreshold));
+            }).slice(0, 15);
         } else if (isCountOrListQuery || (keywords.length === 0 && isStockOrInventoryQuery)) {
-            // General count or list query ("how many services we have", "list products", "show catalog")
-            context.products = await models.Product.find(productQuery)
-                .select(PRODUCT_FIELDS)
-                .sort({ createdAt: -1 })
-                .limit(30)
-                .lean();
+            context.products = products.slice(0, 30);
         } else if (keywords.length > 0 || isStockOrInventoryQuery) {
-            const regexConditions = keywords.map(kw => ({
-                $or: [
-                    { name: { $regex: escapeRegex(kw), $options: 'i' } },
-                    { category: { $regex: escapeRegex(kw), $options: 'i' } },
-                    { brand: { $regex: escapeRegex(kw), $options: 'i' } },
-                    { barcode: { $regex: escapeRegex(kw), $options: 'i' } },
-                    { sku: { $regex: escapeRegex(kw), $options: 'i' } },
-                    { model: { $regex: escapeRegex(kw), $options: 'i' } },
-                    { supplier: { $regex: escapeRegex(kw), $options: 'i' } },
-                    { size: { $regex: escapeRegex(kw), $options: 'i' } },
-                    { color: { $regex: escapeRegex(kw), $options: 'i' } },
-                    { description: { $regex: escapeRegex(kw), $options: 'i' } },
-                    { batchNo: { $regex: escapeRegex(kw), $options: 'i' } }
-                ]
-            }));
-
-            if (regexConditions.length > 0) {
-                context.products = await models.Product.find({
-                    ...productQuery,
-                    $or: regexConditions.map(c => c.$or).flat()
-                })
-                    .select(PRODUCT_FIELDS)
-                    .limit(20)
-                    .lean();
-            }
-
-            if (context.products.length === 0 && isStockOrInventoryQuery) {
-                context.products = await models.Product.find(productQuery)
-                    .select(PRODUCT_FIELDS)
-                    .sort({ createdAt: -1 })
-                    .limit(20)
-                    .lean();
-            }
+            if (keywords.length > 0) context.products = products.filter((p) => matchesAny(p, PRODUCT_SEARCH, keywords)).slice(0, 20);
+            if (context.products.length === 0 && isStockOrInventoryQuery) context.products = products.slice(0, 20);
         }
 
-        // -------------------------------------------------------------
-        // 2. INGESTED DEPARTMENT KNOWLEDGE (Policies, Guides, FAQs)
-        // -------------------------------------------------------------
-        if (models.DepartmentKnowledge) {
-            const knowledgeFilter = {
-                ...tenantFilter,
-                $or: [
-                    { department: { $in: [department, 'all', 'general'] } },
-                    { industry: { $in: [industry, 'all', 'general'] } }
-                ]
-            };
-
-            if (keywords.length > 0) {
-                const kwRegex = keywords.map(kw => ({
-                    $or: [
-                        { title: { $regex: escapeRegex(kw), $options: 'i' } },
-                        { content: { $regex: escapeRegex(kw), $options: 'i' } },
-                        { tags: { $in: [new RegExp(escapeRegex(kw), 'i')] } }
-                    ]
-                }));
-                const matchedDocs = await models.DepartmentKnowledge.find({
-                    ...tenantFilter,
-                    $or: kwRegex.map(r => r.$or).flat()
-                }).limit(5).lean();
-
-                context.knowledgeDocs = matchedDocs;
-            }
-
-            if (context.knowledgeDocs.length === 0) {
-                context.knowledgeDocs = await models.DepartmentKnowledge.find(knowledgeFilter)
-                    .limit(4)
-                    .lean();
-            }
+        // 2. STORE KNOWLEDGE (policies, guides, FAQs added by the owner)
+        const knowledge = await loadStore(ownerId, 'departmentknowledge');
+        if (keywords.length > 0) {
+            context.knowledgeDocs = knowledge.filter((d) =>
+                matchesAny(d, ['title', 'content'], keywords) ||
+                (Array.isArray(d.tags) && d.tags.some((t) => keywords.some((kw) => String(t).toLowerCase().includes(kw))))
+            ).slice(0, 5);
+        }
+        if (context.knowledgeDocs.length === 0) {
+            context.knowledgeDocs = knowledge.filter((d) =>
+                [department, 'all', 'general'].includes(d.department) || [industry, 'all', 'general'].includes(d.industry)
+            ).slice(0, 4);
         }
 
-        // -------------------------------------------------------------
-        // 3. INDUSTRY ADAPTER: PET SHOP (Pets, Grooming, Vaccines)
-        // STRICT RULE: Only accessible if the tenant's current industry is 'petshop'
-        // -------------------------------------------------------------
-        const isPetShop = industry === 'petshop';
-        if (isPetShop && models.Pet) {
-            let petQuery = { ...tenantFilter };
-            const isVaccineQuery = /vaccin|deworm|rabies|booster|due|shot/i.test(qLower);
-            const isFoodRefillQuery = /food|feed|refill|pedigree|royal canin|diet|consumption/i.test(qLower);
+        // 3. PET SHOP
+        if (ind === 'petshop') {
+            const pets = await loadStore(ownerId, 'pets');
+            context.pets = (keywords.length ? pets.filter((p) => matchesAny(p, ['petName', 'breed', 'species', 'customerName', 'customerPhone', 'microchipId'], keywords)) : pets).slice(0, 8);
 
-            if (keywords.length > 0) {
-                petQuery.$or = keywords.map(kw => ({
-                    $or: [
-                        { petName: { $regex: escapeRegex(kw), $options: 'i' } },
-                        { breed: { $regex: escapeRegex(kw), $options: 'i' } },
-                        { species: { $regex: escapeRegex(kw), $options: 'i' } },
-                        { customerName: { $regex: escapeRegex(kw), $options: 'i' } },
-                        { customerPhone: { $regex: escapeRegex(kw), $options: 'i' } },
-                        { microchipId: { $regex: escapeRegex(kw), $options: 'i' } }
-                    ]
-                })).map(c => c.$or).flat();
-            }
-
-            context.pets = await models.Pet.find(petQuery)
-                .select('petName species breed customerName customerPhone microchipId vaccineName lastVaccinationDate nextVaccineDate dewormingDate nextDewormingDate foodBrand nextFoodRefillDate notes')
-                .limit(8)
-                .lean();
-
-            // If query is about grooming or veterinary appointments
-            if (models.PetService) {
-                let serviceQuery = { ...tenantFilter };
-                if (keywords.length > 0) {
-                    serviceQuery.$or = keywords.map(kw => ({
-                        $or: [
-                            { petName: { $regex: escapeRegex(kw), $options: 'i' } },
-                            { customerName: { $regex: escapeRegex(kw), $options: 'i' } },
-                            { serviceType: { $regex: escapeRegex(kw), $options: 'i' } },
-                            { status: { $regex: escapeRegex(kw), $options: 'i' } },
-                            { groomer: { $regex: escapeRegex(kw), $options: 'i' } }
-                        ]
-                    })).map(c => c.$or).flat();
-                } else {
-                    // Default to today's or recent appointments
-                    serviceQuery.status = { $in: ['Booked', 'Checked-In', 'In-Progress', 'Ready-For-Pickup'] };
-                }
-
-                context.petServices = await models.PetService.find(serviceQuery)
-                    .select('petName species breed customerName customerPhone serviceType status cost groomer scheduledDate specialInstructions notes')
-                    .sort({ createdAt: -1 })
-                    .limit(8)
-                    .lean();
-            }
+            const services = (await loadStore(ownerId, 'pet_services')).sort(byNewest);
+            context.petServices = (keywords.length
+                ? services.filter((s) => matchesAny(s, ['petName', 'customerName', 'serviceType', 'status', 'groomer'], keywords))
+                : services.filter((s) => ['Booked', 'Checked-In', 'In-Progress', 'Ready-For-Pickup'].includes(s.status))
+            ).slice(0, 8);
         }
 
-        // -------------------------------------------------------------
-        // 4. INDUSTRY ADAPTER: CLOTHING & TAILORING (Alteration Tickets)
-        // STRICT RULE: Only accessible if the tenant's current industry is 'clothing'
-        // -------------------------------------------------------------
-        const isClothingShop = industry === 'clothing';
-        if (isClothingShop && models.AlterationTicket) {
-            let altQuery = { ...tenantFilter };
-            if (keywords.length > 0) {
-                altQuery.$or = keywords.map(kw => ({
-                    $or: [
-                        { ticketNo: { $regex: escapeRegex(kw), $options: 'i' } },
-                        { customerName: { $regex: escapeRegex(kw), $options: 'i' } },
-                        { garmentType: { $regex: escapeRegex(kw), $options: 'i' } },
-                        { status: { $regex: escapeRegex(kw), $options: 'i' } }
-                    ]
-                })).map(c => c.$or).flat();
-            }
-            context.alterationTickets = await models.AlterationTicket.find(altQuery)
-                .select('ticketNo customerName customerPhone garmentType alterationType status deliveryDate tailorName notes')
-                .limit(6)
-                .lean();
+        // 4. CLOTHING (alteration tickets)
+        if (ind === 'clothing') {
+            const tickets = await loadStore(ownerId, 'alterationtickets');
+            context.alterationTickets = (keywords.length ? tickets.filter((t) => matchesAny(t, ['ticketNo', 'customerName', 'garmentType', 'status'], keywords)) : tickets).slice(0, 6);
         }
 
-        // -------------------------------------------------------------
-        // 5. INDUSTRY ADAPTER: MOBILE SHOP (Repair Tickets & IMEIs)
-        // STRICT RULE: Only accessible if the tenant's current industry is 'mobile_shop'
-        // -------------------------------------------------------------
-        const isMobileShop = industry === 'mobile_shop';
-        if (isMobileShop && models.RepairTicket) {
-            let repQuery = { ...tenantFilter };
-            if (keywords.length > 0) {
-                repQuery.$or = keywords.map(kw => ({
-                    $or: [
-                        { customerName: { $regex: escapeRegex(kw), $options: 'i' } },
-                        { imei: { $regex: escapeRegex(kw), $options: 'i' } },
-                        { deviceModel: { $regex: escapeRegex(kw), $options: 'i' } },
-                        { deviceBrand: { $regex: escapeRegex(kw), $options: 'i' } },
-                        { status: { $regex: escapeRegex(kw), $options: 'i' } }
-                    ]
-                })).map(c => c.$or).flat();
-            }
-            context.repairTickets = await models.RepairTicket.find(repQuery)
-                .select('ticketType customerName customerPhone deviceBrand deviceModel imei issueDescription status estimatedCost promisedDate technician')
-                .limit(6)
-                .lean();
+        // 5. MOBILE SHOP (repair tickets)
+        if (ind === 'mobile_shop') {
+            const tickets = await loadStore(ownerId, 'repairtickets');
+            context.repairTickets = (keywords.length ? tickets.filter((t) => matchesAny(t, ['customerName', 'imei', 'deviceModel', 'deviceBrand', 'status'], keywords)) : tickets).slice(0, 6);
         }
 
-        // -------------------------------------------------------------
-        // 6. INDUSTRY ADAPTER: SOFTWARE DEVELOPMENT (Clients, Projects & Milestones)
-        // -------------------------------------------------------------
-        const isSoftwareDev = ind === 'software_development';
-        if (isSoftwareDev) {
-            const isClientOrMilestoneQuery = /client|clients|customer|customers|project|projects|milestone|milestones|phase|phases|contract|lead/i.test(qLower);
-            if (isClientOrMilestoneQuery && models.Client) {
-                let clientQuery = { ...tenantFilter };
-                if (keywords.length > 0) {
-                    clientQuery.$or = keywords.map(kw => ({
-                        $or: [
-                            { companyName: { $regex: escapeRegex(kw), $options: 'i' } },
-                            { contactPerson: { $regex: escapeRegex(kw), $options: 'i' } },
-                            { projectName: { $regex: escapeRegex(kw), $options: 'i' } },
-                            { projectType: { $regex: escapeRegex(kw), $options: 'i' } }
-                        ]
-                    })).map(c => c.$or).flat();
-                }
-                context.clients = await models.Client.find(clientQuery)
-                    .select('companyName contactPerson email mobile projectName projectType budget deadline')
-                    .limit(10)
-                    .lean();
-            }
-
-            if (isClientOrMilestoneQuery && models.Milestone) {
-                let mQuery = { ...tenantFilter };
-                if (keywords.length > 0) {
-                    mQuery.$or = keywords.map(kw => ({
-                        $or: [
-                            { title: { $regex: escapeRegex(kw), $options: 'i' } },
-                            { clientName: { $regex: escapeRegex(kw), $options: 'i' } },
-                            { status: { $regex: escapeRegex(kw), $options: 'i' } }
-                        ]
-                    })).map(c => c.$or).flat();
-                }
-                context.milestones = await models.Milestone.find(mQuery)
-                    .select('clientName title description dueDate status amount invoiced')
-                    .sort({ dueDate: 1 })
-                    .limit(10)
-                    .lean();
-            }
+        // 6. SOFTWARE DEVELOPMENT (clients, milestones)
+        if (ind === 'software_development' && /client|clients|customer|customers|project|projects|milestone|milestones|phase|phases|contract|lead/i.test(qLower)) {
+            const clients = await loadStore(ownerId, 'clients');
+            context.clients = (keywords.length ? clients.filter((c) => matchesAny(c, ['companyName', 'contactPerson', 'projectName', 'projectType'], keywords)) : clients).slice(0, 10);
+            const milestones = (await loadStore(ownerId, 'milestones'))
+                .sort((a, b) => String(a.dueDate || '').localeCompare(String(b.dueDate || '')));
+            context.milestones = (keywords.length ? milestones.filter((m) => matchesAny(m, ['title', 'clientName', 'status'], keywords)) : milestones).slice(0, 10);
         }
 
-        // -------------------------------------------------------------
-        // 6. BILLS & SALES SEARCH
-        // -------------------------------------------------------------
+        // 7. BILLS & SALES
         const isBillQuery = /bill|invoice|receipt|sale|purchase|order|checkout/i.test(qLower);
-        const invoiceMatches = qLower.match(/([a-z0-9#-]{3,15})/gi) || [];
-
-        if (isBillQuery || invoiceMatches.length > 0) {
-            let billOrConditions = [];
-            for (const match of invoiceMatches) {
-                if (match.length >= 3 && !STOP_WORDS.has(match)) {
-                    billOrConditions.push({ invoiceNo: { $regex: escapeRegex(match), $options: 'i' } });
-                    billOrConditions.push({ customerName: { $regex: escapeRegex(match), $options: 'i' } });
-                    billOrConditions.push({ customerMobile: { $regex: escapeRegex(match), $options: 'i' } });
-                }
-            }
-
-            if (billOrConditions.length > 0) {
-                context.bills = await models.Bill.find({
-                    ...tenantFilter,
-                    $or: billOrConditions
-                })
-                    .select('invoiceNo customerName customerMobile grandTotal paymentMethod paymentStatus date createdAt')
-                    .limit(5)
-                    .lean();
-            } else if (isBillQuery) {
-                context.bills = await models.Bill.find(tenantFilter)
-                    .sort({ createdAt: -1 })
-                    .select('invoiceNo customerName customerMobile grandTotal paymentMethod paymentStatus date')
-                    .limit(3)
-                    .lean();
-            }
+        const terms = (qLower.match(/([a-z0-9#-]{3,15})/gi) || []).filter((m) => m.length >= 3 && !STOP_WORDS.has(m));
+        if (isBillQuery || terms.length > 0) {
+            const bills = (await loadStore(ownerId, 'bills')).sort(byNewest);
+            const BILL_SEARCH = ['invoiceNo', 'receiptNo', 'customerName', 'customerMobile', 'customerPhone'];
+            const matched = terms.length ? bills.filter((b) => matchesAny(b, BILL_SEARCH, terms)).slice(0, 5) : [];
+            context.bills = matched.length ? matched : (isBillQuery ? bills.slice(0, 3) : []);
         }
 
-        // -------------------------------------------------------------
-        // 7. CREDIT & DUES SEARCH
-        // -------------------------------------------------------------
-        const isCreditQuery = /credit|due|udhar|khata|pending|balance|debt|owe/i.test(qLower);
-        if (isCreditQuery && models.Credit) {
-            let creditQuery = { ...tenantFilter };
-            if (keywords.length > 0) {
-                creditQuery.$or = keywords.map(kw => ({
-                    $or: [
-                        { customerName: { $regex: escapeRegex(kw), $options: 'i' } },
-                        { customerMobile: { $regex: escapeRegex(kw), $options: 'i' } }
-                    ]
-                })).map(c => c.$or).flat();
-            }
-
-            context.credits = await models.Credit.find(creditQuery)
-                .select('customerName customerMobile totalDue remainingAmount dueDate')
-                .limit(5)
-                .lean();
+        // 8. CREDIT & DUES
+        if (/credit|due|udhar|khata|pending|balance|debt|owe/i.test(qLower)) {
+            const credits = await loadStore(ownerId, 'credit_customers');
+            context.credits = (keywords.length ? credits.filter((c) => matchesAny(c, ['customerName', 'name', 'customerMobile', 'mobile', 'phone'], keywords)) : credits).slice(0, 5);
         }
-
     } catch (err) {
         console.warn('⚠️ [Chatbot Retrieval Error]:', err.message);
     }
@@ -712,40 +493,9 @@ async function answerTenantQuery({
         throw new Error('Tenant identification is required.');
     }
 
-    // 1. CROSS-INDUSTRY BOUNDARY SHIELD (Zero Cross-Industry Leakage Guarantee)
-    const cleanQ = userQuery.toLowerCase();
-    const ind = String(industry).toLowerCase().trim();
-    const friendlyName = ind === 'grocery' ? 'Grocery Store' : (ind === 'clothing' ? 'Clothing' : (ind === 'petshop' ? 'Pet Shop' : (ind === 'pharmacy' ? 'Pharmacy' : (ind === 'software_development' ? 'Software Development' : ind))));
-
-    const isAskingAboutClothing = /\b(cloth|clothes|clothing|cloth shop|clothing shop|apparel|garment|garments|textile|boutique|alteration|alterations|tailor|tailoring|stitching|pant|pants|shirt|shirts|saree|sarees|dress|dresses|jeans|trousers|kurti|lehenga|suit|blazer|size matrix|fabric)\b/i.test(cleanQ);
-    const isAskingAboutPets = /\b(pet|pets|pet shop|dog|dogs|cat|cats|puppy|puppies|kitten|kittens|grooming|pet spa|vaccination|vaccinations|deworming|pet passport|pedigree|royal canin|whiskas|microchip)\b/i.test(cleanQ);
-    const isAskingAboutRepairs = /\b(mobile shop|phone repair|mobile repair|imei|imeis|repair ticket|repair tickets|screen replacement|battery replacement|display repair|tempered glass|smartphone|handset)\b/i.test(cleanQ);
-    const isAskingAboutPharma = /\b(pharmacy|chemist|medicine|medicines|drug|drugs|prescription|prescriptions|schedule h|schedule x|expiry batch|capsule|tablet|tablets|syrup|dosage)\b/i.test(cleanQ);
-
-    if (ind !== 'clothing' && isAskingAboutClothing) {
-        return {
-            reply: `Privacy & Security Notice 🛡️: You are currently working in your ${friendlyName} workspace. To prevent cross-industry confusion and protect data privacy, I cannot access, display, or discuss Clothing / Apparel records or fashion items. I am strictly dedicated to your ${friendlyName} products, inventory, bills, and customers! 😊`,
-            sources: { department, industry, engine: 'SwordNex Industry Isolation Shield' }
-        };
-    }
-    if (ind !== 'petshop' && isAskingAboutPets) {
-        return {
-            reply: `Privacy & Security Notice 🛡️: You are currently working in your ${friendlyName} workspace. To prevent cross-industry confusion and protect data privacy, I cannot access, display, or discuss Pet Shop records or pet grooming details. I am strictly dedicated to your ${friendlyName} products, inventory, bills, and customers! 😊`,
-            sources: { department, industry, engine: 'SwordNex Industry Isolation Shield' }
-        };
-    }
-    if (ind !== 'mobile_shop' && isAskingAboutRepairs) {
-        return {
-            reply: `Privacy & Security Notice 🛡️: You are working in your ${friendlyName} workspace. I cannot access mobile repair tickets or IMEI logs belonging to electronics/repair shops. 😊`,
-            sources: { department, industry, engine: 'SwordNex Industry Isolation Shield' }
-        };
-    }
-    if (ind !== 'pharmacy' && isAskingAboutPharma) {
-        return {
-            reply: `Privacy & Security Notice 🛡️: You are working in your ${friendlyName} workspace. I cannot dispense pharmacy or prescription medicine records. I am strictly dedicated to your ${friendlyName} operations! 😊`,
-            sources: { department, industry, engine: 'SwordNex Industry Isolation Shield' }
-        };
-    }
+    // No keyword-based "industry shield": every lookup below is limited to this
+    // store's own records, so there is no other industry's data to leak, and
+    // refusing by keyword blocked normal questions ("dog food" in a grocery).
 
     // 2. FAST PATH: In-Memory Cache Check (<10ms response for 500 concurrent users)
     const cacheKey = getCacheKey(ownerId, industry, userQuery);
@@ -894,6 +644,5 @@ module.exports = {
     retrieveTenantContext,
     formatGroundingContext,
     answerTenantQuery,
-    extractSearchKeywords,
-    buildTenantFilter
+    extractSearchKeywords
 };

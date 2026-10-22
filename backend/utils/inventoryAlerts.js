@@ -7,7 +7,7 @@ const wa = require('./whatsappService');
 const { sendEmail } = require('./emailService');
 const emailTemplates = require('./emailTemplates');
 const { listStoreRecords } = require('./storeRecords');
-const { Product, EmailLog } = require('../models/mongodb');
+const { recordEmail } = require('./emailLog');
 
 /**
  * Check if a product has dropped below its minimum stock threshold after a sale,
@@ -112,12 +112,7 @@ async function runDailyLowStockSummary(now = new Date(), { ownerId: onlyOwnerId 
             }
 
             // Query low-stock products strictly for this owner (Dual-mode support)
-            let products = [];
-            if (process.env.DB_TYPE === 'firestore') {
-                products = await listStoreRecords(ownerId, 'products');
-            } else {
-                products = await Product.find({ ownerId }).lean();
-            }
+            const products = await listStoreRecords(ownerId, 'products');
 
             const lowStockItems = (products || []).filter((p) => {
                 const threshold = Number(p.minStockThreshold !== undefined ? p.minStockThreshold : (p.reorderLevel || 5));
@@ -153,30 +148,15 @@ async function runDailyLowStockSummary(now = new Date(), { ownerId: onlyOwnerId 
                     ...template
                 });
                 summary.emailsSent += 1;
-                if (EmailLog) {
-                    await EmailLog.create({
-                        tenantId: owner.tenantId || process.env.TENANT_ID || 'SwordNexBilling-4pzp8',
-                        ownerId,
-                        recipient: email,
-                        subject: template.subject,
-                        type: 'morning_stock',
-                        status: 'sent',
-                        metadata: { storeName, itemCount: lowStockItems.length }
-                    }).catch((e) => console.error('[inventoryAlerts] EmailLog error:', e.message));
-                }
+                await recordEmail({
+                    ownerId, recipient: email, subject: template.subject, type: 'morning_stock', status: 'sent',
+                    metadata: { storeName, itemCount: lowStockItems.length }
+                });
             } catch (err) {
                 console.error(`[inventoryAlerts] Failed sending low stock email to ${email}:`, err.message);
-                if (EmailLog) {
-                    await EmailLog.create({
-                        tenantId: owner.tenantId || process.env.TENANT_ID || 'SwordNexBilling-4pzp8',
-                        ownerId,
-                        recipient: email,
-                        subject: template.subject,
-                        type: 'morning_stock',
-                        status: 'failed',
-                        error: err.message
-                    }).catch(() => {});
-                }
+                await recordEmail({
+                    ownerId, recipient: email, subject: template.subject, type: 'morning_stock', status: 'failed', error: err.message
+                });
             }
         }
     } catch (err) {

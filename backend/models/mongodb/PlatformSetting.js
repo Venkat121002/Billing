@@ -5,7 +5,9 @@ const PlatformSettingSchema = new mongoose.Schema({
     key: { type: String, required: true, unique: true, default: 'global' },
     // How POS bills are sent to customers on WhatsApp: 'pdf' | 'text'.
     // A store can be overridden individually via owner.billDeliveryMode.
-    billDeliveryMode: { type: String, enum: ['pdf', 'text'], default: 'pdf' }
+    billDeliveryMode: { type: String, enum: ['pdf', 'text'], default: 'pdf' },
+    // Price (₹) of one extra staff login bought on top of the plan's limit.
+    extraStaffLoginPrice: { type: Number, default: 15, min: 0 }
 }, { timestamps: true });
 
 module.exports = mongoose.model('PlatformSetting', PlatformSettingSchema);

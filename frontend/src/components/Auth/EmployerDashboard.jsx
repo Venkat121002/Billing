@@ -100,7 +100,6 @@ function EmployerDashboard() {
     expenseCategories: [],
     totalInventoryGST: 0,
   });
-  console.log("faisal", stats);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -378,11 +377,7 @@ function EmployerDashboard() {
         // For mapping names
       ]);
 
-      console.log("hakkim", productsRes);
 
-      //console.log("hakkim",customersRes);
-      // console.log(creditRes);
-      // console.log(transactionsRes);
 
 
       const role = currentUser?.role;
@@ -1244,7 +1239,6 @@ function EmployerDashboard() {
                 </p>
               </div>
             }</div>
-            <p>{console.log("kadhar", chartData)}</p>
 
             {chartData.inventoryStatusData.length > 0 ? (
               <>

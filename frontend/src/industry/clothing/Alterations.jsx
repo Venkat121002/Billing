@@ -24,6 +24,7 @@ import {
     RefreshCw
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { offerWhatsApp, openWhatsApp } from '../../utils/whatsappLink';
 import { useReactToPrint } from 'react-to-print';
 import Barcode from 'react-barcode';
 
@@ -121,6 +122,7 @@ const Alterations = () => {
             });
 
             toast.success(`Ticket #${res.data.ticketNo} created!`);
+            offerWhatsApp(res.data.whatsappLink, 'Send receipt on WhatsApp');
             setIsModalOpen(false);
             fetchTickets();
 
@@ -155,14 +157,12 @@ const Alterations = () => {
 
     const handleUpdateStatus = async (ticketId, newStatus) => {
         try {
-            await axios.put(`${API_URL}/alteration-tickets/${ticketId}`, { status: newStatus }, {
+            const res = await axios.put(`${API_URL}/alteration-tickets/${ticketId}`, { status: newStatus }, {
                 headers: getAuthHeaders()
             });
 
             toast.success(`Ticket marked as ${newStatus}`);
-            if (newStatus === 'Ready for Pickup') {
-                toast.success('Automated WhatsApp alert sent to customer! 📲', { duration: 4000 });
-            }
+            offerWhatsApp(res.data?.whatsappLink, 'Tell customer on WhatsApp');
             fetchTickets();
         } catch (err) {
             console.error('Update status error:', err);
@@ -178,14 +178,13 @@ const Alterations = () => {
 
         try {
             setIsNotifying(prev => ({ ...prev, [ticket.id || ticket._id]: true }));
-            await axios.post(`${API_URL}/alteration-tickets/${ticket.id || ticket._id}/notify`, {}, {
+            const res = await axios.post(`${API_URL}/alteration-tickets/${ticket.id || ticket._id}/notify`, {}, {
                 headers: getAuthHeaders()
             });
-
-            toast.success(`WhatsApp alert dispatched to ${ticket.customerPhone}! 📲`);
+            openWhatsApp(res.data?.whatsappLink);
         } catch (err) {
             console.error('Notify error:', err);
-            toast.error('Failed to send WhatsApp alert');
+            toast.error('Could not prepare the WhatsApp message');
         } finally {
             setIsNotifying(prev => ({ ...prev, [ticket.id || ticket._id]: false }));
         }
@@ -660,7 +659,7 @@ const Alterations = () => {
                             </div>
 
                             <div className="border-t pt-2 text-center text-[9px] text-gray-500">
-                                WhatsApp alert will be sent upon completion.
+                                We will message you on WhatsApp when it is ready.
                             </div>
                         </div>
                     )}

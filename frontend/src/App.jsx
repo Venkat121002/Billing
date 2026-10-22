@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 
 
 import { Toaster } from "react-hot-toast";
@@ -9,54 +10,55 @@ import {
 } from "react-router-dom";
 
 import Layout from "./Layout/Layout";
-import PayPage from "./components/Auth/PayPage";
+const PayPage = lazy(() => import("./components/Auth/PayPage"));
 import { AuthProvider } from "./contexts/AuthContext";
 import PrivateRoute from "./contexts/PrivateRoute";
 import SubscriptionRoute from "./components/Auth/SubscriptionRoute";
 import ModuleRoute from "./contexts/ModuleRoute";
-import Pricing from "./components/Auth/Pricing";
-
+const Pricing = lazy(() => import("./components/Auth/Pricing"));
 import { SuperAdminAuthProvider } from "./contexts/SuperAdminAuthContext";
 import SuperAdminPrivateRoute from "./contexts/SuperAdminPrivateRoute";
-import SuperAdminLogin from "./pages/SuperAdmin/SuperAdminLogin";
-import SuperAdminConsole from "./components/SuperAdmin/SuperAdminConsole";
+const SuperAdminLogin = lazy(() => import("./pages/SuperAdmin/SuperAdminLogin"));
+const SuperAdminConsole = lazy(() => import("./components/SuperAdmin/SuperAdminConsole"));
 import { ThemeScope } from "./components/SuperAdmin/theme";
 
-import EmployerDashboard from "./components/Auth/EmployerDashboard";
+const EmployerDashboard = lazy(() => import("./components/Auth/EmployerDashboard"));
 import Login from "./components/Auth/Login";
 import TeamLogin from "./components/Auth/TeamLogin";
-import Signup from "./components/Auth/SignUp";
-import Onboarding from "./components/Auth/Onboarding";
-import Settings from "./pages/Settings";
-import IndustryScreen from "./components/Billing/IndustryScreen";
-import CashBook from "./components/Expenses/CashBook.jsx"
-import Credit from "./components/Billing/credit";
-import { Sessionrecord } from "./components/Auth/Sessionrecord";
-import Support from "./components/Billing/Support";
-import ForgotPassword from "./components/Auth/forgot";
-import Reports from "./components/Billing/Reports";
-
-import BarcodePage from "./industry/mobile/BarcodePage";
-import AcademyInventry from "./industry/academy/academyinventry";
-import Trainer from "./components/Billing/Trainer";
-import Students from "./industry/academy/Students";
-import Clients from "./industry/SoftwareDevelopment/Clients";
-import RepairTickets from "./industry/mobile/RepairTickets";
-import ImeiLookup from "./industry/mobile/ImeiLookup";
-import Pets from "./industry/petshop/Pets";
-import PetServices from "./industry/petshop/PetServices";
-import PetPassport from "./industry/petshop/PetPassport";
-import ExpiryAlerts from "./industry/Pharmacy/ExpiryAlerts";
-import Milestones from "./industry/SoftwareDevelopment/Milestones";
-import SoftwareDevelopmentInventory from "./industry/SoftwareDevelopment/SoftwareDevelopmentInventory";
-import AddClient from "./industry/SoftwareDevelopment/AddClient";
-import AddSoftwareService from "./industry/SoftwareDevelopment/AddSoftwareService";
-import Alterations from "./industry/clothing/Alterations";
-import ClothingHub from "./industry/clothing/ClothingHub";
-import SDProposalGenerator from "./industry/SoftwareDevelopment/SDProposalGenerator";
-
-
-
+const Signup = lazy(() => import("./components/Auth/SignUp"));
+const Onboarding = lazy(() => import("./components/Auth/Onboarding"));
+const Settings = lazy(() => import("./pages/Settings"));
+const IndustryScreen = lazy(() => import("./components/Billing/IndustryScreen"));
+const CashBook = lazy(() => import("./components/Expenses/CashBook.jsx"));
+const Credit = lazy(() => import("./components/Billing/credit"));
+const Sessionrecord = lazy(() => import("./components/Auth/Sessionrecord").then((m) => ({ default: m.Sessionrecord })));
+const Support = lazy(() => import("./components/Billing/Support"));
+const ForgotPassword = lazy(() => import("./components/Auth/forgot"));
+const Reports = lazy(() => import("./components/Billing/Reports"));
+const BarcodePage = lazy(() => import("./industry/mobile/BarcodePage"));
+const AcademyInventry = lazy(() => import("./industry/academy/academyinventry"));
+const Trainer = lazy(() => import("./components/Billing/Trainer"));
+const Students = lazy(() => import("./industry/academy/Students"));
+const Clients = lazy(() => import("./industry/SoftwareDevelopment/Clients"));
+const RepairTickets = lazy(() => import("./industry/mobile/RepairTickets"));
+const ImeiLookup = lazy(() => import("./industry/mobile/ImeiLookup"));
+const Pets = lazy(() => import("./industry/petshop/Pets"));
+const PetServices = lazy(() => import("./industry/petshop/PetServices"));
+const PetPassport = lazy(() => import("./industry/petshop/PetPassport"));
+const ExpiryAlerts = lazy(() => import("./industry/Pharmacy/ExpiryAlerts"));
+const Milestones = lazy(() => import("./industry/SoftwareDevelopment/Milestones"));
+const SoftwareDevelopmentInventory = lazy(() => import("./industry/SoftwareDevelopment/SoftwareDevelopmentInventory"));
+const AddClient = lazy(() => import("./industry/SoftwareDevelopment/AddClient"));
+const AddSoftwareService = lazy(() => import("./industry/SoftwareDevelopment/AddSoftwareService"));
+const Alterations = lazy(() => import("./industry/clothing/Alterations"));
+const ClothingHub = lazy(() => import("./industry/clothing/ClothingHub"));
+const SDProposalGenerator = lazy(() => import("./industry/SoftwareDevelopment/SDProposalGenerator"));
+// Shown for the moment a screen's code is still downloading.
+const ScreenLoader = () => (
+  <div className="flex min-h-[60vh] items-center justify-center" role="status" aria-label="Loading">
+    <div className="h-8 w-8 animate-spin rounded-full border-2 border-green-600 border-t-transparent" />
+  </div>
+);
 
 // Employer routes
 const employerRoutes = [
@@ -123,6 +125,8 @@ function App() {
       <Router>
         <AuthProvider>
           <Layout>
+            {/* Screens are loaded on demand (React.lazy) so the first visit only downloads what it shows. */}
+            <Suspense fallback={<ScreenLoader />}>
             <Routes>
               <Route path="/" element={<Navigate to="/login" />} />
               <Route path="/login" element={<Login />} />
@@ -175,6 +179,7 @@ function App() {
 
               {/* 404 Route */}
             </Routes>
+            </Suspense>
           </Layout>
         </AuthProvider>
 

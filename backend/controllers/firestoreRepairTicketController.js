@@ -1,6 +1,6 @@
 
 const { getCollection, fetchUnifiedData } = require('../utils/dbUtils');
-const { sendDirectText } = require('../utils/whatsappService');
+const { whatsappLink, manualMessage, storeNameFor } = require('../utils/customerWhatsApp');
 
 // Helper wrapper to get repair tickets collection reference
 const getRepairTicketsCollection = (req) => {
@@ -85,9 +85,10 @@ exports.createRepairTicket = async (req, res) => {
         const repairTicketsRef = getRepairTicketsCollection(req);
         const docRef = await repairTicketsRef.add(repairTicketData);
 
-        // Automated WhatsApp Notification on Ticket Creation
+        // WhatsApp confirmation for the store to send (see utils/customerWhatsApp.js)
+        let link = null;
         if (repairTicketData.customerPhone) {
-            const storeName = req.user?.businessName || req.user?.name || "SwordNex Mobile Service";
+            const storeName = await storeNameFor(req);
             const ticketShortId = docRef.id.slice(-6).toUpperCase();
             const device = [repairTicketData.deviceBrand, repairTicketData.deviceModel].filter(Boolean).join(' ') || 'your device';
             const message = `Hi ${repairTicketData.customerName || 'there'},
@@ -103,11 +104,10 @@ We will keep you updated at every step. Feel free to call or message us anytime 
 
 - Team ${storeName}`;
 
-            sendDirectText({ to: repairTicketData.customerPhone, text: message })
-                .catch(err => console.error('[WhatsApp Repair Ticket Created Error]:', err.message));
+            link = whatsappLink(repairTicketData.customerPhone, message);
         }
 
-        res.json({ id: docRef.id, ...repairTicketData });
+        res.json({ id: docRef.id, ...repairTicketData, whatsappLink: link });
     } catch (err) {
         console.error("Create Repair Ticket Error:", err.message);
         res.status(500).send("Server Error");
@@ -134,13 +134,14 @@ exports.updateRepairTicket = async (req, res) => {
 
         await repairTicketRef.update(updateData);
 
-        // Automated WhatsApp lifecycle notification if status changed
+        // WhatsApp lifecycle message (sent by the store, see utils/customerWhatsApp.js) if status changed
+        let link = null;
         if (updateData.status && updateData.status !== prevData.status && (updateData.customerPhone || prevData.customerPhone)) {
             const customerPhone = updateData.customerPhone || prevData.customerPhone;
             const customerName = updateData.customerName || prevData.customerName || 'Customer';
             const deviceBrand = updateData.deviceBrand || prevData.deviceBrand || '';
             const deviceModel = updateData.deviceModel || prevData.deviceModel || '';
-            const storeName = req.user?.businessName || req.user?.name || "SwordNex Mobile Service";
+            const storeName = await storeNameFor(req);
             const ticketShortId = id.slice(-6).toUpperCase();
 
             const device = [deviceBrand, deviceModel].filter(Boolean).join(' ') || 'your device';
@@ -181,13 +182,10 @@ Thank you for choosing ${storeName}. See you next time!
 - Team ${storeName}`;
             }
 
-            if (statusMessage) {
-                sendDirectText({ to: customerPhone, text: statusMessage })
-                    .catch(err => console.error('[WhatsApp Repair Status Update Error]:', err.message));
-            }
+            if (statusMessage) link = whatsappLink(customerPhone, statusMessage);
         }
 
-        res.json({ id, ...updateData });
+        res.json({ id, ...updateData, whatsappLink: link });
     } catch (err) {
         console.error("Update Repair Ticket Error:", err.message);
         res.status(500).send("Server Error");
@@ -231,7 +229,7 @@ exports.sendWhatsAppUpdate = async (req, res) => {
         const deviceBrand = ticket.deviceBrand || '';
         const deviceModel = ticket.deviceModel || '';
         const device = [deviceBrand, deviceModel].filter(Boolean).join(' ') || 'your device';
-        const storeName = req.user?.businessName || req.user?.name || "SwordNex Mobile Service";
+        const storeName = await storeNameFor(req);
         const ticketShortId = id.slice(-6).toUpperCase();
         const status = req.body.status || ticket.status || 'Received';
 
@@ -295,14 +293,7 @@ If you have any questions, feel free to reply to this message.
 - Team ${storeName}`;
         }
 
-        const waResult = await sendDirectText({ to: customerPhone, text: message });
-        res.json({
-            success: true,
-            status,
-            message,
-            waResult,
-            customerPhone
-        });
+        res.json({ ...manualMessage(customerPhone, message), status, customerPhone });
     } catch (err) {
         console.error("Send WhatsApp Update Error:", err.message);
         res.status(500).json({ msg: err.message || "Failed to send WhatsApp message" });

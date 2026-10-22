@@ -4,6 +4,7 @@ import API_URL from "../../config/api";
 import { useAuth } from "../../contexts/AuthContext";
 import BillingLayout from "../../Layout/BillingLayout/AdminLayout";
 import toast from "react-hot-toast";
+import { offerWhatsApp, openWhatsApp } from "../../utils/whatsappLink";
 import {
   Search,
   Wrench,
@@ -217,15 +218,17 @@ const RepairTickets = () => {
     };
     try {
       if (editingTicketId) {
-        await axios.put(`${API_URL}/repair-tickets/${editingTicketId}`, payload, {
+        const res = await axios.put(`${API_URL}/repair-tickets/${editingTicketId}`, payload, {
           headers: { "x-auth-token": token },
         });
-        toast.success(`Ticket updated! WhatsApp alert sent to ${formData.customerPhone || "customer"}`);
+        toast.success("Ticket updated!");
+        offerWhatsApp(res.data?.whatsappLink, "Send status on WhatsApp");
       } else {
-        await axios.post(`${API_URL}/repair-tickets`, payload, {
+        const res = await axios.post(`${API_URL}/repair-tickets`, payload, {
           headers: { "x-auth-token": token },
         });
-        toast.success(`Job Sheet created! Automated WhatsApp sent to ${formData.customerPhone || "customer"}`);
+        toast.success("Job Sheet created!");
+        offerWhatsApp(res.data?.whatsappLink, "Send job sheet on WhatsApp");
       }
       setIsModalOpen(false);
       setFormData(emptyForm);
@@ -249,15 +252,14 @@ const RepairTickets = () => {
         finalCost: Number(ticket.finalCost || ticket.estimatedCost || 0),
         estimatedCost: Number(ticket.estimatedCost || 0),
       };
-      await axios.put(`${API_URL}/repair-tickets/${ticketId}`, payload, {
+      const res = await axios.put(`${API_URL}/repair-tickets/${ticketId}`, payload, {
         headers: { "x-auth-token": token },
       });
       setTickets((prev) =>
         prev.map((t) => ((t.id || t._id) === ticketId ? { ...t, status: newStatus } : t))
       );
-      toast.success(
-        `Status set to "${newStatus}"! Automated WhatsApp sent to ${ticket.customerPhone || "customer"}`
-      );
+      toast.success(`Status set to "${newStatus}"!`);
+      offerWhatsApp(res.data?.whatsappLink, "Tell customer on WhatsApp");
     } catch (err) {
       console.error("Status update error:", err);
       toast.error("Failed to update status");
@@ -283,15 +285,14 @@ const RepairTickets = () => {
     setSendingWa(true);
     const token = sessionStorage.getItem("token");
     try {
-      await axios.post(
+      const res = await axios.post(
         `${API_URL}/repair-tickets/${ticketId}/send-whatsapp`,
         { status: status || ticket.status },
         { headers: { "x-auth-token": token } }
       );
-      toast.success(`📲 Automated WhatsApp alert sent to ${ticket.customerPhone}!`);
+      openWhatsApp(res.data?.whatsappLink);
     } catch (err) {
-      console.error("WhatsApp send error:", err);
-      toast.error("API send failed. Opening WhatsApp Web...");
+      console.error("WhatsApp message error:", err);
       openWhatsAppDirect(ticket, status);
     } finally {
       setSendingWa(false);

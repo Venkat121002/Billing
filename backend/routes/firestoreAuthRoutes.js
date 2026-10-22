@@ -3,12 +3,13 @@ const router = express.Router();
 const authController = require('../controllers/firestoreAuthController');
 const auth = require('../middleware/firestoreAuth');
 const roleAuth = require('../middleware/roleAuth');
+const { limitAttemptsPerAccount } = require('../utils/attemptLimiter');
 
 // @route   POST /api/v2/auth/register
 router.post('/register', authController.register);
 
 // @route   POST /api/v2/auth/login
-router.post('/login', authController.login);
+router.post('/login', limitAttemptsPerAccount('login', { max: 10 }), authController.login);
 
 // @route   GET /api/v2/auth/me
 router.get('/me', auth, authController.getMe);
@@ -23,7 +24,7 @@ router.post('/logout', auth, authController.logout);
 router.delete('/delete-account', auth, authController.deleteAccount);
 
 // @route   POST /api/v2/auth/forgot-password
-router.post('/forgot-password', authController.forgotPassword);
+router.post('/forgot-password', limitAttemptsPerAccount('forgot', { max: 5, windowMs: 60 * 60 * 1000 }), authController.forgotPassword);
 
 // @route   POST /api/v2/auth/reset-password
 router.post('/reset-password', authController.resetPassword);

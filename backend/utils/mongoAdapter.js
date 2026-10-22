@@ -43,7 +43,8 @@ function toMongoUpdate(data) {
     const $set = {};
     const $inc = {};
     // Security: Protect immutable identification and creation timestamps from being tampered with
-    const IMMUTABLE_KEYS = new Set(['_id', 'id', 'createdAt', 'ownerId', 'tenantId', 'createdBy']);
+    // subuserId too: a body must not move a record into another staff login's records.
+    const IMMUTABLE_KEYS = new Set(['_id', 'id', 'createdAt', 'ownerId', 'tenantId', 'subuserId', 'createdBy']);
 
     for (const [key, value] of Object.entries(data)) {
         if (IMMUTABLE_KEYS.has(key)) continue;

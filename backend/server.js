@@ -332,14 +332,6 @@ app.use(
     require('./routes/firestoreClothingRoutes')
 );
 
-// Payments: public pay-link endpoints (token-authenticated) + Razorpay webhook
-app.use('/api/v2/pay', require('./routes/paymentRoutes'));
-app.use('/v2/pay', require('./routes/paymentRoutes'));
-
-
-const { razorpayWebhook } = require('./controllers/paymentController');
-app.post('/api/v2/webhooks/razorpay', razorpayWebhook);
-app.post('/v2/webhooks/razorpay', razorpayWebhook);
 // Payments: public pay-link endpoints (token-authenticated) + Cashfree webhook
 app.use('/api/v2/pay', require('./routes/paymentRoutes'));
 app.use('/v2/pay', require('./routes/paymentRoutes'));

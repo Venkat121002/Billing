@@ -4,6 +4,7 @@ import API_URL from "../../config/api";
 import { useAuth } from "../../contexts/AuthContext";
 import BillingLayout from "../../Layout/BillingLayout/AdminLayout";
 import toast from "react-hot-toast";
+import { offerWhatsApp, openWhatsApp } from "../../utils/whatsappLink";
 import {
   Scissors,
   PlusCircle,
@@ -139,8 +140,9 @@ const PetServices = () => {
         await axios.put(`${API_URL}/pet-services/${editingId}`, formData, config);
         toast.success("Service ticket updated!");
       } else {
-        await axios.post(`${API_URL}/pet-services`, formData, config);
+        const res = await axios.post(`${API_URL}/pet-services`, formData, config);
         toast.success("Pet checked in successfully!");
+        offerWhatsApp(res.data?.whatsappLink, "Send check-in on WhatsApp");
       }
       setIsModalOpen(false);
       setFormData(emptyTicket);
@@ -207,15 +209,16 @@ const PetServices = () => {
 
       // 2. Send via WhatsApp API if requested
       if (sendApi && ticket.customerPhone) {
+        toast.success(`Status updated to ${targetStatus}!`);
         try {
-          await axios.post(
+          const res = await axios.post(
             `${API_URL}/pet-services/${ticket.id}/send-status-whatsapp`,
             { status: targetStatus, customMessage: message },
             config
           );
-          toast.success(`Status updated & WhatsApp sent to ${ticket.customerPhone}!`);
+          openWhatsApp(res.data?.whatsappLink);
         } catch (waErr) {
-          toast.success("Status updated (WhatsApp API delivered fallback)");
+          toast.error("Status updated, but the WhatsApp message could not be prepared");
         }
       } else {
         toast.success(`Status updated to ${targetStatus}!`);

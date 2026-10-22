@@ -1,6 +1,8 @@
 const { getCollection, fetchUnifiedData } = require('../utils/dbUtils');
-const whatsappService = require('../utils/whatsappService');
-const { Pet, Owner } = require('../models/mongodb');
+const { manualMessage, storeNameFor } = require('../utils/customerWhatsApp');
+const crypto = require('crypto');
+const { db } = require('../config/firebase');
+const { Pet } = require('../models/mongodb');
 
 // Helper wrapper to get pets collection reference
 const getPetsCollection = (req) => {
@@ -169,38 +171,21 @@ exports.getDueReminders = async (req, res) => {
     }
 };
 
-// Helper: send WhatsApp reminder
+// Helper: prepare a WhatsApp reminder for the store to send from its own
+// WhatsApp (no platform send: see utils/customerWhatsApp.js).
 async function sendPetWhatsApp(req, pet, defaultMessage, customMessage, phoneOverride) {
-    const message = customMessage || defaultMessage;
+    const message = typeof customMessage === 'string' && customMessage.trim()
+        ? customMessage.slice(0, 2000)
+        : defaultMessage;
     const phone = phoneOverride || req.body?.phone || pet.customerPhone;
 
     if (!phone) {
-        return {
-            sent: false,
-            reason: "No phone number on file for pet owner",
-            message
-        };
+        return { sent: false, reason: "No phone number on file for pet owner", message };
     }
 
-    let waResult = null;
-    try {
-        waResult = await whatsappService.sendDirectText({ to: phone, text: message });
-    } catch (e) {
-        console.warn("Direct WhatsApp send failed:", e.message);
-    }
-
-    const cleanPhone = String(phone).replace(/\D/g, '');
-    const webPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
-    const whatsappWebUrl = `https://wa.me/${webPhone}?text=${encodeURIComponent(message)}`;
-
-    return {
-        sent: !!waResult?.messageId,
-        messageId: waResult?.messageId || null,
-        mode: waResult?.mode || 'web-link',
-        whatsappWebUrl,
-        message,
-        phone
-    };
+    const result = manualMessage(phone, message);
+    // whatsappWebUrl / sent kept for the existing Pets screen.
+    return { ...result, sent: false, whatsappWebUrl: result.whatsappLink, phone };
 }
 
 // @desc    Send automated WhatsApp vaccination reminder
@@ -215,7 +200,7 @@ exports.sendVaccineReminder = async (req, res) => {
         if (!petDoc.exists) return res.status(404).json({ msg: "Pet not found" });
 
         const pet = petDoc.data();
-        const storeName = req.user?.businessName || req.user?.name || "Our Pet Care Team";
+        const storeName = await storeNameFor(req);
         const customerName = pet.customerName || "Pet Parent";
         const petName = pet.petName || "your pet";
         const vaccine = pet.vaccineName || "Annual Vaccination";
@@ -232,11 +217,7 @@ Staying on schedule keeps ${petName} healthy and protected against critical dise
         const result = await sendPetWhatsApp(req, pet, defaultMessage, customMessage, phone);
         if (phone && !pet.customerPhone) {
             try {
-                if (petDoc.ref && typeof petDoc.ref.update === 'function') {
-                    await petDoc.ref.update({ customerPhone: phone });
-                } else if (Pet) {
-                    await Pet.updateOne({ _id: id }, { $set: { customerPhone: phone } });
-                }
+                await getPetsCollection(req).doc(id).update({ customerPhone: phone });
             } catch { /* ignore */ }
         }
         res.json({ success: true, ...result });
@@ -258,7 +239,7 @@ exports.sendDewormingReminder = async (req, res) => {
         if (!petDoc.exists) return res.status(404).json({ msg: "Pet not found" });
 
         const pet = petDoc.data();
-        const storeName = req.user?.businessName || req.user?.name || "Our Pet Care Team";
+        const storeName = await storeNameFor(req);
         const customerName = pet.customerName || "Pet Parent";
         const petName = pet.petName || "your pet";
         const dueDate = pet.nextDewormingDate || "this week";
@@ -274,11 +255,7 @@ Routine deworming prevents digestive issues and keeps your pet active and playfu
         const result = await sendPetWhatsApp(req, pet, defaultMessage, customMessage, phone);
         if (phone && !pet.customerPhone) {
             try {
-                if (petDoc.ref && typeof petDoc.ref.update === 'function') {
-                    await petDoc.ref.update({ customerPhone: phone });
-                } else if (Pet) {
-                    await Pet.updateOne({ _id: id }, { $set: { customerPhone: phone } });
-                }
+                await getPetsCollection(req).doc(id).update({ customerPhone: phone });
             } catch { /* ignore */ }
         }
         res.json({ success: true, ...result });
@@ -300,7 +277,7 @@ exports.sendFoodRefillReminder = async (req, res) => {
         if (!petDoc.exists) return res.status(404).json({ msg: "Pet not found" });
 
         const pet = petDoc.data();
-        const storeName = req.user?.businessName || req.user?.name || "Our Pet Store";
+        const storeName = await storeNameFor(req);
         const customerName = pet.customerName || "Pet Parent";
         const petName = pet.petName || "your pet";
         const food = pet.foodBrand ? `${pet.foodBrand}${pet.packSizeKg ? ` (${pet.packSizeKg}kg)` : ''}` : "pet food";
@@ -317,11 +294,7 @@ Would you like us to reserve a fresh bag for pickup or arrange home delivery? Ju
         const result = await sendPetWhatsApp(req, pet, defaultMessage, customMessage, phone);
         if (phone && !pet.customerPhone) {
             try {
-                if (petDoc.ref && typeof petDoc.ref.update === 'function') {
-                    await petDoc.ref.update({ customerPhone: phone });
-                } else if (Pet) {
-                    await Pet.updateOne({ _id: id }, { $set: { customerPhone: phone } });
-                }
+                await getPetsCollection(req).doc(id).update({ customerPhone: phone });
             } catch { /* ignore */ }
         }
         res.json({ success: true, ...result });
@@ -331,31 +304,52 @@ Would you like us to reserve a fresh bag for pickup or arrange home delivery? Ju
     }
 };
 
-// @desc    Public/Sharable Pet Passport profile (No login required)
-// @route   GET /api/v2/pets/public-passport/:id
+// @desc    Create (or return) the pet's shareable passport token. Staff only.
+// @route   POST /api/v2/pets/:id/passport-link
+exports.createPassportLink = async (req, res) => {
+    try {
+        const ref = getPetsCollection(req).doc(req.params.id);
+        const doc = await ref.get();
+        if (!doc.exists) return res.status(404).json({ msg: "Pet not found" });
+
+        let token = doc.data().passportToken;
+        if (!token) {
+            token = crypto.randomBytes(18).toString('base64url');
+            await ref.update({ passportToken: token });
+        }
+        res.json({ token });
+    } catch (err) {
+        console.error("Create Passport Link Error:", err.message);
+        res.status(500).json({ msg: "Could not create the passport link" });
+    }
+};
+
+// Find a pet by its passport token, across every store (the token is the only
+// credential, like a dues pay link). MongoDB or Firestore.
+async function findPetByPassportToken(token) {
+    if (!token || token.length < 20) return null;
+    if ((process.env.DB_TYPE || 'mongodb') === 'mongodb') {
+        return Pet.findOne({ passportToken: String(token) }).lean();
+    }
+    const prefix = `SwordNexBillingSoftware/${process.env.TENANT_ID}/`;
+    const snap = await db.collectionGroup('pets').where('passportToken', '==', String(token)).limit(5).get();
+    const hit = snap.docs.find((d) => d.ref.path.startsWith(prefix));
+    return hit ? { _id: hit.id, ...hit.data() } : null;
+}
+
+// @desc    Public/Sharable Pet Passport profile (No login required).
+//          Looked up by an unguessable passport token, never by record id, and
+//          without the owner's phone number or private notes.
+// @route   GET /api/v2/pets/public-passport/:token
 exports.getPublicPassport = async (req, res) => {
     try {
-        const { id } = req.params;
-        let pet = null;
-
-        // Try MongoDB first
-        if (Pet) {
-            const mongoose = require('mongoose');
-            if (mongoose.Types.ObjectId.isValid(id)) {
-                pet = await Pet.findById(id).lean();
-            }
-            if (!pet) {
-                pet = await Pet.findOne({ id: id }).lean();
-            }
-        }
-
+        const pet = await findPetByPassportToken(req.params.id);
         if (!pet) {
             return res.status(404).json({ msg: "Pet record not found" });
         }
 
-        // Return verified public data
         res.json({
-            id: pet._id || pet.id,
+            id: req.params.id,
             petName: pet.petName || "Unnamed Pet",
             species: pet.species || "Dog",
             breed: pet.breed || "Mixed Breed",
@@ -363,8 +357,7 @@ exports.getPublicPassport = async (req, res) => {
             dob: pet.dob || "",
             weightKg: pet.weightKg || "",
             microchipId: pet.microchipId || "",
-            customerName: pet.customerName || "Pet Parent",
-            customerPhone: pet.customerPhone || "",
+            customerName: String(pet.customerName || "Pet Parent").split(' ')[0],
             vaccineName: pet.vaccineName || "Rabies Booster",
             lastVaccinationDate: pet.lastVaccinationDate || "",
             nextVaccineDate: pet.nextVaccineDate || "",
@@ -372,7 +365,6 @@ exports.getPublicPassport = async (req, res) => {
             nextDewormingDate: pet.nextDewormingDate || "",
             vaccineHistory: pet.vaccineHistory || [],
             foodBrand: pet.foodBrand || "",
-            notes: pet.notes || "",
             updatedAt: pet.updatedAt || pet.createdAt
         });
     } catch (err) {

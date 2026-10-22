@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Info, Save } from "lucide-react";
 import toast from "react-hot-toast";
-import { Card, ErrorBox, PageHeader, Spinner, buttonClass, saRequest } from "./shared";
+import { Card, ErrorBox, PageHeader, Spinner, buttonClass, inputClass, saRequest } from "./shared";
 
 export const BILL_DELIVERY_OPTIONS = [
   { value: "pdf", label: "PDF", help: "Receipt PDF attached to the WhatsApp message (invoice_created template)." },
@@ -22,6 +22,7 @@ export const TextNotEnabledNote = () => (
 export default function SettingsView() {
   const [settings, setSettings] = useState(null);
   const [mode, setMode] = useState("pdf");
+  const [extraPrice, setExtraPrice] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -31,16 +32,24 @@ export default function SettingsView() {
       .then((data) => {
         setSettings(data);
         setMode(data.billDeliveryMode);
+        setExtraPrice(String(data.extraStaffLoginPrice ?? ""));
       })
       .catch((err) => setError(err.message));
   };
 
   useEffect(load, []);
 
+  const dirty = settings && (mode !== settings.billDeliveryMode || Number(extraPrice) !== Number(settings.extraStaffLoginPrice));
+
   const save = async () => {
+    const price = Number(extraPrice);
+    if (extraPrice === "" || !Number.isFinite(price) || price < 0) {
+      toast.error("Enter an extra staff login price of 0 or more");
+      return;
+    }
     setSaving(true);
     try {
-      const data = await saRequest("settings", { method: "put", body: { billDeliveryMode: mode } });
+      const data = await saRequest("settings", { method: "put", body: { billDeliveryMode: mode, extraStaffLoginPrice: price } });
       setSettings(data);
       toast.success("Settings saved");
     } catch (err) {
@@ -88,7 +97,27 @@ export default function SettingsView() {
 
           {mode === "text" && !settings.billTextEnabled && <TextNotEnabledNote />}
 
-          <button onClick={save} disabled={saving || mode === settings.billDeliveryMode} className={buttonClass.primary}>
+          <div className="border-t border-gray-200 sa-dark:border-slate-800 pt-4">
+            <h2 className="text-sm font-medium text-gray-800 sa-dark:text-slate-200">Extra staff login price</h2>
+            <p className="text-xs text-gray-500 sa-dark:text-slate-500 mt-0.5">
+              Price per additional staff login a store buys on top of its plan's limit.
+            </p>
+            <label className="mt-2 flex items-center gap-2 text-sm text-gray-700 sa-dark:text-slate-300">
+              ₹
+              <input
+                type="number"
+                min="0"
+                step="1"
+                value={extraPrice}
+                onChange={(e) => setExtraPrice(e.target.value)}
+                className={`${inputClass} w-32`}
+                aria-label="Extra staff login price in rupees"
+              />
+              per login
+            </label>
+          </div>
+
+          <button onClick={save} disabled={saving || !dirty} className={buttonClass.primary}>
             <Save className="w-4 h-4" /> {saving ? "Saving..." : "Save"}
           </button>
         </Card>

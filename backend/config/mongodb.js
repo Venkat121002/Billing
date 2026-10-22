@@ -12,8 +12,10 @@ const connectMongoDB = async () => {
 
     try {
         await mongoose.connect(mongoURI, {
-            maxPoolSize: 500,
-            minPoolSize: 10,
+            // Per server instance. 500 would let a few instances exhaust a hosted
+            // MongoDB's connection limit; requests queue briefly instead.
+            maxPoolSize: 20,
+            minPoolSize: 2,
             serverSelectionTimeoutMS: 5000,
             socketTimeoutMS: 45000,
         });
