@@ -18,21 +18,21 @@ try {
     const keyPath = path.resolve(
       __dirname,
       '..',
-      process.env.FIREBASE_SERVICE_ACCOUNT_PATH || 'serviceAccountKey.json'
+      process.env.FB_SERVICE_ACCOUNT_PATH || process.env.FIREBASE_SERVICE_ACCOUNT_PATH || 'serviceAccountKey.json'
     );
     let options;
     try {
       const serviceAccount = require(keyPath);
-      const expected = process.env.FIREBASE_PROJECT_ID;
+      const expected = process.env.FB_PROJECT_ID || process.env.FIREBASE_PROJECT_ID;
       if (expected && serviceAccount.project_id !== expected) {
         throw new Error(
-          `Service account key is for project "${serviceAccount.project_id}" but FIREBASE_PROJECT_ID is "${expected}"`
+          `Service account key is for project "${serviceAccount.project_id}" but FB_PROJECT_ID is "${expected}"`
         );
       }
       options = { credential: admin.credential.cert(serviceAccount), projectId: serviceAccount.project_id };
     } catch (err) {
       if (err.code !== 'MODULE_NOT_FOUND') throw err;
-      options = { credential: admin.credential.applicationDefault(), projectId: process.env.FIREBASE_PROJECT_ID || process.env.GCLOUD_PROJECT };
+      options = { credential: admin.credential.applicationDefault(), projectId: process.env.FB_PROJECT_ID || process.env.FIREBASE_PROJECT_ID || process.env.GCLOUD_PROJECT };
     }
     admin.initializeApp(options);
     console.log(`🔥 Firebase Admin initialized (project: ${admin.app().options.projectId})`);

@@ -5,9 +5,9 @@ const morgan = require('morgan');
 const fs = require('fs');
 const dotenv = require('dotenv');
 
-// Load .env first, then let .env.custom override if present
+// Load .env first, then let .env.custom override if present (only in local dev)
 dotenv.config();
-if (fs.existsSync('.env.custom')) {
+if (!process.env.FUNCTION_TARGET && !process.env.K_SERVICE && fs.existsSync('.env.custom')) {
     dotenv.config({ path: '.env.custom', override: true });
 }
 
