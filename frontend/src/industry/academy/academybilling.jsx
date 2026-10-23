@@ -689,7 +689,6 @@ const AcademyBilling = () => {
             };
 
             await axios.put(`${API_URL}/credit/${creditId}`, updatePayload, config);
-            console.log("Credit balance updated successfully");
           }
         } catch (err) {
           console.error("Error updating credit balance:", err);
@@ -740,7 +739,6 @@ const AcademyBilling = () => {
             if (product) {
               const currentQty = Number(product.quantity || 0);
               const newQty = Math.max(currentQty - item.qty, 0);
-              console.log(`Updating stock for ${item.name}: ${currentQty} -> ${newQty}`);
               await axios.put(`${API_URL}/products/${item.productId}`, { quantity: newQty }, config);
             }
           } catch (err) {

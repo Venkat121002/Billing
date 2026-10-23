@@ -5,6 +5,7 @@ import API_URL from "../../config/api";
 import { useAuth } from "../../contexts/AuthContext";
 import BillingLayout from "../../Layout/BillingLayout/AdminLayout";
 import toast from "react-hot-toast";
+import { openWhatsApp } from "../../utils/whatsappLink";
 import {
   Search,
   PawPrint,
@@ -157,6 +158,18 @@ const Pets = () => {
     setIsModalOpen(true);
   };
 
+  // The public passport is reached by an unguessable token, never by the record id.
+  const openPassport = async (id) => {
+    try {
+      const { data } = await axios.post(`${API_URL}/pets/${id}/passport-link`, {}, {
+        headers: { "x-auth-token": sessionStorage.getItem("token") },
+      });
+      navigate(`/pet-passport/${data.token}`);
+    } catch {
+      toast.error("Could not open the pet passport");
+    }
+  };
+
   const handleDeletePet = async (id) => {
     if (!window.confirm("Are you sure you want to delete this pet record?")) return;
     const token = sessionStorage.getItem("token");
@@ -285,15 +298,11 @@ const Pets = () => {
         } catch { /* ignore */ }
       }
 
-      if (res.data.sent) {
-        toast.success(`WhatsApp reminder sent to ${targetPhone}!`);
-      } else {
-        toast.success("Reminder generated! Opening WhatsApp link...");
-      }
+      openWhatsApp(res.data.whatsappLink);
       setReminderModal({ isOpen: false, pet: null, reminderType: "vaccine", message: "", phone: "", isSending: false });
     } catch (err) {
       console.error("Reminder error:", err);
-      toast.error("Failed to send WhatsApp message via API");
+      toast.error("Could not prepare the WhatsApp reminder");
       setReminderModal((prev) => ({ ...prev, isSending: false }));
     }
   };
@@ -584,7 +593,7 @@ const Pets = () => {
                             {/* Digital Pet Passport QR */}
                             <button
                               title="View & Print Digital Pet Passport"
-                              onClick={() => navigate(`/pet-passport/${petId}`)}
+                              onClick={() => openPassport(petId)}
                               className="p-2 rounded-lg text-emerald-700 hover:bg-emerald-50 border border-emerald-200 transition"
                             >
                               <QrCode size={15} />

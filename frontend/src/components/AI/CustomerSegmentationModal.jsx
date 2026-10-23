@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import axios from "axios";
 import API_URL from "../../config/api";
 import toast from "react-hot-toast";
+import { openWhatsApp } from "../../utils/whatsappLink";
 import {
   Users,
   Award,
@@ -108,7 +109,7 @@ const CustomerSegmentationModal = ({ isOpen, onClose }) => {
     setSendingTo(cust.customerId);
     try {
       const token = sessionStorage.getItem("token");
-      await axios.post(
+      const res = await axios.post(
         `${API_URL}/automation/send-segment-campaign`,
         {
           mobile: cust.mobile,
@@ -117,7 +118,7 @@ const CustomerSegmentationModal = ({ isOpen, onClose }) => {
         },
         { headers: { "x-auth-token": token } }
       );
-      toast.success(`WhatsApp campaign sent to ${cust.name || cust.mobile}!`);
+      openWhatsApp(res.data?.whatsappLink);
     } catch (err) {
       console.error("Send campaign error:", err);
       // Fallback: Open WhatsApp Web directly

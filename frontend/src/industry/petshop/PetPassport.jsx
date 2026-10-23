@@ -31,16 +31,8 @@ const PetPassport = () => {
     const fetchPassport = async () => {
       try {
         setLoading(true);
-        // Try public endpoint first, fallback to standard authenticated endpoint
-        let res;
-        try {
-          res = await axios.get(`${API_URL}/pets/public-passport/${id}`);
-        } catch (e) {
-          const token = sessionStorage.getItem("token");
-          res = await axios.get(`${API_URL}/pets/${id}`, {
-            headers: token ? { "x-auth-token": token } : {}
-          });
-        }
+        // `id` is the pet's passport token (see Pets.jsx openPassport).
+        const res = await axios.get(`${API_URL}/pets/public-passport/${id}`);
         setPet(res.data);
       } catch (err) {
         console.error("Passport fetch error:", err);
@@ -180,10 +172,6 @@ const PetPassport = () => {
                 Pet Parent
               </div>
               <p className="font-bold text-gray-900 text-lg">{pet.customerName || "Pet Parent"}</p>
-              <p className="text-gray-600 text-sm mt-1 flex items-center gap-1.5 font-medium">
-                <Phone size={13} className="text-emerald-500" />
-                {pet.customerPhone || "No contact on file"}
-              </p>
             </div>
 
             {/* Vitals */}

@@ -1,204 +1,152 @@
 /**
  * Chatbot & Knowledge Ingestion Controller
- * Provides endpoints for SwordNexi multi-tenant cross-department AI assistant.
+ * SwordNexi AI assistant. Everything here is scoped to the signed-in store and
+ * works on MongoDB or Firestore (getCollection / storeRecords).
  */
 const { answerTenantQuery } = require('../utils/aiChatbotService');
-const models = require('../models/mongodb');
+const { getCollection } = require('../utils/dbUtils');
+const { countStoreRecords, listStoreRecords } = require('../utils/storeRecords');
+
+const MAX_MESSAGE_LENGTH = 1000;   // each message is a paid AI call
+const MAX_KNOWLEDGE_LENGTH = 20000;
+
+const storeOwnerId = (req) => (req.user.role === 'owner' ? req.user.userId : req.user.ownerId);
+const knowledgeCol = (req) => getCollection(req, 'departmentknowledge');
 
 /**
- * Handles incoming chat messages with strict multi-tenant isolation
+ * Handles incoming chat messages for the caller's own store only.
  */
 exports.queryChatbot = async (req, res) => {
     try {
-        const { message, department = 'all', industry = 'all', history = [] } = req.body;
+        const { message, department = 'all' } = req.body;
 
         if (!message || typeof message !== 'string' || !message.trim()) {
             return res.status(400).json({ success: false, msg: 'Message is required' });
         }
-
-        const ownerId = req.ownerId;
-        const tenantId = req.user?.tenantId || req.ownerId;
-
-        if (!ownerId && !tenantId) {
-            return res.status(401).json({ success: false, msg: 'Tenant authorization is missing' });
+        if (message.length > MAX_MESSAGE_LENGTH) {
+            return res.status(400).json({ success: false, msg: `Please keep questions under ${MAX_MESSAGE_LENGTH} characters.` });
         }
 
-        const effectiveIndustry = (industry && industry !== 'all' && industry !== 'general')
-            ? industry
-            : (req.user?.industry || industry || 'general');
+        const ownerId = storeOwnerId(req);
+        // The store's industry comes from the login token, not from the browser.
+        const industry = req.user.industry || 'general';
 
         const result = await answerTenantQuery({
             ownerId,
-            tenantId,
             userQuery: message.trim(),
-            department,
-            industry: effectiveIndustry,
-            conversationHistory: Array.isArray(history) ? history : []
+            department: String(department).slice(0, 50),
+            industry
         });
 
-        return res.json({
-            success: true,
-            reply: result.reply,
-            sources: result.sources
-        });
+        return res.json({ success: true, reply: result.reply, sources: result.sources });
     } catch (err) {
         console.error('❌ [Chatbot Controller Error]:', err.message);
-        return res.status(500).json({
-            success: false,
-            msg: 'Failed to process assistant query',
-            error: err.message
-        });
+        return res.status(500).json({ success: false, msg: 'Failed to process assistant query' });
     }
 };
 
 /**
- * Ingests a new department policy, SOP, manual, or FAQ
+ * Adds a store policy, SOP, manual or FAQ (owner only, see route).
  */
 exports.ingestKnowledge = async (req, res) => {
     try {
-        const { title, content, department = 'all', industry = 'all', category = 'faq', tags = [] } = req.body;
+        const { title, content, department = 'all', category = 'faq', tags = [] } = req.body;
 
-        if (!title || !content) {
+        if (typeof title !== 'string' || typeof content !== 'string' || !title.trim() || !content.trim()) {
             return res.status(400).json({ success: false, msg: 'Title and content are required' });
         }
+        if (content.length > MAX_KNOWLEDGE_LENGTH) {
+            return res.status(400).json({ success: false, msg: `Content must be under ${MAX_KNOWLEDGE_LENGTH} characters.` });
+        }
 
-        const ownerId = req.ownerId;
-        const tenantId = req.user?.tenantId || req.ownerId;
-
-        const newDoc = new models.DepartmentKnowledge({
-            tenantId,
-            ownerId,
-            department: String(department).toLowerCase().trim(),
-            industry: String(industry).toLowerCase().trim(),
-            title: title.trim(),
-            category: category.trim(),
+        const now = new Date().toISOString();
+        const doc = {
+            department: String(department).toLowerCase().trim().slice(0, 50),
+            industry: req.user.industry || 'general',
+            title: title.trim().slice(0, 200),
+            category: String(category).trim().slice(0, 50),
             content: content.trim(),
-            tags: Array.isArray(tags) ? tags : String(tags).split(',').map(t => t.trim()).filter(Boolean),
-            createdBy: req.user?.name || req.user?.email || 'admin',
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString()
-        });
+            tags: (Array.isArray(tags) ? tags : String(tags).split(','))
+                .map((t) => String(t).trim().slice(0, 40)).filter(Boolean).slice(0, 20),
+            ownerId: storeOwnerId(req),
+            createdBy: req.user.userId,
+            createdAt: now,
+            updatedAt: now
+        };
 
-        await newDoc.save();
-
+        const ref = await knowledgeCol(req).add(doc);
         return res.status(201).json({
             success: true,
             msg: 'Department knowledge ingested successfully',
-            doc: newDoc
+            doc: { id: ref.id, ...doc }
         });
     } catch (err) {
         console.error('❌ [Knowledge Ingestion Error]:', err.message);
-        return res.status(500).json({
-            success: false,
-            msg: 'Failed to ingest knowledge',
-            error: err.message
-        });
+        return res.status(500).json({ success: false, msg: 'Failed to ingest knowledge' });
     }
 };
 
 /**
- * Lists ingested knowledge items for the current tenant
+ * Lists the store's knowledge items.
  */
 exports.listKnowledge = async (req, res) => {
     try {
-        const ownerId = req.ownerId;
-        const tenantId = req.user?.tenantId || req.ownerId;
         const { department, category } = req.query;
+        let docs = await listStoreRecords(storeOwnerId(req), 'departmentknowledge');
+        if (department && department !== 'all') docs = docs.filter((d) => d.department === department);
+        if (category && category !== 'all') docs = docs.filter((d) => d.category === category);
+        docs = docs
+            .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')))
+            .map(({ _path, ...d }) => ({ ...d, id: d._id }));
 
-        const filter = {
-            $or: [{ ownerId }, { tenantId }]
-        };
-
-        if (department && department !== 'all') {
-            filter.department = department;
-        }
-
-        if (category && category !== 'all') {
-            filter.category = category;
-        }
-
-        const docs = await models.DepartmentKnowledge.find(filter)
-            .sort({ createdAt: -1 })
-            .lean();
-
-        return res.json({
-            success: true,
-            count: docs.length,
-            docs
-        });
+        return res.json({ success: true, count: docs.length, docs });
     } catch (err) {
         console.error('❌ [List Knowledge Error]:', err.message);
-        return res.status(500).json({
-            success: false,
-            msg: 'Failed to retrieve department knowledge',
-            error: err.message
-        });
+        return res.status(500).json({ success: false, msg: 'Failed to retrieve department knowledge' });
     }
 };
 
 /**
- * Deletes an ingested knowledge item
+ * Deletes one of the store's knowledge items (owner only, see route).
  */
 exports.deleteKnowledge = async (req, res) => {
     try {
-        const ownerId = req.ownerId;
-        const tenantId = req.user?.tenantId || req.ownerId;
-        const { id } = req.params;
-
-        const deleted = await models.DepartmentKnowledge.findOneAndDelete({
-            _id: id,
-            $or: [{ ownerId }, { tenantId }]
-        });
-
-        if (!deleted) {
-            return res.status(404).json({ success: false, msg: 'Knowledge document not found or unauthorized' });
+        const ref = knowledgeCol(req).doc(req.params.id);
+        const doc = await ref.get();
+        if (!doc.exists) {
+            return res.status(404).json({ success: false, msg: 'Knowledge document not found' });
         }
-
-        return res.json({
-            success: true,
-            msg: 'Knowledge document deleted successfully'
-        });
+        await ref.delete();
+        return res.json({ success: true, msg: 'Knowledge document deleted successfully' });
     } catch (err) {
         console.error('❌ [Delete Knowledge Error]:', err.message);
-        return res.status(500).json({
-            success: false,
-            msg: 'Failed to delete knowledge document',
-            error: err.message
-        });
+        return res.status(500).json({ success: false, msg: 'Failed to delete knowledge document' });
     }
 };
 
 /**
- * Retrieves department & data statistics for the assistant
+ * Store data counts shown in the assistant panel.
  */
 exports.getChatbotStats = async (req, res) => {
     try {
-        const ownerId = req.ownerId;
-        const tenantId = req.user?.tenantId || req.ownerId;
-        const filter = { $or: [{ ownerId }, { tenantId }] };
-
-        const [productCount, lowStockCount, knowledgeCount, billCount] = await Promise.all([
-            models.Product.countDocuments(filter),
-            models.Product.countDocuments({ ...filter, quantity: { $lte: 5 } }),
-            models.DepartmentKnowledge.countDocuments(filter),
-            models.Bill.countDocuments(filter)
+        const ownerId = storeOwnerId(req);
+        const [products, knowledgeCount, billCount] = await Promise.all([
+            listStoreRecords(ownerId, 'products'),
+            countStoreRecords(ownerId, ['departmentknowledge']),
+            countStoreRecords(ownerId, ['bills'])
         ]);
 
         return res.json({
             success: true,
             stats: {
-                totalProducts: productCount,
-                lowStockProducts: lowStockCount,
+                totalProducts: products.length,
+                lowStockProducts: products.filter((p) => Number(p.quantity || 0) <= 5).length,
                 ingestedKnowledgeDocs: knowledgeCount,
                 totalBills: billCount
             }
         });
     } catch (err) {
         console.error('❌ [Chatbot Stats Error]:', err.message);
-        return res.status(500).json({
-            success: false,
-            msg: 'Failed to retrieve chatbot stats',
-            error: err.message
-        });
+        return res.status(500).json({ success: false, msg: 'Failed to retrieve chatbot stats' });
     }
 };

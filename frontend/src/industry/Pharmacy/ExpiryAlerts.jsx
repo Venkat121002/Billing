@@ -5,6 +5,7 @@ import API_URL from "../../config/api";
 import { useAuth } from "../../contexts/AuthContext";
 import BillingLayout from "../../Layout/BillingLayout/AdminLayout";
 import toast from "react-hot-toast";
+import { openWhatsApp } from "../../utils/whatsappLink";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import {
@@ -406,9 +407,7 @@ const ExpiryAlerts = () => {
           headers: { "x-auth-token": token },
         }
       );
-      if (res.data?.success) {
-        toast.success(`Refill reminder dispatched to ${refill.patientName} on WhatsApp!`);
-      }
+      openWhatsApp(res.data?.whatsappLink);
     } catch (err) {
       console.error("Refill send error:", err);
       toast.error(err.response?.data?.msg || "Could not dispatch WhatsApp reminder.");

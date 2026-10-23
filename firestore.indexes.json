@@ -52,6 +52,20 @@
             ]
         },
         {
+            "collectionGroup": "pets",
+            "fieldPath": "passportToken",
+            "indexes": [
+                {
+                    "order": "ASCENDING",
+                    "queryScope": "COLLECTION"
+                },
+                {
+                    "order": "ASCENDING",
+                    "queryScope": "COLLECTION_GROUP"
+                }
+            ]
+        },
+        {
             "collectionGroup": "subusercredit",
             "fieldPath": "payToken",
             "indexes": [

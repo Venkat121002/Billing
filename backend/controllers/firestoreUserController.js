@@ -3,6 +3,7 @@ const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const { Owner: OwnerModel, SubUser: SubUserModel } = require('../models/mongodb');
 const { getOwnerPlan } = require('../utils/planEnforcement');
+const { emailMatch } = require('../utils/emailMatch');
 
 // Determine which database to use
 const DB_TYPE = process.env.DB_TYPE || 'mongodb';
@@ -62,7 +63,7 @@ exports.createSubUser = async (req, res) => {
             }
 
             // Unique across owners and staff (login looks up owners first).
-            const existing = (await SubUserModel.findOne({ email, tenantId })) || (await OwnerModel.findOne({ email, tenantId }));
+            const existing = (await SubUserModel.findOne({ email: emailMatch(email), tenantId })) || (await OwnerModel.findOne({ email: emailMatch(email), tenantId }));
             if (existing) {
                 return res.status(400).json({ msg: "User with this email already exists" });
             }
@@ -279,7 +280,7 @@ exports.updateSubUser = async (req, res) => {
 
             if (email && email !== subUser.email) {
                 if (typeof email !== 'string') return res.status(400).json({ msg: "Invalid email" });
-                const existing = (await SubUserModel.findOne({ email, tenantId, userId: { $ne: subUserId } })) || (await OwnerModel.findOne({ email, tenantId }));
+                const existing = (await SubUserModel.findOne({ email: emailMatch(email), tenantId, userId: { $ne: subUserId } })) || (await OwnerModel.findOne({ email: emailMatch(email), tenantId }));
                 if (existing) {
                     return res.status(400).json({ msg: "Email already in use" });
                 }
@@ -288,6 +289,7 @@ exports.updateSubUser = async (req, res) => {
             const mongoUpdates = { ...updates };
             if (password) {
                 mongoUpdates.password = await bcrypt.hash(password, 10);
+                mongoUpdates.passwordChangedAt = new Date().toISOString(); // signs the staff member out everywhere
             }
 
             if (Object.keys(mongoUpdates).length > 0) {
@@ -330,7 +332,8 @@ exports.updateSubUser = async (req, res) => {
             }
         }
 
-        // 2. Update Firestore
+        // 2. Update Firestore (a new password also signs the staff member out everywhere)
+        if (password) updates.passwordChangedAt = new Date().toISOString();
         if (Object.keys(updates).length > 0) {
             await subUserRef.update({
                 ...updates,

@@ -198,7 +198,6 @@ const MobileRecord = () => {
     const userId = currentUser?.uid || currentUser?.userId;
 
     if (!userId) {
-      console.log("⚠️ No user ID found, skipping fetch");
       setLoading(false);
       return;
     }

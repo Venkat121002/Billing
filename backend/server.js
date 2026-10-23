@@ -5,9 +5,9 @@ const morgan = require('morgan');
 const fs = require('fs');
 const dotenv = require('dotenv');
 
-// Load .env first, then let .env.custom override if present
+// Load .env first, then let .env.custom override if present (only in local dev)
 dotenv.config();
-if (fs.existsSync('.env.custom')) {
+if (!process.env.FUNCTION_TARGET && !process.env.K_SERVICE && fs.existsSync('.env.custom')) {
     dotenv.config({ path: '.env.custom', override: true });
 }
 
@@ -332,14 +332,6 @@ app.use(
     require('./routes/firestoreClothingRoutes')
 );
 
-// Payments: public pay-link endpoints (token-authenticated) + Razorpay webhook
-app.use('/api/v2/pay', require('./routes/paymentRoutes'));
-app.use('/v2/pay', require('./routes/paymentRoutes'));
-
-
-const { razorpayWebhook } = require('./controllers/paymentController');
-app.post('/api/v2/webhooks/razorpay', razorpayWebhook);
-app.post('/v2/webhooks/razorpay', razorpayWebhook);
 // Payments: public pay-link endpoints (token-authenticated) + Cashfree webhook
 app.use('/api/v2/pay', require('./routes/paymentRoutes'));
 app.use('/v2/pay', require('./routes/paymentRoutes'));

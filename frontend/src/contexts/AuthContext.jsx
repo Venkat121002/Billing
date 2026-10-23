@@ -57,18 +57,15 @@ export function AuthProvider({ children }) {
   // Check auth on load
   useEffect(() => {
     const initAuth = async () => {
-      console.log("🔐 initAuth: Starting...");
       try {
         // 1. Check Local Token (Backend Session)
         const token = sessionStorage.getItem("token");
-        console.log("🎫 Local Token check:", token ? "Token present" : "No token");
 
         if (token) {
           try {
             // Note: Ensure /auth/me exists in your backend and returns user data
             const res = await api.get("auth/me");
             const userData = res.data;
-            console.log("👤 Backend User fetched:", userData.uid || userData.userId);
             setCurrentUser(userData);
           } catch (e) {
             console.error("❌ Backend fetch failed:", e);
@@ -79,7 +76,6 @@ export function AuthProvider({ children }) {
       } catch (error) {
         console.error("❌ Auth initialization failure:", error);
       } finally {
-        console.log("🔓 Unlocking App (loading=false)");
         setLoading(false);
       }
     };
@@ -90,7 +86,6 @@ export function AuthProvider({ children }) {
   // LOGIN
   async function employerLogin(email, password, loginType = 'admin', remember = false) {
     try {
-      console.log("🚀 Logging in via Backend API...");
 
       const res = await api.post("auth/login", {
         email,
@@ -99,7 +94,6 @@ export function AuthProvider({ children }) {
         remember
       });
 
-      console.log("✅ Login Success:", res.data);
 
       const { token, user } = res.data;
       clearToken();
@@ -147,7 +141,6 @@ export function AuthProvider({ children }) {
 
   async function employerSignup(data) {
     try {
-      console.log("🚀 Registering via Backend API...");
 
       const payload = {
         firstName: data.firstName,
@@ -173,7 +166,6 @@ export function AuthProvider({ children }) {
 
       const res = await api.post("auth/register", payload);
 
-      console.log("✅ Signup Success:", res.data);
       const { token, user } = res.data;
 
       clearToken();
@@ -319,9 +311,7 @@ export function AuthProvider({ children }) {
   async function updateProfile(data) {
     try {
       const url = "auth/update-profile";
-      console.log(`📝 [AuthContext] Updating Profile: PUT ${api.defaults.baseURL}${url}`, data);
       const res = await api.put(url, data);
-      console.log("✅ [AuthContext] Profile Update Success:", res.data);
 
       // Refresh user data
       const userRes = await api.get("auth/me");

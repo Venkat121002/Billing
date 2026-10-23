@@ -123,6 +123,7 @@ if (require.main === module) {
     process.exit(1);
   }
   process.env.FIREBASE_PROJECT_ID = String(flags.project);
+  process.env.FB_PROJECT_ID = String(flags.project); // newer name for the same setting
   process.env.BILLING_DB_ID = String(flags.database || process.env.BILLING_DB_ID || 'billing');
   const { NAMESPACE } = require('../config/tenant');
   const { rawDb } = require('../config/firebase');

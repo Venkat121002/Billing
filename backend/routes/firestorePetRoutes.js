@@ -12,6 +12,9 @@ router.use(auth);
 // Reminders & analytics
 router.get('/reminders/due', petController.getDueReminders);
 
+// Shareable passport link (creates the pet's unguessable passport token)
+router.post('/:id/passport-link', petController.createPassportLink);
+
 // Automated WhatsApp Reminders
 router.post('/:id/send-vaccine-reminder', petController.sendVaccineReminder);
 router.post('/:id/send-deworming-reminder', petController.sendDewormingReminder);

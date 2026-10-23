@@ -647,7 +647,6 @@ const SDBilling = () => {
             };
 
             await axios.put(`${API_URL}/credit/${creditId}`, updatePayload, config);
-            console.log("Credit balance updated successfully");
           }
         } catch (err) {
           console.error("Error updating credit balance:", err);

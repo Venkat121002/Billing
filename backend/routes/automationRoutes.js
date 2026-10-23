@@ -6,7 +6,6 @@ const { runDailyLowStockSummary } = require('../utils/inventoryAlerts');
 const { runDuePaymentReminders } = require('../utils/dueReminders');
 const { generateDailySalesSummary, runAllOwnersDailySalesSummary } = require('../utils/salesSummary');
 const { isGeminiConfigured } = require('../config/gemini');
-const { Product, Bill } = require('../models/mongodb');
 const platformStore = require('../utils/platformStore');
 const { generateDailyReportPDF } = require('../utils/reportPdfGenerator');
 
@@ -17,6 +16,7 @@ const { categorizeExpense } = require('../utils/expenseCategorization');
 const { generateGstReturnsSummary, buildGstExcelWorkbook } = require('../utils/gstReturnGenerator');
 const wa = require('../utils/whatsappService');
 const { listStoreRecords } = require('../utils/storeRecords');
+const { manualMessage } = require('../utils/customerWhatsApp');
 
 // Phase 3 Feature 11 Utilities (Receipt & Invoice Scanner OCR)
 const multer = require('multer');
@@ -135,13 +135,10 @@ router.post('/send-segment-campaign', async (req, res) => {
             return res.status(403).json({ msg: 'Campaign messages can only be sent to your own customers.' });
         }
 
-        const personalized = message.replace('{customerName}', customerName || 'Customer');
-        const sendResult = await wa.sendDirectText({ to: mobile, text: personalized });
-
-        res.json({
-            msg: `Campaign message sent to ${mobile}`,
-            sendResult
-        });
+        const personalized = message.slice(0, 2000).replace('{customerName}', customerName || 'Customer');
+        // Promotional text can't be sent business-initiated without a template:
+        // the store sends it from its own WhatsApp (see utils/customerWhatsApp.js).
+        res.json(manualMessage(mobile, personalized));
     } catch (err) {
         console.error('❌ Send Campaign Error:', err);
         res.status(500).json({ msg: 'Failed to dispatch campaign', error: err.message });
@@ -398,10 +395,9 @@ router.get('/pharmacy/refills', async (req, res) => {
 
         // Look back 60 days of bills to detect repeat course cycles
         const startDate = new Date(Date.now() - 60 * 86400000).toISOString();
-        const bills = await Bill.find({
-            ownerId: effectiveOwnerId,
-            createdAt: { $gte: startDate }
-        }).sort({ createdAt: -1 }).lean();
+        // This store's bills (owner + staff), MongoDB or Firestore, newest first.
+        const bills = (await listStoreRecords(effectiveOwnerId, 'bills', { since: startDate }))
+            .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
 
         const refills = [];
         const seenCombo = new Set();
@@ -487,23 +483,11 @@ router.post('/pharmacy/send-refill', async (req, res) => {
         const daysCount = Math.max(1, Math.abs(Number(daysRemaining) || 3));
         const dueDate = req.body.dueDate || new Date(Date.now() + daysCount * 86400000).toLocaleDateString('en-GB');
 
-        const waRes = await wa.sendTemplate({
-            to: patientPhone,
-            type: 'MEDICINE_REFILL_REMINDER',
-            data: {
-                patient_name: patientName || 'Valued Patient',
-                pharmacy_name: pharmacyName,
-                medicine_name: medicineName || 'Prescription Medicines',
-                days_left: String(daysCount),
-                expiry_date: dueDate
-            }
-        });
-
-        res.json({
-            success: true,
-            msg: `Refill reminder dispatched to ${patientName} on WhatsApp!`,
-            waRes
-        });
+        // There is no approved refill template (the old code reused the SwordNex
+        // subscription-expiry template, which told patients their "subscription"
+        // was expiring). The pharmacy sends this from its own WhatsApp instead.
+        const text = `Hello ${patientName || 'there'},\n\nThis is a reminder from ${pharmacyName}: your regular supply of ${medicineName || 'your medicines'} is due for a refill in about ${daysCount} day${daysCount === 1 ? '' : 's'} (around ${dueDate}).\n\nReply YES or call us and we will keep your pack ready for pickup or delivery.\n\nWishing you good health,\n${pharmacyName}`;
+        res.json(manualMessage(patientPhone, text));
     } catch (err) {
         console.error('❌ Send Refill WhatsApp Error:', err);
         res.status(500).json({ msg: 'Failed to dispatch WhatsApp refill reminder', error: err.message });
@@ -526,10 +510,7 @@ router.get('/daily-sales-summary/download-pdf', async (req, res) => {
         const start = new Date(`${istString}T00:00:00.000+05:30`).toISOString();
         const end = new Date(`${istString}T23:59:59.999+05:30`).toISOString();
 
-        const bills = await Bill.find({
-            ownerId: effectiveOwnerId,
-            createdAt: { $gte: start, $lte: end }
-        }).lean();
+        const bills = await listStoreRecords(effectiveOwnerId, 'bills', { since: start, until: end });
 
         let totalRevenue = 0;
         let cashTotal = 0;
@@ -556,11 +537,7 @@ router.get('/daily-sales-summary/download-pdf', async (req, res) => {
         });
 
         const topProducts = Object.values(productStats).sort((a, b) => b.qty - a.qty).slice(0, 5);
-        const { Credit } = require('../models/mongodb');
-        const todayCredits = await Credit.find({
-            ownerId: effectiveOwnerId,
-            createdAt: { $gte: start, $lte: end }
-        }).lean();
+        const todayCredits = await listStoreRecords(effectiveOwnerId, 'credit_customers', { since: start, until: end });
         const duesIncurred = todayCredits.reduce((sum, c) => sum + Number(c.balance || c.amount || 0), 0);
 
         const pdfBuffer = await generateDailyReportPDF({

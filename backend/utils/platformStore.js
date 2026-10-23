@@ -151,13 +151,16 @@ exports.updateSupportRequest = async (id, patch) => {
 };
 
 // ---------- Platform settings (single 'global' record) ----------
-const PLATFORM_DEFAULTS = { billDeliveryMode: 'pdf' };
+const PLATFORM_DEFAULTS = { billDeliveryMode: 'pdf', extraStaffLoginPrice: 15 };
 const settingsDoc = () => db.collection('platform').doc('settings');
 
 exports.getPlatformSettings = async () => {
     if (isMongo()) {
         const doc = await models.PlatformSetting.findOne({ key: 'global' }).lean();
-        return { ...PLATFORM_DEFAULTS, ...(doc ? { billDeliveryMode: doc.billDeliveryMode } : {}) };
+        const saved = {};
+        if (doc?.billDeliveryMode) saved.billDeliveryMode = doc.billDeliveryMode;
+        if (doc?.extraStaffLoginPrice != null) saved.extraStaffLoginPrice = doc.extraStaffLoginPrice;
+        return { ...PLATFORM_DEFAULTS, ...saved };
     }
     const doc = await settingsDoc().get();
     return { ...PLATFORM_DEFAULTS, ...(doc.exists ? doc.data() : {}) };

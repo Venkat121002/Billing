@@ -7,6 +7,8 @@ const { sendEmail } = require('../utils/emailService');
 const bcrypt = require('bcryptjs');
 const otpService = require('../utils/otpService');
 const platformStore = require('../utils/platformStore');
+const { emailMatch } = require('../utils/emailMatch');
+const { forgetAccount } = require('../middleware/firestoreAuth');
 const jwt = require('jsonwebtoken');
 
 // MongoDB models
@@ -59,7 +61,7 @@ exports.register = async (req, res) => {
         if (DB_TYPE === 'mongodb') {
             // Emails are unique across owners and staff: login looks up owners first,
             // so a duplicate would lock the other account out.
-            const existingUser = (await OwnerModel.findOne({ email, tenantId })) || (await SubUserModel.findOne({ email, tenantId }));
+            const existingUser = (await OwnerModel.findOne({ email: emailMatch(email), tenantId })) || (await SubUserModel.findOne({ email: emailMatch(email), tenantId }));
             if (existingUser) {
                 return res.status(400).json({ msg: "User already exists" });
             }
@@ -891,7 +893,7 @@ exports.forgotPassword = async (req, res) => {
         if (typeof email !== 'string' || !email) return res.status(400).json({ msg: "Email is required" });
 
         const exists = DB_TYPE === 'mongodb'
-            ? !!((await OwnerModel.findOne({ email, tenantId })) || (await SubUserModel.findOne({ email, tenantId })))
+            ? !!((await OwnerModel.findOne({ email: emailMatch(email), tenantId })) || (await SubUserModel.findOne({ email: emailMatch(email), tenantId })))
             : !!(await findFirestoreAccountByEmail(tenantId, email));
 
         if (exists) {
@@ -940,13 +942,16 @@ exports.resetPassword = async (req, res) => {
 
         if (DB_TYPE === 'mongodb') {
             const hash = await bcrypt.hash(password, 10);
-            const owner = await OwnerModel.findOne({ email, tenantId });
+            // passwordChangedAt signs every existing session out (see middleware/firestoreAuth.js).
+            const changed = { password: hash, passwordChangedAt: new Date().toISOString() };
+            const owner = await OwnerModel.findOne({ email: emailMatch(email), tenantId });
             if (owner) {
-                await OwnerModel.updateOne({ _id: owner._id }, { $set: { password: hash } });
+                await OwnerModel.updateOne({ _id: owner._id }, { $set: changed });
+                forgetAccount(owner.userId);
             } else {
-                const sub = await SubUserModel.findOne({ email, tenantId });
+                const sub = await SubUserModel.findOne({ email: emailMatch(email), tenantId });
                 if (!sub) return res.status(400).json({ msg: "Account not found" });
-                await SubUserModel.updateOne({ _id: sub._id }, { $set: { password: hash } });
+                await SubUserModel.updateOne({ _id: sub._id }, { $set: changed });
             }
         } else {
             // Firestore mode signs in through Firebase Auth (see login()), so the
@@ -955,6 +960,12 @@ exports.resetPassword = async (req, res) => {
             const account = await findFirestoreAccountByEmail(tenantId, email);
             if (!account) return res.status(400).json({ msg: "Account not found" });
             await admin.auth().updateUser(account.uid, { password });
+            const ownersCol = db.collection('owner');
+            const accountRef = account.role === 'owner'
+                ? ownersCol.doc(account.uid)
+                : ownersCol.doc(account.ownerId).collection('subuser').doc(account.uid);
+            await accountRef.update({ passwordChangedAt: new Date().toISOString() });
+            if (account.role === 'owner') forgetAccount(account.uid);
         }
 
         res.json({ msg: "Password updated successfully" });

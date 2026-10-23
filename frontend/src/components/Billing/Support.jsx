@@ -129,7 +129,6 @@ export const Support = () => {
 
     const handleSubmit = (e) => {
         e.preventDefault();
-        console.log("Form submitted:", { ...formData, subject: selectedSubject });
     };
 
     const handleInputChange = (e) => {

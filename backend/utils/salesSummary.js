@@ -9,7 +9,7 @@ const emailTemplates = require('./emailTemplates');
 const { money } = require('./paymentService');
 const { generateDailyReportPDF } = require('./reportPdfGenerator');
 const { listStoreRecords } = require('./storeRecords');
-const { Bill, Credit, Product, EmailLog } = require('../models/mongodb');
+const { recordEmail } = require('./emailLog');
 
 /**
  * Returns Start & End of day in IST (Asia/Kolkata)
@@ -38,28 +38,12 @@ async function generateDailySalesSummary({ ownerId, date = new Date() }) {
         const ownerMobile = owner.mobile || owner.phone;
         const ownerEmail = owner.email;
 
-        // Fetch all bills, credits, and products strictly for this owner (Dual-mode support)
-        let bills = [];
-        let todayCredits = [];
-        let products = [];
-
-        if (process.env.DB_TYPE === 'firestore') {
-            bills = await listStoreRecords(ownerId, 'bills', { since: start, until: end });
-            todayCredits = await listStoreRecords(ownerId, 'credit_customers', { since: start, until: end });
-            products = await listStoreRecords(ownerId, 'products');
-        } else {
-            bills = await Bill.find({
-                ownerId,
-                createdAt: { $gte: start, $lte: end }
-            }).lean();
-            todayCredits = await Credit.find({
-                ownerId,
-                createdAt: { $gte: start, $lte: end }
-            }).lean();
-            products = await Product.find({
-                ownerId
-            }).lean();
-        }
+        // This store's records only (owner + staff), in MongoDB or Firestore.
+        const [bills, todayCredits, products] = await Promise.all([
+            listStoreRecords(ownerId, 'bills', today),
+            listStoreRecords(ownerId, 'credit_customers', today),
+            listStoreRecords(ownerId, 'products')
+        ]);
 
         let totalRevenue = 0;
         let cashTotal = 0;
@@ -182,30 +166,15 @@ async function generateDailySalesSummary({ ownerId, date = new Date() }) {
                     attachment: pdfAttachment ? [pdfAttachment] : []
                 });
                 result.emailSent = true;
-                if (EmailLog) {
-                    await EmailLog.create({
-                        tenantId: owner.tenantId || process.env.TENANT_ID || 'SwordNexBilling-4pzp8',
-                        ownerId,
-                        recipient: ownerEmail,
-                        subject: emailTemplate.subject,
-                        type: 'daily_closing_summary',
-                        status: 'sent',
-                        metadata: { storeName, totalSales: summaryData.totalSales, totalBills: bills.length }
-                    }).catch((e) => console.error('[salesSummary] EmailLog error:', e.message));
-                }
+                await recordEmail({
+                    ownerId, recipient: ownerEmail, subject: emailTemplate.subject, type: 'daily_closing_summary', status: 'sent',
+                    metadata: { storeName, totalSales: summaryData.totalSales, totalBills: bills.length }
+                });
             } catch (err) {
                 console.error(`[salesSummary] Email failed for ${ownerEmail}:`, err.message);
-                if (EmailLog) {
-                    await EmailLog.create({
-                        tenantId: owner.tenantId || process.env.TENANT_ID || 'SwordNexBilling-4pzp8',
-                        ownerId,
-                        recipient: ownerEmail,
-                        subject: emailTemplate.subject,
-                        type: 'daily_closing_summary',
-                        status: 'failed',
-                        error: err.message
-                    }).catch(() => {});
-                }
+                await recordEmail({
+                    ownerId, recipient: ownerEmail, subject: emailTemplate.subject, type: 'daily_closing_summary', status: 'failed', error: err.message
+                });
             }
         }
 

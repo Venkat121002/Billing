@@ -87,9 +87,10 @@ class ConcurrencyLimiter {
 
 const softwareAiQueue = new ConcurrencyLimiter(30);
 
-// 4. Software Services Catalog Cache (5 minutes)
-let cachedSoftwareServices = null;
-let cachedSoftwareServicesExpiry = 0;
+// 4. Software Services Catalog Cache (5 minutes), one entry per store/login.
+// Must never be shared across stores: each store's services, prices and leads are private.
+const servicesCache = new Map(); // `${ownerId}:${subuserId}` -> { services, expires }
+const SERVICES_TTL_MS = 5 * 60 * 1000;
 
 // Helper: Clean raw AI markdown/json formatting
 function cleanJsonOutput(raw = '') {
@@ -119,7 +120,7 @@ exports.generateProposal = async (req, res) => {
         const prompt = rawPrompt.trim();
 
         const ownerId = req.ownerId || req.user?.userId;
-        const cacheKey = getCacheKey(ownerId, 'proposal', `${prompt}-${budget}-${timelineWeeks}`);
+        const cacheKey = getCacheKey(ownerId, 'proposal', `${prompt}-${budget}-${timelineWeeks}-${clientName}-${category}`);
 
         // Fast Cache Check (<10ms)
         const cached = getFromCache(cacheKey);
@@ -129,17 +130,18 @@ exports.generateProposal = async (req, res) => {
 
         // Fetch registered software services to ground tech leads and rates (cached for 5m to protect DB under high concurrency)
         let registeredServices = [];
-        if (cachedSoftwareServices && Date.now() < cachedSoftwareServicesExpiry) {
-            registeredServices = cachedSoftwareServices;
+        const servicesKey = `${ownerId}:${req.user?.subuserId || ''}`;
+        const cachedServices = servicesCache.get(servicesKey);
+        if (cachedServices && Date.now() < cachedServices.expires) {
+            registeredServices = cachedServices.services;
         } else if (models.mongoose?.connection?.readyState === 1 || process.env.DB_TYPE === 'firestore') {
             try {
                 const productsRef = getCollection(req, 'products');
                 const snap = await productsRef.get();
-                cachedSoftwareServices = snap.docs
+                registeredServices = snap.docs
                     .map(d => ({ id: d.id, ...d.data() }))
                     .filter(p => p.industry === 'software_development');
-                cachedSoftwareServicesExpiry = Date.now() + 5 * 60 * 1000;
-                registeredServices = cachedSoftwareServices;
+                servicesCache.set(servicesKey, { services: registeredServices, expires: Date.now() + SERVICES_TTL_MS });
             } catch (e) {
                 registeredServices = [];
             }

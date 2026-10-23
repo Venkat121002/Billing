@@ -1,7 +1,8 @@
 const { getCollection, fetchUnifiedData } = require('../utils/dbUtils');
-const { sendDirectText } = require('../utils/whatsappService');
+const { sendTemplate } = require('../utils/whatsappService');
+const { whatsappLink, manualMessage } = require('../utils/customerWhatsApp');
 const platformStore = require('../utils/platformStore');
-const { Product, Bill, StoreCredit } = require('../models/mongodb');
+const { listStoreRecords } = require('../utils/storeRecords');
 
 // Helper to get collection
 const getClothingCol = (req, name) => getCollection(req, name);
@@ -142,8 +143,8 @@ ${discountTotal > 0 ? `Total Savings: Rs. ${Number(discountTotal).toFixed(2)}\n`
 
 Thank you for shopping with ${storeName}! Visit us again soon.`;
 
-        const waRes = await sendDirectText({ to: customerPhone, text: invoiceMessage });
-        res.json({ success: true, msg: `WhatsApp bill sent to ${customerPhone}`, waRes });
+        // Sent by the store from its own WhatsApp (see utils/customerWhatsApp.js).
+        res.json(manualMessage(customerPhone, invoiceMessage));
     } catch (err) {
         console.error("Send Bill WhatsApp Error:", err);
         res.status(500).json({ msg: "Failed to dispatch WhatsApp bill", error: err.message });
@@ -238,7 +239,8 @@ exports.processSizeExchange = async (req, res) => {
             storeCreditNote = { id: scRef.id, ...creditData };
         }
 
-        // Send WhatsApp confirmation to customer if mobile exists
+        // Exchange receipt for the store to send from its own WhatsApp
+        let link = null;
         if (customerPhone) {
             const owner = await platformStore.getOwner(effectiveOwnerId).catch(() => null);
             const storeName = owner?.companyDetails?.name || owner?.businessName || req.user.businessName || "Our Clothing Store";
@@ -261,13 +263,13 @@ ${diffText}
 
 Thank you for visiting ${storeName}!`;
 
-            sendDirectText({ to: customerPhone, text: exchangeText })
-                .catch(err => console.log('[Exchange WhatsApp Error]:', err.message));
+            link = whatsappLink(customerPhone, exchangeText);
         }
 
         res.json({
             success: true,
             msg: "Size exchange processed successfully!",
+            whatsappLink: link,
             priceDiff,
             storeCreditNote,
             returnedItem,
@@ -364,10 +366,7 @@ exports.getEodClosing = async (req, res) => {
         const end = new Date(`${istDateStr}T23:59:59.999+05:30`).toISOString();
 
         // Fetch bills for today strictly for this clothing store
-        const bills = await Bill.find({
-            ownerId: effectiveOwnerId,
-            createdAt: { $gte: start, $lte: end }
-        }).lean();
+        const bills = await listStoreRecords(effectiveOwnerId, 'bills', { since: start, until: end });
 
         let totalRevenue = 0;
         let cashTotal = 0;
@@ -435,10 +434,11 @@ exports.sendEodWhatsApp = async (req, res) => {
     try {
         const effectiveOwnerId = req.user.role === 'owner' ? req.user.userId : (req.user.ownerId || req.user.userId);
         const owner = await platformStore.getOwner(effectiveOwnerId).catch(() => null);
-        const targetPhone = req.body.ownerPhone || owner?.phone || owner?.mobile || req.user.phone;
+        // Only ever the owner's own registered number (never a number from the request).
+        const targetPhone = owner?.mobile || owner?.phone;
 
         if (!targetPhone) {
-            return res.status(400).json({ msg: "Store owner phone number is required" });
+            return res.status(400).json({ msg: "Add a mobile number to the store owner's profile first." });
         }
 
         const storeName = owner?.companyDetails?.name || owner?.businessName || req.user.businessName || "Clothing Boutique";
@@ -468,8 +468,25 @@ Date: ${istDateStr}
 ----------------------------
 Automated EOD Report • SwordNex Billing`;
 
-        const waRes = await sendDirectText({ to: targetPhone, text: summaryText });
-        res.json({ success: true, msg: `Closing summary dispatched to ${targetPhone} on WhatsApp!`, waRes });
+        // Business-initiated message to the owner: must use the approved template
+        // (free text is dropped by Meta outside the 24-hour window).
+        const money = (n) => `Rs. ${Number(n || 0).toFixed(2)}`;
+        const waRes = await sendTemplate({
+            to: targetPhone,
+            type: 'DAILY_SALES_SUMMARY',
+            data: {
+                owner_name: owner?.firstName || 'Owner',
+                store_name: storeName,
+                date: istDateStr,
+                total_sales: money(totalRevenue),
+                total_bills: String(totalBills),
+                cash_sales: money(paymentBreakdown.cash),
+                digital_sales: money(Number(paymentBreakdown.upi || 0) + Number(paymentBreakdown.card || 0)),
+                dues_incurred: money(0),
+                top_products: `${totalItemsSold} garments sold · top seller: ${topStaff}`
+            }
+        });
+        res.json({ success: true, msg: `Closing summary sent to the owner's WhatsApp.`, preview: summaryText, waRes });
     } catch (err) {
         console.error("Send EOD WhatsApp Error:", err);
         res.status(500).json({ msg: "Failed to send EOD WhatsApp", error: err.message });

@@ -140,7 +140,6 @@ const Credit = () => {
   };
 
   const handleConfirmPay = () => {
-    console.log("Confirm Pay Clicked. Amount:", payAmount);
     const amount = parseFloat(payAmount);
     if (!amount || amount <= 0) {
       console.error("Invalid amount");
@@ -222,7 +221,6 @@ const Credit = () => {
   // 🔹 Submit (Add/Edit)
   const handleSubmit = async (e) => {
     e.preventDefault();
-    console.log("handleSubmit called", formData);
 
     if (!currentUser) {
       console.error("No currentUser");
@@ -555,7 +553,6 @@ const Credit = () => {
   
 
   const handlePay = async (session, index, amount) => {
-    console.log("handlePay called", { session, index, amount, currentUser });
 
     if (!currentUser) {
       console.error("No current user found");
@@ -590,7 +587,6 @@ const Credit = () => {
       const token = sessionStorage.getItem("token");
       const config = { headers: { "Content-Type": "application/json", "x-auth-token": token } };
 
-      console.log("Updating credit balance...", { id: prev.id, balance: overallBalance, payments });
 
       axios.put(`${API_URL}/credit/${prev.id}`, {
         payments,
@@ -598,7 +594,6 @@ const Credit = () => {
         totalbalance: overallBalance
       }, config)
         .then(() => {
-          console.log("Payment recorded successfully");
           toast.success("Payment recorded!");
           fetchCustomers();
         })
@@ -677,7 +672,6 @@ const Credit = () => {
       toast.error("Failed to save payments");
     }
   };
-  console.log(userData); // debug purpose
 
 
 

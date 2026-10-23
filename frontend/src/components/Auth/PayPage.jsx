@@ -72,7 +72,6 @@ const PayPage = () => {
 
         if (result.redirect) {
           // Payment redirect happened
-          console.log("Payment redirect initiated");
         }
 
         // Verify payment on return

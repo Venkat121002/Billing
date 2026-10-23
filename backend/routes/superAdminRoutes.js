@@ -3,9 +3,10 @@ const router = express.Router();
 const superAdminAuth = require('../middleware/superAdminAuth');
 const controller = require('../controllers/superAdminController');
 const planController = require('../controllers/planController');
+const { limitAttemptsPerAccount } = require('../utils/attemptLimiter');
 
 // Public
-router.post('/login', controller.login);
+router.post('/login', limitAttemptsPerAccount('superadmin-login', { max: 5 }), controller.login);
 
 // Protected (super admin token required)
 // Console (read-only data): overview, stores, dataset registry + rows

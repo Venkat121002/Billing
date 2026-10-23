@@ -428,11 +428,23 @@ exports.getPlatformSettings = async (req, res) => {
 // @route   PUT /superadmin/settings   body: { billDeliveryMode: 'pdf' | 'text' }
 exports.updatePlatformSettings = async (req, res) => {
     try {
-        const { billDeliveryMode } = req.body;
-        if (!billDelivery.MODES.includes(billDeliveryMode)) {
-            return res.status(400).json({ msg: "billDeliveryMode must be 'pdf' or 'text'" });
+        const { billDeliveryMode, extraStaffLoginPrice } = req.body;
+        const patch = {};
+        if (billDeliveryMode !== undefined) {
+            if (!billDelivery.MODES.includes(billDeliveryMode)) {
+                return res.status(400).json({ msg: "billDeliveryMode must be 'pdf' or 'text'" });
+            }
+            patch.billDeliveryMode = billDeliveryMode;
         }
-        const settings = await store.updatePlatformSettings({ billDeliveryMode });
+        if (extraStaffLoginPrice !== undefined) {
+            const price = Number(extraStaffLoginPrice);
+            if (!Number.isFinite(price) || price < 0) {
+                return res.status(400).json({ msg: 'Extra staff login price must be 0 or more' });
+            }
+            patch.extraStaffLoginPrice = Math.round(price * 100) / 100;
+        }
+        if (!Object.keys(patch).length) return res.status(400).json({ msg: 'Nothing to update' });
+        const settings = await store.updatePlatformSettings(patch);
         res.json({ ...settings, billTextEnabled: billDelivery.isTextEnabled() });
     } catch (err) {
         console.error('SuperAdmin updatePlatformSettings Error:', err.message);

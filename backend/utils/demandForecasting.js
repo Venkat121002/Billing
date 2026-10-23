@@ -7,7 +7,6 @@
  */
 const { getGeminiModel, isGeminiConfigured } = require('../config/gemini');
 const { listStoreRecords } = require('./storeRecords');
-const { Product } = require('../models/mongodb');
 
 /**
  * Calculates demand forecast and restock suggestions for a store
@@ -19,20 +18,9 @@ async function generateDemandForecast({ ownerId, tenantId, lookbackDays = 30, fo
         const sinceIso = sinceDate.toISOString();
 
         // 1. Fetch current inventory products strictly for this owner
-        let products = [];
-        if (ownerId) {
-            try {
-                products = await listStoreRecords(ownerId, 'products');
-            } catch (err) {
-                console.warn('listStoreRecords products fallback:', err.message);
-            }
-        }
-        if ((!products || products.length === 0) && Product) {
-            const productQuery = {};
-            if (ownerId) productQuery.ownerId = ownerId;
-            if (tenantId) productQuery.tenantId = tenantId;
-            products = await Product.find(productQuery).lean();
-        }
+        // (listStoreRecords requires ownerId and works on MongoDB and Firestore;
+        // no fallback query: a store with no products simply has none.)
+        const products = await listStoreRecords(ownerId, 'products');
 
         // 2. Fetch past bills within the lookback window
         const [standardBills, gstBills] = await Promise.all([

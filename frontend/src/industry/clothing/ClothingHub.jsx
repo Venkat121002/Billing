@@ -25,6 +25,7 @@ import {
     ArrowRight
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { offerWhatsApp } from '../../utils/whatsappLink';
 import Barcode from 'react-barcode';
 import { useReactToPrint } from 'react-to-print';
 
@@ -180,9 +181,7 @@ const ClothingHub = () => {
             });
 
             toast.success('Size exchange completed! Inventory updated.');
-            if (exchangeForm.customerPhone) {
-                toast.success('Exchange receipt sent on WhatsApp! 📲');
-            }
+            offerWhatsApp(res.data?.whatsappLink, 'Send receipt on WhatsApp');
             setExchangeResult(res.data);
             fetchStoreCredits();
         } catch (err) {
