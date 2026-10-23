@@ -1,7 +1,7 @@
 /**
  * The three subscription plans (trial / standard / premium) in either
  * database. MongoDB: the Plan collection. Firestore:
- * SwordNexBillingSoftware/{TENANT_ID}/plans/{key}. Missing plans are created
+ * <BILLING_NAMESPACE>/main/plans/{key}. Missing plans are created
  * from planDefaults.js on first read, and capabilities added to the catalog
  * later are appended with their default value (existing values never change).
  */
@@ -11,7 +11,7 @@ const DEFAULTS = require('./planDefaults');
 
 const KEYS = ['trial', 'standard', 'premium'];
 const isMongo = () => (process.env.DB_TYPE || 'mongodb') === 'mongodb';
-const plansCol = () => db.collection('SwordNexBillingSoftware').doc(process.env.TENANT_ID).collection('plans');
+const plansCol = () => db.collection('plans');
 
 const missingCapabilities = (plan) => {
     const have = new Set((plan.capabilities || []).map((c) => c.key));

@@ -4,23 +4,22 @@
  * chosen by DB_TYPE, and returns plain objects shaped the same in both modes
  * (every record carries `_id`, which is what the frontend keys on).
  *
- * Firestore layout (all under SwordNexBillingSoftware/{TENANT_ID}):
+ * Firestore layout (all under <BILLING_NAMESPACE>/main, e.g. billing/main):
  *   owner/{ownerId}                       tenant account (Owner)
  *   owner/{ownerId}/subuser/{subuserId}   sub-users
  *   owner/{ownerId}/{collection}          business records
  *   supportRequests/{id}                  support inbox
  */
 const mongoose = require('mongoose');
-const { db } = require('../config/firebase');
+const { db, rawDb } = require('../config/firebase');
 const models = require('../models/mongodb');
 
 const DB_TYPE = process.env.DB_TYPE || 'mongodb';
 const isMongo = () => DB_TYPE === 'mongodb';
 
 // ---------- Firestore helpers ----------
-const root = () => db.collection('SwordNexBillingSoftware').doc(process.env.TENANT_ID);
-const ownersCol = () => root().collection('owner');
-const requestsCol = () => root().collection('supportRequests');
+const ownersCol = () => db.collection('owner');
+const requestsCol = () => db.collection('supportRequests');
 
 const shape = (doc) => ({ _id: doc.id, ...doc.data() });
 const byCreatedDesc = (a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || ''));
@@ -32,8 +31,8 @@ const fsSubUserDocs = async (ownerId) => {
     if (ownerId) {
         return (await ownersCol().doc(ownerId).collection('subuser').get()).docs;
     }
-    const prefix = `${root().path}/`;
-    const snap = await db.collectionGroup('subuser').get();
+    const prefix = `${db.namespaceRoot.path}/`;
+    const snap = await rawDb.collectionGroup('subuser').get();
     return snap.docs.filter((d) => d.ref.path.startsWith(prefix));
 };
 
@@ -153,7 +152,7 @@ exports.updateSupportRequest = async (id, patch) => {
 
 // ---------- Platform settings (single 'global' record) ----------
 const PLATFORM_DEFAULTS = { billDeliveryMode: 'pdf' };
-const settingsDoc = () => root().collection('platform').doc('settings');
+const settingsDoc = () => db.collection('platform').doc('settings');
 
 exports.getPlatformSettings = async () => {
     if (isMongo()) {

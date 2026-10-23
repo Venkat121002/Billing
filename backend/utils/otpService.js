@@ -55,8 +55,7 @@ const hashOtp = (key, otp) =>
 
 // ---- storage (one record per key; the Mongo field is still called `email`) ----
 const fsRef = (key) =>
-    db.collection('SwordNexBillingSoftware').doc(process.env.TENANT_ID)
-        .collection('otpVerifications').doc(crypto.createHash('sha256').update(key).digest('hex'));
+    db.collection('otpVerifications').doc(crypto.createHash('sha256').update(key).digest('hex'));
 
 const load = async (key) => {
     if (isMongo()) return OtpVerification.findOne({ email: key }).lean();

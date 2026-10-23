@@ -63,7 +63,7 @@ exports.createSubscriptionOrder = async (req, res) => {
         if (DB_TYPE === 'mongodb') {
             ownerDoc = await OwnerModel.findOne({ userId: ownerId, tenantId: process.env.TENANT_ID }).lean();
         } else {
-            const doc = await db.collection('SwordNexBillingSoftware').doc(process.env.TENANT_ID).collection('owner').doc(ownerId).get();
+            const doc = await db.collection('owner').doc(ownerId).get();
             if (doc.exists) ownerDoc = doc.data();
         }
         if (!ownerDoc) return res.status(404).json({ msg: "Account owner record not found." });
@@ -199,8 +199,7 @@ exports.settleSubscriptionOrder = async (orderId, order, successfulPayment) => {
                 tenantId: process.env.TENANT_ID, ownerId: tags.ownerId, orderId
             }).lean();
         } else {
-            const ownerRef = db.collection('SwordNexBillingSoftware').doc(process.env.TENANT_ID)
-                .collection('owner').doc(tags.ownerId);
+            const ownerRef = db.collection('owner').doc(tags.ownerId);
             const ownerDoc = await ownerRef.get();
             if (!ownerDoc.exists) return null;
             const history = await ownerRef.collection('subscriptiondetails')
@@ -322,7 +321,7 @@ exports.settleSubscriptionOrder = async (orderId, order, successfulPayment) => {
             { upsert: true }
         );
     } else {
-        const ownerRef = db.collection('SwordNexBillingSoftware').doc(tenantId).collection('owner').doc(ownerId);
+        const ownerRef = db.collection('owner').doc(ownerId);
         const historyRef = ownerRef.collection('subscriptiondetails').doc(orderId);
         const transactionResult = await db.runTransaction(async (transaction) => {
             const ownerDoc = await transaction.get(ownerRef);
@@ -470,7 +469,7 @@ exports.activateTrial = async (req, res) => {
 
         } else {
             // === FIRESTORE MODE ===
-            const ownerDocRef = db.collection('SwordNexBillingSoftware').doc(tenantId).collection('owner').doc(userId);
+            const ownerDocRef = db.collection('owner').doc(userId);
             console.log(`[DEBUG] activateTrial: Path=${ownerDocRef.path}`);
 
             const doc = await ownerDocRef.get();

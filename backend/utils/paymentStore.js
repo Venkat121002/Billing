@@ -2,24 +2,24 @@
  * Data access for online payments (Cashfree) against customer dues ("credit" records).
  * Works with MongoDB or Firestore, chosen by DB_TYPE, and returns plain objects.
  *
- * Firestore layout (under SwordNexBillingSoftware/{TENANT_ID}):
+ * Firestore layout (under <BILLING_NAMESPACE>/main, e.g. billing/main):
  *   owner/{ownerId}/credit_customers/{id}                      owner's dues
  *   owner/{ownerId}/subuser/{subId}/subusercredit/{id}         sub-user's dues
  *   payments/{orderId}                                         one doc per Cashfree order
  *
  * Every credit returned carries `_id`, `ownerId`, `tenantId` and (Firestore) `_path`.
  */
-const { db, admin } = require('../config/firebase');
+const { db, rawDb, admin, NAMESPACE } = require('../config/firebase');
+const { relativePath } = require('../config/tenantFirestore');
 const { Credit, Payment } = require('../models/mongodb');
 
 const isMongo = () => (process.env.DB_TYPE || 'mongodb') === 'mongodb';
-const root = () => db.collection('SwordNexBillingSoftware').doc(process.env.TENANT_ID);
-const paymentsCol = () => root().collection('payments');
+const paymentsCol = () => db.collection('payments');
 
-// path: SwordNexBillingSoftware/{tenant}/owner/{ownerId}/...
+// `_path` is relative to the namespace (owner/{ownerId}/...), which is what db.doc() takes.
 const fsCredit = (doc) => {
-    const seg = doc.ref.path.split('/');
-    return { _id: doc.id, ...doc.data(), tenantId: seg[1], ownerId: seg[3], _path: doc.ref.path };
+    const path = relativePath(doc.ref.path, NAMESPACE);
+    return { _id: doc.id, ...doc.data(), tenantId: process.env.TENANT_ID, ownerId: path.split('/')[1], _path: path };
 };
 
 // ---------- credit records ----------
@@ -35,7 +35,7 @@ exports.findStaffCredit = async (user, id) => {
         return Credit.findOne(query).lean();
     }
 
-    const ownerRef = root().collection('owner').doc(ownerId);
+    const ownerRef = db.collection('owner').doc(ownerId);
     const ref = user.role === 'subuser'
         ? ownerRef.collection('subuser').doc(user.subuserId || user.userId).collection('subusercredit').doc(String(id))
         : ownerRef.collection('credit_customers').doc(String(id));
@@ -48,9 +48,9 @@ exports.findCreditByToken = async (token) => {
     if (!token || token.length < 20) return null;
     if (isMongo()) return Credit.findOne({ payToken: token }).lean();
 
-    const prefix = `${root().path}/`;
+    const prefix = `${db.namespaceRoot.path}/`;
     for (const group of ['credit_customers', 'subusercredit']) {
-        const snap = await db.collectionGroup(group).where('payToken', '==', token).limit(5).get();
+        const snap = await rawDb.collectionGroup(group).where('payToken', '==', token).limit(5).get();
         const hit = snap.docs.find((d) => d.ref.path.startsWith(prefix));
         if (hit) return fsCredit(hit);
     }
@@ -65,7 +65,7 @@ exports.setPayToken = async (credit, token) => {
 exports.getCreditForPayment = async (payment) => {
     if (isMongo()) return Credit.findById(payment.creditId).lean();
     if (!payment.creditPath) return null;
-    const doc = await db.doc(payment.creditPath).get();
+    const doc = await db.doc(relativePath(payment.creditPath, NAMESPACE)).get();
     return doc.exists ? fsCredit(doc) : null;
 };
 
@@ -110,7 +110,7 @@ exports.updateCreditLedger = async (payment, compute) => {
         throw new Error(`Could not safely update credit ledger for Cashfree order ${payment.orderId}`);
     }
     if (!payment.creditPath) return null;
-    const ref = db.doc(payment.creditPath);
+    const ref = db.doc(relativePath(payment.creditPath, NAMESPACE));
     return db.runTransaction(async (t) => {
         const snap = await t.get(ref);
         if (!snap.exists) return null;

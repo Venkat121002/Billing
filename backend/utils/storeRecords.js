@@ -5,13 +5,14 @@
  *
  * MongoDB: one collection per kind, filtered by { tenantId, ownerId }
  *          (staff records carry the owner's ownerId too).
- * Firestore: SwordNexBillingSoftware/{TENANT_ID}/owner/{ownerId}/{kind}
+ * Firestore: <BILLING_NAMESPACE>/main/owner/{ownerId}/{kind}
  *          plus owner/{ownerId}/subuser/{subuserId}/{staff collection}.
  *
  * Records come back as plain objects with `_id` (and, in Firestore, `_path`,
  * the document path, which updateStoreRecord and paymentStore use).
  */
-const { db } = require('../config/firebase');
+const { db, NAMESPACE } = require('../config/firebase');
+const { relativePath } = require('../config/tenantFirestore');
 const { getModel } = require('../models/mongodb');
 const { storeFilter } = require('./dbUtils');
 
@@ -27,8 +28,7 @@ const STAFF_COLLECTION = {
     transactions: 'subusertransactions'
 };
 
-const ownerRef = (ownerId) => db.collection('SwordNexBillingSoftware')
-    .doc(process.env.TENANT_ID).collection('owner').doc(ownerId);
+const ownerRef = (ownerId) => db.collection('owner').doc(ownerId);
 
 // The owner's collection plus each staff login's collection for `kind`.
 async function firestoreCollections(ownerId, kind) {
@@ -70,7 +70,7 @@ async function listStoreRecords(ownerId, kind, { since, until } = {}) {
     return snaps.flatMap((snap) => snap.docs.map((doc) => ({
         ...doc.data(),
         _id: doc.id,
-        _path: doc.ref.path,
+        _path: relativePath(doc.ref.path, NAMESPACE),
         ownerId,
         tenantId: filter.tenantId
     })));

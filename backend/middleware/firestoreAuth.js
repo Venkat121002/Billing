@@ -17,8 +17,7 @@ async function subUserStillExists({ userId, subuserId, ownerId }) {
         return !!(await SubUserModel.exists({ userId: id, ownerId, tenantId }));
     }
 
-    const doc = await db.collection('SwordNexBillingSoftware').doc(tenantId)
-        .collection('owner').doc(ownerId)
+    const doc = await db.collection('owner').doc(ownerId)
         .collection('subuser').doc(id)
         .get();
     return doc.exists;

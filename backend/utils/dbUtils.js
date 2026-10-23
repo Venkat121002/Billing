@@ -9,7 +9,7 @@ const DB_TYPE = process.env.DB_TYPE || 'mongodb';
  * Gets the correct collection reference based on user role and database type.
  * Supports both Firestore and MongoDB seamlessly.
  *
- * Firestore: SwordNexBillingSoftware/{tenantId}/owner/{ownerId}/{subCollection}
+ * Firestore: <BILLING_NAMESPACE>/main/owner/{ownerId}/{subCollection}
  * MongoDB: Mongoose model with query filters {tenantId, ownerId, subuserId}
  */
 const getCollection = (req, subCollection) => {
@@ -62,9 +62,7 @@ const getCollection = (req, subCollection) => {
     }
 
     // === FIRESTORE MODE (Original Logic) ===
-    const ownerDocRef = db.collection('SwordNexBillingSoftware')
-        .doc(tenantId)
-        .collection('owner')
+    const ownerDocRef = db.collection('owner')
         .doc(effectiveOwnerId);
 
     if (role === 'owner') {
@@ -158,9 +156,7 @@ const fetchUnifiedData = async (req, subCollection, options = {}) => {
         }
 
         // === FIRESTORE MODE ===
-        const subusersRef = db.collection('SwordNexBillingSoftware')
-            .doc(tenantId)
-            .collection('owner')
+        const subusersRef = db.collection('owner')
             .doc(userId)
             .collection('subuser');
 
@@ -180,9 +176,7 @@ const fetchUnifiedData = async (req, subCollection, options = {}) => {
             if (subCollection === 'transactions') targetCollection = 'subusertransactions';
             if (subCollection === 'cashbook') targetCollection = 'subusertransactions';
 
-            const subuserColRef = db.collection('SwordNexBillingSoftware')
-                .doc(tenantId)
-                .collection('owner')
+            const subuserColRef = db.collection('owner')
                 .doc(userId)
                 .collection('subuser')
                 .doc(subuserId)

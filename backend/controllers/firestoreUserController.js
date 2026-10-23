@@ -104,7 +104,7 @@ exports.createSubUser = async (req, res) => {
 
         // === FIRESTORE MODE (Original Logic) ===
         // 1. Check Owner/Tenant Plan Limits
-        const ownerDocRef = db.collection('SwordNexBillingSoftware').doc(tenantId).collection('owner').doc(ownerId);
+        const ownerDocRef = db.collection('owner').doc(ownerId);
         const ownerDoc = await ownerDocRef.get();
 
         if (!ownerDoc.exists) {
@@ -218,9 +218,7 @@ exports.getSubUsers = async (req, res) => {
         }
 
         // === FIRESTORE MODE ===
-        const subUsersRef = db.collection('SwordNexBillingSoftware')
-            .doc(tenantId)
-            .collection('owner')
+        const subUsersRef = db.collection('owner')
             .doc(ownerId)
             .collection('subuser');
 
@@ -303,9 +301,7 @@ exports.updateSubUser = async (req, res) => {
         }
 
         // === FIRESTORE MODE ===
-        const subUserRef = db.collection('SwordNexBillingSoftware')
-            .doc(tenantId)
-            .collection('owner')
+        const subUserRef = db.collection('owner')
             .doc(ownerId)
             .collection('subuser')
             .doc(subUserId);
@@ -373,9 +369,7 @@ exports.deleteSubUser = async (req, res) => {
         }
 
         // === FIRESTORE MODE ===
-        const subUserRef = db.collection('SwordNexBillingSoftware')
-            .doc(tenantId)
-            .collection('owner')
+        const subUserRef = db.collection('owner')
             .doc(ownerId)
             .collection('subuser')
             .doc(subUserId);

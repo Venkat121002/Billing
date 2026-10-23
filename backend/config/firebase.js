@@ -1,6 +1,8 @@
 const admin = require('firebase-admin');
 const { getFirestore } = require('firebase-admin/firestore');
 const path = require('path');
+const { NAMESPACE, NAMESPACE_ROOT_DOC } = require('./tenant');
+const { scopeToNamespace } = require('./tenantFirestore');
 
 /**
  * Firebase Admin / Firestore (production database when DB_TYPE=firestore).
@@ -43,22 +45,31 @@ try {
 }
 
 // Lazy Firestore handle: only touched on first real use, so DB_TYPE=mongodb dev works without credentials.
-let _db = null;
-const db = new Proxy({}, {
+// `db` is namespaced (db.collection('owner') -> billing/main/owner); `rawDb` is the real database.
+let _raw = null;
+let _scoped = null;
+const open = () => {
+  if (initError) throw new Error('Firestore is unavailable: ' + initError.message);
+  if (!_raw) {
+    // Billing lives in its own named database (BILLING_DB_ID), separate from the
+    // project's (default) database used by the main website.
+    const databaseId = process.env.BILLING_DB_ID;
+    _raw = databaseId && databaseId !== '(default)'
+      ? getFirestore(admin.app(), databaseId)
+      : admin.firestore();
+    _raw.settings({ ignoreUndefinedProperties: true });
+    _scoped = scopeToNamespace(_raw, NAMESPACE, NAMESPACE_ROOT_DOC);
+  }
+};
+const lazy = (pick) => new Proxy({}, {
   get(_target, prop) {
-    if (initError) throw new Error('Firestore is unavailable: ' + initError.message);
-    if (!_db) {
-      // Billing lives in its own named database (BILLING_DB_ID), separate from the
-      // project's (default) database used by the main website.
-      const databaseId = process.env.BILLING_DB_ID;
-      _db = databaseId && databaseId !== '(default)'
-        ? getFirestore(admin.app(), databaseId)
-        : admin.firestore();
-      _db.settings({ ignoreUndefinedProperties: true });
-    }
-    const value = _db[prop];
-    return typeof value === 'function' ? value.bind(_db) : value;
+    open();
+    const handle = pick();
+    const value = handle[prop];
+    return typeof value === 'function' ? value.bind(handle) : value;
   }
 });
+const db = lazy(() => _scoped);
+const rawDb = lazy(() => _raw);
 
-module.exports = { admin, db };
+module.exports = { admin, db, rawDb, NAMESPACE };

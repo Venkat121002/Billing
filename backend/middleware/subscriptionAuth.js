@@ -32,9 +32,7 @@ const subscriptionAuth = async (req, res, next) => {
 
         } else {
             // === FIRESTORE MODE ===
-            const ownerDoc = await db.collection('SwordNexBillingSoftware')
-                .doc(tenantId)
-                .collection('owner')
+            const ownerDoc = await db.collection('owner')
                 .doc(ownerId)
                 .get();
 

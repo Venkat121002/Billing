@@ -121,7 +121,7 @@ exports.register = async (req, res) => {
             }
 
             userId = userRecord.uid;
-            const ownerDocRef = db.collection('SwordNexBillingSoftware').doc(tenantId).collection('owner').doc(userId);
+            const ownerDocRef = db.collection('owner').doc(userId);
 
             const ownerData = {
                 firstName,
@@ -304,7 +304,7 @@ exports.login = async (req, res) => {
 
             uid = authResponse.data.localId;
 
-            let userDocRef = db.collection('SwordNexBillingSoftware').doc(tenantId).collection('owner').doc(uid);
+            let userDocRef = db.collection('owner').doc(uid);
             let userDoc = await userDocRef.get();
 
             if (userDoc.exists) {
@@ -312,8 +312,6 @@ exports.login = async (req, res) => {
                 ownerId = uid;
             } else {
                 const ownersSnapshot = await db
-                    .collection('SwordNexBillingSoftware')
-                    .doc(tenantId)
                     .collection('owner')
                     .get();
 
@@ -358,7 +356,7 @@ exports.login = async (req, res) => {
                     return res.status(401).json({ msg: "Sub-user record is incomplete (missing owner association)." });
                 }
 
-                const bossDoc = await db.collection('SwordNexBillingSoftware').doc(tenantId).collection('owner').doc(ownerId).get();
+                const bossDoc = await db.collection('owner').doc(ownerId).get();
                 if (!bossDoc.exists) {
                     console.error("❌ Owner account not found for sub-user:", ownerId);
                     return res.status(403).json({ msg: "Owner account not found. Access denied." });
@@ -571,7 +569,7 @@ exports.updateProfile = async (req, res) => {
         }
 
         // === FIRESTORE MODE ===
-        const ownerDocRef = db.collection('SwordNexBillingSoftware').doc(tenantId).collection('owner').doc(ownerId);
+        const ownerDocRef = db.collection('owner').doc(ownerId);
         const ownerDoc = await ownerDocRef.get();
 
         if (!ownerDoc.exists) {
@@ -699,7 +697,7 @@ exports.getMe = async (req, res) => {
 
         } else {
             // === FIRESTORE MODE ===
-            const ownerDocRef = db.collection('SwordNexBillingSoftware').doc(tenantId).collection('owner').doc(userId);
+            const ownerDocRef = db.collection('owner').doc(userId);
             const ownerDoc = await ownerDocRef.get();
 
             if (ownerDoc.exists) {
@@ -707,8 +705,6 @@ exports.getMe = async (req, res) => {
                 ownerId = userId;
             } else {
                 const ownersSnapshot = await db
-                    .collection('SwordNexBillingSoftware')
-                    .doc(tenantId)
                     .collection('owner')
                     .get();
 
@@ -735,7 +731,7 @@ exports.getMe = async (req, res) => {
                 }
             }
 
-            const bossDoc = await db.collection('SwordNexBillingSoftware').doc(tenantId).collection('owner').doc(ownerId).get();
+            const bossDoc = await db.collection('owner').doc(ownerId).get();
             bossData = bossDoc.exists ? bossDoc.data() : userData;
         }
 
@@ -795,7 +791,7 @@ const mongoModels = require('../models/mongodb');
 // nested per-owner, so (as in getMe()) this loops owners rather than needing a
 // collection-group index on `email`.
 async function findFirestoreAccountByEmail(tenantId, email) {
-    const ownersCol = db.collection('SwordNexBillingSoftware').doc(tenantId).collection('owner');
+    const ownersCol = db.collection('owner');
     const ownerSnap = await ownersCol.where('email', '==', email).limit(1).get();
     if (!ownerSnap.empty) {
         return { uid: ownerSnap.docs[0].id, role: 'owner' };
@@ -822,7 +818,7 @@ exports.logout = async (req, res) => {
             const Model = role === 'subuser' ? SubUserModel : OwnerModel;
             await Model.updateOne({ userId, tenantId }, { $set: { lastLogout: now } });
         } else {
-            const ownerDocRef = db.collection('SwordNexBillingSoftware').doc(tenantId).collection('owner').doc(role === 'subuser' ? ownerId : userId);
+            const ownerDocRef = db.collection('owner').doc(role === 'subuser' ? ownerId : userId);
             const ref = role === 'subuser' ? ownerDocRef.collection('subuser').doc(userId) : ownerDocRef;
             await ref.update({ lastLogout: now });
         }
@@ -843,8 +839,7 @@ exports.deleteAccount = async (req, res) => {
             if (DB_TYPE === 'mongodb') {
                 await SubUserModel.deleteOne({ userId, tenantId });
             } else {
-                await db.collection('SwordNexBillingSoftware').doc(tenantId)
-                    .collection('owner').doc(ownerId).collection('subuser').doc(userId).delete();
+                await db.collection('owner').doc(ownerId).collection('subuser').doc(userId).delete();
                 // Sub-user credentials live in Firebase Auth in this mode, not the Firestore doc.
                 await admin.auth().deleteUser(userId).catch(e => console.error('Auth delete failed:', e.message));
             }
@@ -869,7 +864,7 @@ exports.deleteAccount = async (req, res) => {
             // Owner: every business record and sub-user lives nested under the owner
             // doc, so deleting that subtree removes all of it in one call.
             const subUsers = await platformStore.listSubUsers(userId);
-            const ownerDocRef = db.collection('SwordNexBillingSoftware').doc(tenantId).collection('owner').doc(userId);
+            const ownerDocRef = db.collection('owner').doc(userId);
             await db.recursiveDelete(ownerDocRef);
 
             const uids = [userId, ...subUsers.map(s => s.userId)];
@@ -1056,7 +1051,7 @@ exports.getItemCategories = async (req, res) => {
         if (DB_TYPE === 'mongodb') {
             owner = await OwnerModel.findOne({ userId: ownerId, tenantId }).select('item_categories').lean();
         } else {
-            const doc = await db.collection('SwordNexBillingSoftware').doc(tenantId).collection('owner').doc(ownerId).get();
+            const doc = await db.collection('owner').doc(ownerId).get();
             owner = doc.exists ? doc.data() : null;
         }
         if (!owner) return res.status(404).json({ msg: "Owner record not found" });
@@ -1087,7 +1082,7 @@ exports.updateItemCategories = async (req, res) => {
             );
             if (result.matchedCount === 0) return res.status(404).json({ msg: "Owner record not found" });
         } else {
-            const ref = db.collection('SwordNexBillingSoftware').doc(tenantId).collection('owner').doc(ownerId);
+            const ref = db.collection('owner').doc(ownerId);
             const doc = await ref.get();
             if (!doc.exists) return res.status(404).json({ msg: "Owner record not found" });
             await ref.update({ item_categories: categories });

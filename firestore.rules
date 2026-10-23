@@ -2,7 +2,7 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // All billing data (SwordNexBillingSoftware/{tenantId}/...) is read and
+    // All billing data (billing/main/...) is read and
     // written only by the backend through the Firebase Admin SDK, which is not
     // subject to these rules. The web app never talks to Firestore directly.
     //

@@ -12,7 +12,6 @@ const platformStore = require('./platformStore');
 const { listStoreRecords, countStoreRecords } = require('./storeRecords');
 
 const isMongo = () => (process.env.DB_TYPE || 'mongodb') === 'mongodb';
-const tenantRoot = () => db.collection('SwordNexBillingSoftware').doc(process.env.TENANT_ID);
 
 const num = (v) => (v === undefined || v === null || v === '' || isNaN(Number(v)) ? null : Number(v));
 const first = (...vals) => vals.find((v) => v !== undefined && v !== null && v !== '');
@@ -210,7 +209,7 @@ async function ownersInScope(scopeOwnerId) {
 // ------------------------------------------------------------------ loaders
 async function loadPayments(oid) {
     if (isMongo()) return (await models.Payment.find({ ownerId: oid }).lean()).map((p) => ({ ...p, _id: String(p._id) }));
-    const snap = await tenantRoot().collection('payments').where('ownerId', '==', oid).get();
+    const snap = await db.collection('payments').where('ownerId', '==', oid).get();
     return snap.docs.map((d) => ({ _id: d.id, ...d.data() }));
 }
 
