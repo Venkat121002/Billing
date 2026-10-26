@@ -184,6 +184,15 @@ exports.register = async (req, res) => {
 
         const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '24h' });
 
+        // Tell the Partner Program (one short attempt, never fails the sign-up): the partner sees this customer as on a free trial.
+        if (referralCode) {
+            await partnerProgram.reportSignup({
+                referralCode, email,
+                name: `${firstName} ${lastName || ''}`.trim(),
+                trialEndsAt: addDays(new Date(), TRIAL_DAYS)
+            });
+        }
+
         res.json({
             token,
             user: {
@@ -195,15 +204,6 @@ exports.register = async (req, res) => {
                 email
             }
         });
-
-        // Tell the Partner Program (non-blocking): the partner sees this customer as on a free trial.
-        if (referralCode) {
-            partnerProgram.reportSignup({
-                referralCode, email,
-                name: `${firstName} ${lastName || ''}`.trim(),
-                trialEndsAt: addDays(new Date(), TRIAL_DAYS)
-            });
-        }
 
         // Send Welcome Email (Non-blocking)
         sendEmail({

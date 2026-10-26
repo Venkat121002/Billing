@@ -394,7 +394,7 @@ exports.settleSubscriptionOrder = async (orderId, order, successfulPayment) => {
 
     // A paid subscription (not an add-on) activates the referring partner's commission. Non-blocking.
     if (applied && plan !== 'additional_users' && ownerEmail) {
-        partnerProgram.reportPayment({ orderId, email: ownerEmail, name: ownerName, amount, billingCycle });
+        await partnerProgram.reportPayment({ orderId, email: ownerEmail, name: ownerName, amount, billingCycle });
     }
 
     if (applied && ownerEmail) {
