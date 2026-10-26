@@ -18,6 +18,19 @@ import {
 } from "lucide-react";
 import AuthShell, { AuthField, authInputClass, authPlainInputClass, authInputErrorClass, authButtonClass } from "./AuthShell";
 
+// A partner's link carries ?ref=CODE; remember it so the code survives navigating around before sign-up.
+const initialReferralCode = () => {
+  try {
+    const fromUrl = new URLSearchParams(window.location.search).get("ref");
+    if (fromUrl) {
+      localStorage.setItem("snx_partner_code", fromUrl.trim().toUpperCase().slice(0, 30));
+    }
+    return (localStorage.getItem("snx_partner_code") || "").toUpperCase();
+  } catch {
+    return "";
+  }
+};
+
 const BUSINESS_TYPES = [
   "Sole Proprietorship",
   "Partnership",
@@ -56,7 +69,7 @@ const Required = () => <span className="text-red-500">*</span>;
 const Signup = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [done, setDone] = useState(false);
-  const { employerSignup, sendSignupOtp, verifySignupOtp } = useAuth();
+  const { employerSignup, sendSignupOtp, verifySignupOtp, checkReferralCode } = useAuth();
 
   // Email + WhatsApp verification: the whole form is filled first, then
   // "Create account" opens a popup for the two codes. Both must be entered.
@@ -96,7 +109,10 @@ const Signup = () => {
     country: "India",
     gstin: "",
     pan: "",
+    // Partner referral code: from a ?ref= link (also remembered by the partner tracking script) or typed in.
+    referralCode: initialReferralCode(),
   });
+  const [referralNote, setReferralNote] = useState({ state: "idle", text: "" });
 
   // Validation messages are shown under each field ({ fieldName: message }),
   // not as toasts. A field's message clears as soon as it is edited.
@@ -134,6 +150,16 @@ const Signup = () => {
     const input = formRef.current?.elements?.namedItem(name);
     input?.scrollIntoView({ behavior: "smooth", block: "center" });
     input?.focus({ preventScroll: true });
+  };
+
+  const checkReferral = async () => {
+    const code = formData.referralCode.trim();
+    if (!code) return setReferralNote({ state: "idle", text: "" });
+    setReferralNote({ state: "checking", text: "Checking code..." });
+    const result = await checkReferralCode(code);
+    if (result.valid === true) setReferralNote({ state: "ok", text: result.partnerName ? `Referred by ${result.partnerName}` : "Referral code applied" });
+    else if (result.valid === false) setReferralNote({ state: "bad", text: "That referral code is not valid." });
+    else setReferralNote({ state: "idle", text: "" });
   };
 
   const createAccount = async (verificationToken) => {
@@ -402,6 +428,26 @@ const Signup = () => {
             })}
             {passwordsMismatch && !errors.confirmPassword && <li className="text-red-500">Passwords don't match</li>}
           </ul>
+
+          <div className="mt-4">
+            <AuthField label="Referral code (optional)" error={errors.referralCode}>
+              <input
+                name="referralCode"
+                value={formData.referralCode}
+                onChange={(e) => { setReferralNote({ state: "idle", text: "" }); handleChange(e); }}
+                onBlur={checkReferral}
+                placeholder="e.g. SN-ABC123"
+                autoComplete="off"
+                maxLength={30}
+                className={`${authPlainInputClass} uppercase placeholder:normal-case`}
+              />
+            </AuthField>
+            {referralNote.text && (
+              <p className={`mt-1 text-xs ${referralNote.state === "ok" ? "text-green-700" : referralNote.state === "bad" ? "text-red-500" : "text-gray-400"}`}>
+                {referralNote.text}
+              </p>
+            )}
+          </div>
         </Section>
 
         {/* ---------- Address & tax ---------- */}

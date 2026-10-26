@@ -5,6 +5,9 @@ const auth = require('../middleware/firestoreAuth');
 const roleAuth = require('../middleware/roleAuth');
 const { limitAttemptsPerAccount } = require('../utils/attemptLimiter');
 
+// @route   GET /api/v2/auth/referral/:code
+router.get('/referral/:code', authController.checkReferralCode);
+
 // @route   POST /api/v2/auth/register
 router.post('/register', authController.register);
 

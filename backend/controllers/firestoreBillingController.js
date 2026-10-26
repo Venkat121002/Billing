@@ -136,6 +136,7 @@ const billDelivery = require('../utils/billDelivery');
 const platformStore = require('../utils/platformStore');
 const { normalizePhone } = require('../utils/whatsappService');
 const paymentStore = require('../utils/paymentStore');
+const partnerProgram = require('../utils/partnerProgram');
 
 // @desc    Verify Cashfree Payment & Update Subscription
 // @route   POST /api/v2/billing/verify-payment
@@ -389,6 +390,11 @@ exports.settleSubscriptionOrder = async (orderId, order, successfulPayment) => {
         if (currentPayment?.status !== 'paid') {
             throw new Error(`Could not finalize Cashfree subscription order ${orderId}`);
         }
+    }
+
+    // A paid subscription (not an add-on) activates the referring partner's commission. Non-blocking.
+    if (applied && plan !== 'additional_users' && ownerEmail) {
+        partnerProgram.reportPayment({ orderId, email: ownerEmail, name: ownerName, amount, billingCycle });
     }
 
     if (applied && ownerEmail) {
