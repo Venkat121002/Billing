@@ -7,6 +7,7 @@ const { sendEmail } = require('../utils/emailService');
 const bcrypt = require('bcryptjs');
 const otpService = require('../utils/otpService');
 const platformStore = require('../utils/platformStore');
+const partnerProgram = require('../utils/partnerProgram');
 const { emailMatch } = require('../utils/emailMatch');
 const { forgetAccount } = require('../middleware/firestoreAuth');
 const jwt = require('jsonwebtoken');
@@ -54,6 +55,16 @@ exports.register = async (req, res) => {
         return res.status(500).json({ msg: "Server Configuration Error: TENANT_ID not set" });
     }
 
+    // Optional partner referral code. A wrong code is rejected so the user can fix a typo; if the
+    // Partner Program cannot be reached the sign-up still goes through and the code is reported later.
+    let referralCode = partnerProgram.normalizeCode(req.body.referralCode);
+    if (referralCode) {
+        const check = await partnerProgram.verifyCode(referralCode);
+        if (check.valid === false) {
+            return res.status(400).json({ msg: "That referral code is not valid. Check it, or leave the field empty." });
+        }
+    }
+
     try {
         let userId;
 
@@ -97,6 +108,7 @@ exports.register = async (req, res) => {
                 },
                 subscription: newTrialSubscription(),
                 trialUsed: true,
+                ...(referralCode ? { referral: { code: referralCode, usedAt: new Date().toISOString() } } : {}),
                 createdAt: new Date().toISOString(),
                 lastLogin: null
             };
@@ -151,6 +163,7 @@ exports.register = async (req, res) => {
                 },
                 subscription: newTrialSubscription(),
                 trialUsed: true,
+                ...(referralCode ? { referral: { code: referralCode, usedAt: new Date().toISOString() } } : {}),
                 createdAt: new Date().toISOString(),
                 lastLogin: null
             };
@@ -170,6 +183,15 @@ exports.register = async (req, res) => {
         };
 
         const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '24h' });
+
+        // Tell the Partner Program (one short attempt, never fails the sign-up): the partner sees this customer as on a free trial.
+        if (referralCode) {
+            await partnerProgram.reportSignup({
+                referralCode, email,
+                name: `${firstName} ${lastName || ''}`.trim(),
+                trialEndsAt: addDays(new Date(), TRIAL_DAYS)
+            });
+        }
 
         res.json({
             token,
@@ -1104,4 +1126,13 @@ exports.updateItemCategories = async (req, res) => {
         console.error("Update Item Categories Error:", err.message);
         res.status(500).json({ msg: "Server Error" });
     }
+};
+
+// @desc    Check a partner referral code from the sign-up form (public)
+// @route   GET /api/v2/auth/referral/:code
+exports.checkReferralCode = async (req, res) => {
+    const check = await partnerProgram.verifyCode(req.params.code);
+    if (check.valid) return res.json({ valid: true, partnerName: check.partnerName });
+    if (check.unavailable) return res.json({ valid: null, msg: "Could not check the code right now. You can still continue." });
+    return res.status(404).json({ valid: false, msg: "That referral code is not valid." });
 };

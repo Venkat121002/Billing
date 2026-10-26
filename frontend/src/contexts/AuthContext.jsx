@@ -121,6 +121,17 @@ export function AuthProvider({ children }) {
   // SIGNUP
   // SIGNUP OTP: separate codes by email and WhatsApp.
   // channel: "email" | "whatsapp" resends just one; omit to send both.
+  // Sign-up form: is this partner referral code valid? -> { valid: true|false|null, partnerName }
+  async function checkReferralCode(code) {
+    try {
+      const res = await api.get(`auth/referral/${encodeURIComponent(String(code).trim())}`);
+      return res.data;
+    } catch (err) {
+      if (err.response?.status === 404) return { valid: false };
+      return { valid: null };
+    }
+  }
+
   async function sendSignupOtp(email, { mobile, channel } = {}) {
     try {
       const res = await api.post("otp/signup/send", { email, mobile, channel });
@@ -161,7 +172,8 @@ export function AuthProvider({ children }) {
         gstin: data.gstin,
         pan: data.pan,
         plan: data.plan,
-        verificationToken: data.verificationToken
+        verificationToken: data.verificationToken,
+        referralCode: data.referralCode ? String(data.referralCode).trim() : undefined
       };
 
       const res = await api.post("auth/register", payload);
@@ -442,6 +454,7 @@ export function AuthProvider({ children }) {
     employerLogin,
     employerSignup,
     sendSignupOtp,
+    checkReferralCode,
     verifySignupOtp,
     getPlans,
     refreshPlanCapabilities,
