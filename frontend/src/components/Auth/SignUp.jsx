@@ -96,6 +96,7 @@ const Signup = () => {
     country: "India",
     gstin: "",
     pan: "",
+    couponCode: "", // dummy for now - see the affiliate note near createAccount
   });
 
   // Validation messages are shown under each field ({ fieldName: message }),
@@ -139,7 +140,11 @@ const Signup = () => {
   const createAccount = async (verificationToken) => {
     setIsLoading(true);
     try {
-      await employerSignup({ ...formData, verificationToken });
+      // couponCode is a placeholder for the SwordNex One affiliate system: it is collected
+      // but deliberately NOT sent yet. When affiliates go live, send it (the backend must
+      // validate it and record the referral) by removing it from this destructure.
+      const { couponCode: _affiliateCode, ...signupData } = formData;
+      await employerSignup({ ...signupData, verificationToken });
       setOtpOpen(false);
       setDone(true);
     } catch (e) {
@@ -437,6 +442,21 @@ const Signup = () => {
               <input name="pan" value={formData.pan} onChange={handleChange} placeholder="e.g. ABCDE1234F" className={`${authPlainInputClass} uppercase placeholder:normal-case`} />
             </AuthField>
           </div>
+        </Section>
+
+        {/* ---------- Coupon / affiliate code (dummy: not validated or sent yet) ---------- */}
+        <Section title="Coupon code" hint="Optional">
+          <AuthField label="Coupon or affiliate code">
+            <input
+              name="couponCode"
+              autoComplete="off"
+              maxLength={20}
+              value={formData.couponCode}
+              onChange={(e) => handleChange({ target: { name: "couponCode", value: e.target.value.toUpperCase().replace(/[^A-Z0-9_-]/g, "") } })}
+              placeholder="e.g. FRIEND10"
+              className={`${authPlainInputClass} uppercase placeholder:normal-case`}
+            />
+          </AuthField>
         </Section>
 
         <div className="space-y-3">
