@@ -4,6 +4,7 @@ const store = require('../utils/platformStore');
 const billDelivery = require('../utils/billDelivery');
 const { VALID_INDUSTRIES } = require('../utils/industries');
 const saData = require('../utils/superAdminData');
+const { buildWorkbook } = require('../utils/excelExport');
 const { listStoreRecords, countStoreRecords } = require('../utils/storeRecords');
 
 const DB_TYPE = process.env.DB_TYPE || 'mongodb';
@@ -238,6 +239,26 @@ exports.getData = async (req, res) => {
         res.json(result);
     } catch (err) {
         console.error('SuperAdmin getData Error:', err.message);
+        res.status(500).json({ msg: 'Server error: ' + err.message });
+    }
+};
+
+// @desc    One store's data as an Excel file: profile + every dataset, one sheet each
+// @route   GET /superadmin/stores/:id/export
+exports.exportStore = async (req, res) => {
+    try {
+        const data = await saData.exportStoreSheets(req.params.id);
+        if (!data) return res.status(404).json({ msg: 'Store not found' });
+        const file = buildWorkbook(data.sheets);
+        const name = `${data.name}-${new Date().toISOString().slice(0, 10)}`.replace(/[^\w-]+/g, '_');
+        res.set({
+            'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Content-Disposition': `attachment; filename="${name}.xlsx"`,
+            'Cache-Control': 'no-store'
+        });
+        res.send(file);
+    } catch (err) {
+        console.error('SuperAdmin exportStore Error:', err.message);
         res.status(500).json({ msg: 'Server error: ' + err.message });
     }
 };

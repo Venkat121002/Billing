@@ -13,6 +13,7 @@ router.post('/login', limitAttemptsPerAccount('superadmin-login', { max: 5 }), c
 router.get('/overview', superAdminAuth, controller.getOverview);
 router.get('/stores', superAdminAuth, controller.getStores);
 router.get('/stores/:id', superAdminAuth, controller.getStore);
+router.get('/stores/:id/export', superAdminAuth, controller.exportStore);
 router.get('/datasets', superAdminAuth, controller.getDatasets);
 router.get('/data/:dataset', superAdminAuth, controller.getData);
 

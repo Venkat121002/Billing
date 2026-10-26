@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Building2, Check, ChevronDown, Globe, LogOut, Search } from "lucide-react";
-import { BrandMark, ErrorBox, Spinner, StatusBadge, fmtNumber, inputClass } from "./shared";
+import { Building2, Check, ChevronDown, Download, Globe, Loader2, LogOut, Search } from "lucide-react";
+import toast from "react-hot-toast";
+import { BrandMark, ErrorBox, Spinner, StatusBadge, downloadStoreExport, fmtNumber, inputClass } from "./shared";
 import { ThemeToggle } from "./theme";
 
 export const ALL_STORES = "all";
@@ -16,8 +17,22 @@ export const Initial = ({ name, className = "" }) => (
 // Full-screen "choose a workspace" step shown right after super admin login.
 export default function StorePicker({ stores, loading, error, onRetry, onSelect, onLogout }) {
   const [search, setSearch] = useState("");
+  const [exportingId, setExportingId] = useState(null);
   const q = search.trim().toLowerCase();
   const list = useMemo(() => stores.filter((s) => matches(s, q)), [stores, q]);
+
+  const exportStore = async (s) => {
+    if (exportingId) return;
+    setExportingId(s.id);
+    try {
+      await downloadStoreExport(s.id, s.name);
+      toast.success(`Exported ${s.name}`);
+    } catch (err) {
+      toast.error(err.message);
+    } finally {
+      setExportingId(null);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 sa-dark:bg-slate-950 text-gray-800 sa-dark:text-slate-200 relative overflow-hidden">
@@ -72,10 +87,10 @@ export default function StorePicker({ stores, loading, error, onRetry, onSelect,
         ) : (
           <ul className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {list.map((s) => (
-              <li key={s.id}>
+              <li key={s.id} className="relative">
                 <button
                   onClick={() => onSelect(s.id)}
-                  className="w-full h-full flex items-start gap-3 p-4 rounded-2xl border border-gray-200 sa-dark:border-slate-800 bg-white sa-dark:bg-slate-900/70 hover:border-emerald-300 sa-dark:hover:border-emerald-500/50 hover:bg-gray-50 sa-dark:hover:bg-slate-800/50 text-left transition"
+                  className="w-full h-full flex items-start gap-3 p-4 pr-14 rounded-2xl border border-gray-200 sa-dark:border-slate-800 bg-white sa-dark:bg-slate-900/70 hover:border-emerald-300 sa-dark:hover:border-emerald-500/50 hover:bg-gray-50 sa-dark:hover:bg-slate-800/50 text-left transition"
                 >
                   <Initial name={s.name} className="w-11 h-11 text-lg" />
                   <span className="flex-1 min-w-0">
@@ -87,6 +102,15 @@ export default function StorePicker({ stores, loading, error, onRetry, onSelect,
                       {fmtNumber(s.bills)} bills
                     </span>
                   </span>
+                </button>
+                <button
+                  onClick={() => exportStore(s)}
+                  disabled={!!exportingId}
+                  title={`Export all data of ${s.name} to Excel`}
+                  aria-label={`Export ${s.name} to Excel`}
+                  className="absolute top-3 right-3 p-2 rounded-lg text-gray-500 sa-dark:text-slate-400 hover:text-emerald-700 sa-dark:hover:text-emerald-300 hover:bg-emerald-50 sa-dark:hover:bg-emerald-500/10 disabled:opacity-50"
+                >
+                  {exportingId === s.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
                 </button>
               </li>
             ))}

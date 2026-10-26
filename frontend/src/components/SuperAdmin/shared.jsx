@@ -126,6 +126,26 @@ export function downloadExcel(rows, sheetName, filename) {
   saveAs(new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }), `${filename}.xlsx`);
 }
 
+// One store's whole dataset (profile, staff, bills, products, customers...) as an
+// Excel file built by the server. Throws an Error with a readable message.
+export async function downloadStoreExport(storeId, fallbackName = "store") {
+  let res;
+  try {
+    res = await superAdminApi.get(`stores/${encodeURIComponent(storeId)}/export`, { responseType: "blob" });
+  } catch (err) {
+    if (!err.response) throw new Error("Can't reach the server. Check that the backend is running.");
+    let msg = `Export failed (${err.response.status})`;
+    try {
+      msg = JSON.parse(await err.response.data.text()).msg || msg; // error bodies also arrive as blobs
+    } catch {
+      /* keep the generic message */
+    }
+    throw new Error(msg);
+  }
+  const named = /filename="?([^";]+)"?/i.exec(res.headers["content-disposition"] || "");
+  saveAs(res.data, named ? named[1] : `${fallbackName}.xlsx`);
+}
+
 // ----------------------------------------------------------------- layout UI
 // SwordNex Billing mark (the image logos have dark lettering that disappears on the dark theme).
 export const BrandMark = ({ className = "w-8 h-8" }) => (

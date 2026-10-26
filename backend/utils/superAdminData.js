@@ -268,4 +268,20 @@ async function listDatasets(scopeOwnerId) {
     }));
 }
 
-module.exports = { DATASETS, queryDataset, listDatasets, sanitize, ownerId, storeName };
+/**
+ * Everything one store holds, for the Excel export: the store's own profile plus every
+ * dataset in the registry (staff, payments, bills, products, customers, ...), secrets stripped.
+ * Returns [{ label, records }] in registry order.
+ */
+async function exportStoreSheets(scopeOwnerId) {
+    const [owner] = await ownersInScope(scopeOwnerId);
+    if (!owner) return null;
+    const sheets = [{ label: 'Store profile', records: [sanitize(owner)] }];
+    for (const ds of DATASETS) {
+        const rows = await loadForOwner(ds, owner);
+        sheets.push({ label: ds.label, records: sanitize(rows.map((r) => ({ ...r, ...(ds.derive ? ds.derive(r) : {}) }))) });
+    }
+    return { name: storeName(owner), sheets };
+}
+
+module.exports = { DATASETS, queryDataset, listDatasets, exportStoreSheets, sanitize, ownerId, storeName };
