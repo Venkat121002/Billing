@@ -30,6 +30,7 @@ import useItemCategories from '../hooks/useItemCategories';
 import { formatInvoiceNumber } from '../utils/invoiceNumber';
 import { DEFAULT_INVOICE_TERMS } from '../components/Billing/GstInvoice';
 import ItemCategoriesManager from '../components/Settings/ItemCategoriesManager';
+import { getSubscription } from '../utils/subscription';
 
 // Each settings section renders inline as a card under the active tab
 // (it used to open as a popup from a launcher card).
@@ -562,6 +563,8 @@ const Settings = () => {
   const invoicePrefix = userData?.Tenant?.invoice_prefix || 'INV';
   const salesGst = userData?.Tenant?.sales_gst || 0;
   const isOwnerOrAdmin = userData.role === 'owner' || userData.role === 'TenantAdmin';
+  const subscription = getSubscription(userData);
+  const upgradeLabel = subscription.isTopPlan ? 'Renew plan' : 'Upgrade plan';
 
   const daysLeft = userData?.Tenant?.subscription_expiry
     ? Math.max(0, Math.ceil((new Date(userData.Tenant.subscription_expiry) - new Date()) / 86400000))
@@ -856,12 +859,14 @@ const Settings = () => {
                 )}
               </div>
 
-              <button
-                onClick={() => navigate("/pricing")}
-                className="h-10 px-6 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg shadow-sm hover:shadow-md transition-all active:scale-95"
-              >
-                Upgrade Plan
-              </button>
+              {subscription.canUpgrade && (
+                <button
+                  onClick={() => navigate("/pricing")}
+                  className="h-10 px-6 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg shadow-sm hover:shadow-md transition-all active:scale-95"
+                >
+                  {upgradeLabel}
+                </button>
+              )}
             </div>
           </SettingsPanel>
         )}
@@ -1636,12 +1641,12 @@ const Settings = () => {
                       {daysLeft > 0 ? `${daysLeft} day${daysLeft === 1 ? '' : 's'} left` : 'Expired'} · ends {new Date(userData.Tenant.subscription_expiry).toLocaleDateString()}
                     </p>
                   )}
-                  {isOwnerOrAdmin && (
+                  {isOwnerOrAdmin && subscription.canUpgrade && (
                     <button
                       onClick={() => navigate('/pricing')}
                       className="mt-4 w-full h-9 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition-colors"
                     >
-                      Upgrade plan
+                      {upgradeLabel}
                     </button>
                   )}
                 </div>

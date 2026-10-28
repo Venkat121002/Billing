@@ -22,6 +22,16 @@ import {
   CreditCard,
 } from "lucide-react";
 
+// Dial codes offered for the trainer's phone number (India first).
+const COUNTRY_CODES = [
+  ["+91", "India"], ["+971", "UAE"], ["+966", "Saudi Arabia"], ["+974", "Qatar"], ["+965", "Kuwait"],
+  ["+968", "Oman"], ["+973", "Bahrain"], ["+65", "Singapore"], ["+60", "Malaysia"], ["+94", "Sri Lanka"],
+  ["+977", "Nepal"], ["+880", "Bangladesh"], ["+44", "UK"], ["+1", "USA / Canada"], ["+61", "Australia"],
+  ["+49", "Germany"], ["+33", "France"], ["+81", "Japan"],
+];
+const mobileLimit = (code) => (code === "+91" ? 10 : 15);
+const withCode = (mobile, code) => (mobile ? `${code || "+91"} ${mobile}` : "");
+
 const Trainer = () => {
   const { currentUser } = useAuth();
   const navigate = useNavigate();
@@ -41,6 +51,7 @@ const Trainer = () => {
     gst: "", // Not needed for trainer
     pan: "",
     mobile: "",
+    countryCode: "+91",
     email: "",
     address: "",
     paymentMode: "", // Salary
@@ -87,6 +98,7 @@ const Trainer = () => {
       gst: trainer.gst || "",
       pan: trainer.pan || "",
       mobile: trainer.mobile || "",
+      countryCode: trainer.countryCode || "+91",
       email: trainer.email || "",
       address: trainer.address || "",
       paymentMode: trainer.paymentMode || "",
@@ -111,8 +123,13 @@ const Trainer = () => {
 
   const handleSaveTrainer = async (e) => {
     e.preventDefault();
-    if (trainerFormData.mobile && trainerFormData.mobile.length !== 10) {
-      toast.error("Mobile number must be exactly 10 digits");
+    const { mobile, countryCode } = trainerFormData;
+    if (mobile && countryCode === "+91" && mobile.length !== 10) {
+      toast.error("Indian mobile numbers must be exactly 10 digits");
+      return;
+    }
+    if (mobile && countryCode !== "+91" && (mobile.length < 6 || mobile.length > 15)) {
+      toast.error("Enter a valid phone number (6 to 15 digits)");
       return;
     }
     const token = sessionStorage.getItem("token");
@@ -136,6 +153,7 @@ const Trainer = () => {
         gst: "",
         pan: "",
         mobile: "",
+        countryCode: "+91",
         email: "",
         address: "",
         paymentMode: "",
@@ -185,6 +203,7 @@ const Trainer = () => {
                   gst: "",
                   pan: "",
                   mobile: "",
+                  countryCode: "+91",
                   email: "",
                   address: "",
                   paymentMode: "",
@@ -243,7 +262,7 @@ const Trainer = () => {
                         <td className={`${tdClass} font-semibold text-gray-900`}>{trainer.name}</td>
                         <td className={tdClass}>{trainer.company || "—"}</td>
                         <td className={`${tdClass} font-mono text-xs text-gray-500`}>{trainer.code || "—"}</td>
-                        <td className={tdClass}>{trainer.mobile || "—"}</td>
+                        <td className={tdClass}>{withCode(trainer.mobile, trainer.countryCode) || "—"}</td>
                         <td className={`${tdClass} font-semibold text-green-700`}>
                           ₹{Number(trainer.paymentMode || 0).toLocaleString('en-IN')}
                         </td>
@@ -312,7 +331,7 @@ const Trainer = () => {
                     <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Mobile Number</p>
                     <p className="text-gray-700 font-medium flex items-center gap-2">
                       <Phone size={14} className="text-emerald-500" />
-                      {viewTrainer.mobile || "—"}
+                      {withCode(viewTrainer.mobile, viewTrainer.countryCode) || "—"}
                     </p>
                   </div>
                   <div className="space-y-1">
@@ -415,7 +434,26 @@ const Trainer = () => {
                     <Phone size={14} className="text-emerald-500" />
                     Mobile Number
                   </label>
-                  <input type="number" value={trainerFormData.mobile} onChange={(e) => { const val = e.target.value.slice(0, 10); setTrainerFormData({ ...trainerFormData, mobile: val }); }} className="px-4 py-3.5 rounded-2xl border border-emerald-50 bg-gray-50/50 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all font-medium text-gray-900" placeholder="10 digit mobile" />
+                  <div className="flex gap-2">
+                    <select
+                      value={trainerFormData.countryCode}
+                      onChange={(e) => setTrainerFormData({ ...trainerFormData, countryCode: e.target.value, mobile: trainerFormData.mobile.slice(0, mobileLimit(e.target.value)) })}
+                      aria-label="Country code"
+                      className="w-36 shrink-0 px-3 py-3.5 rounded-2xl border border-emerald-50 bg-gray-50/50 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all font-medium text-gray-900"
+                    >
+                      {COUNTRY_CODES.map(([code, country]) => (
+                        <option key={code} value={code}>{code} {country}</option>
+                      ))}
+                    </select>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={trainerFormData.mobile}
+                      onChange={(e) => { const val = e.target.value.replace(/\D/g, "").slice(0, mobileLimit(trainerFormData.countryCode)); setTrainerFormData({ ...trainerFormData, mobile: val }); }}
+                      className="min-w-0 flex-1 px-4 py-3.5 rounded-2xl border border-emerald-50 bg-gray-50/50 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all font-medium text-gray-900"
+                      placeholder={trainerFormData.countryCode === "+91" ? "10 digit mobile" : "Phone number"}
+                    />
+                  </div>
                 </div>
 
                 <div className="flex flex-col gap-1.5">

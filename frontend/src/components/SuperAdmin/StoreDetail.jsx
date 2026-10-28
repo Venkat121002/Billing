@@ -15,6 +15,17 @@ const dateInput = (v) => {
   return isNaN(d) ? "" : d.toISOString().slice(0, 10);
 };
 
+// Same rule as a paid renewal: the period starts today, or after the current end date if the
+// plan still has days left, and runs for one cycle.
+const endDateFor = (cycle, currentEnd) => {
+  const now = new Date();
+  const current = currentEnd ? new Date(currentEnd) : null;
+  const end = new Date(current && current > now ? current : now);
+  if (cycle === "yearly") end.setFullYear(end.getFullYear() + 1);
+  else end.setMonth(end.getMonth() + 1);
+  return dateInput(end);
+};
+
 function Info({ label, value }) {
   return (
     <div className="min-w-0">
@@ -43,6 +54,18 @@ function SubscriptionEditor({ store, onSaved, onCancel }) {
   const [saving, setSaving] = useState(false);
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
+  // Changing the plan or cycle moves the end date to match (it is always computed from the saved
+  // plan, so switching back and forth is not cumulative). The date can still be edited by hand.
+  const changePlanOrCycle = (k) => (e) => {
+    const value = e.target.value;
+    setForm((f) => {
+      const next = { ...f, [k]: value };
+      const unchanged = next.plan === String(sub.plan || "trial").toLowerCase() && next.billingCycle === (sub.billingCycle || "monthly");
+      next.endDate = unchanged || next.plan === "trial" ? dateInput(sub.endDate) : endDateFor(next.billingCycle, sub.endDate);
+      return next;
+    });
+  };
+
   const save = async (e) => {
     e.preventDefault();
     setSaving(true);
@@ -69,14 +92,14 @@ function SubscriptionEditor({ store, onSaved, onCancel }) {
     <form onSubmit={save} className="space-y-3">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <Field label="Plan">
-          <select value={form.plan} onChange={set("plan")} className={`${inputClass} w-full`}>
+          <select value={form.plan} onChange={changePlanOrCycle("plan")} className={`${inputClass} w-full`}>
             <option value="trial">Free trial</option>
             <option value="standard">Standard</option>
             <option value="premium">Premium</option>
           </select>
         </Field>
         <Field label="Billing cycle">
-          <select value={form.billingCycle} onChange={set("billingCycle")} className={`${inputClass} w-full`}>
+          <select value={form.billingCycle} onChange={changePlanOrCycle("billingCycle")} className={`${inputClass} w-full`}>
             <option value="monthly">Monthly</option>
             <option value="yearly">Yearly</option>
           </select>
@@ -86,6 +109,7 @@ function SubscriptionEditor({ store, onSaved, onCancel }) {
         </Field>
         <Field label="Plan ends on">
           <input type="date" value={form.endDate} onChange={set("endDate")} className={`${inputClass} w-full`} />
+          <span className="block mt-1 text-xs text-gray-400 sa-dark:text-slate-500">Set from the plan and cycle; edit it to override.</span>
         </Field>
       </div>
       <div className="flex justify-end gap-2">

@@ -1,12 +1,53 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext";
-import { ArrowLeft, BookOpen, RotateCcw } from "lucide-react";
+import { ArrowLeft, BookOpen, Plus, RotateCcw } from "lucide-react";
 import BillingLayout from "../../Layout/BillingLayout/AdminLayout";
 import toast from "react-hot-toast";
 import { handleEnterToNext } from "../../utils/formUtils";
 import axios from "axios";
 import API_URL from "../../config/api";
+
+// A half-filled new course is kept while the user goes to the Trainers page to add a trainer.
+const DRAFT_KEY = "academy-course-draft";
+const readDraft = () => {
+  try {
+    return JSON.parse(sessionStorage.getItem(DRAFT_KEY) || "null");
+  } catch {
+    return null;
+  }
+};
+const writeDraft = (draft) => {
+  try {
+    if (draft) sessionStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+    else sessionStorage.removeItem(DRAFT_KEY);
+  } catch {
+    /* storage unavailable */
+  }
+};
+
+// Duration is typed as months + days and saved as text, e.g. "02 months, 12 days".
+const pad2 = (n) => String(n).padStart(2, "0");
+const plural = (n, word) => `${pad2(n)} ${word}${n === 1 ? "" : "s"}`;
+const formatDuration = (months, days) => {
+  const m = Number(months) || 0;
+  const d = Number(days) || 0;
+  return [m > 0 && plural(m, "month"), d > 0 && plural(d, "day")].filter(Boolean).join(", ");
+};
+// Reads saved text back into months/days; older free text such as "3 Months", "1 Year" or "6 weeks" works too.
+const parseDuration = (text) => {
+  let months = 0;
+  let days = 0;
+  for (const [, n, unit] of String(text || "").matchAll(/(\d+)\s*(year|month|week|day)/gi)) {
+    const value = Number(n);
+    const u = unit.toLowerCase();
+    if (u === "year") months += value * 12;
+    else if (u === "month") months += value;
+    else if (u === "week") days += value * 7;
+    else days += value;
+  }
+  return { durationMonths: months ? String(months) : "", durationDays: days ? String(days) : "" };
+};
 
 const AddCourse = () => {
   const { currentUser } = useAuth();
@@ -20,11 +61,13 @@ const AddCourse = () => {
   const [trainers, setTrainers] = useState([]);
   const [error, setError] = useState(null);
 
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState(() => (!location.state?.courseId && readDraft()) || {
     courseName: "",
     courseCode: "",
     instructor: "",
     duration: "",
+    durationMonths: "",
+    durationDays: "",
     category: "",
     level: "",
     mode: "",
@@ -81,12 +124,17 @@ const AddCourse = () => {
   }, [currentUser]);
 
   useEffect(() => {
+    writeDraft(null); // a restored draft is used once
+  }, []);
+
+  useEffect(() => {
     if (editingCourse && editingCourseId) {
       setFormData({
         courseName: editingCourse.courseName || "",
         courseCode: editingCourse.courseCode || "",
         instructor: editingCourse.instructor || "",
         duration: editingCourse.duration || "",
+        ...parseDuration(editingCourse.duration),
         category: editingCourse.category || "",
         level: editingCourse.level || "",
         mode: editingCourse.mode || "",
@@ -102,6 +150,10 @@ const AddCourse = () => {
     const { name, value } = e.target;
     setFormData(prev => {
       const newState = { ...prev, [name]: value };
+
+      if (name === "durationMonths" || name === "durationDays") {
+        newState.duration = formatDuration(newState.durationMonths, newState.durationDays);
+      }
 
       if (name === 'courseName') {
         const matchingTrainer = trainers.find(
@@ -132,12 +184,18 @@ const AddCourse = () => {
       toast.error("Course Name is required");
       return;
     }
+    if (!formData.duration) {
+      toast.error("Enter the duration in months and/or days");
+      document.getElementById("durationMonths")?.focus();
+      return;
+    }
 
     setIsSubmitting(true);
 
     try {
+      const { durationMonths, durationDays, ...courseFields } = formData; // entry helpers; `duration` holds the text
       const productData = {
-        ...formData,
+        ...courseFields,
         name: formData.courseName,
         sku: formData.courseCode,
         supplier: formData.instructor,
@@ -172,6 +230,7 @@ const AddCourse = () => {
         toast.success("Course added successfully!");
       }
 
+      writeDraft(null);
       navigate("/inventory");
     } catch (err) {
       const msg = err.response?.data?.msg || "Failed to save course";
@@ -278,27 +337,76 @@ const AddCourse = () => {
                 <label htmlFor="instructor" className="block text-sm font-medium text-gray-700 mb-1">
                   Trainer <span className="text-red-500">*</span>
                 </label>
-                <select
-                  name="instructor"
-                  id="instructor"
-                  value={formData.instructor}
-                  onChange={handleChange}
-                  required
-                  className="w-full px-4 py-3 border rounded-lg bg-white"
-                >
-                  <option value="">Select Trainer</option>
-                  {trainers.map((trainer) => (
-                    <option key={trainer.id} value={trainer.name}>
-                      {trainer.name.charAt(0).toUpperCase() + trainer.name.slice(1)}
-                    </option>
-                  ))}
-                </select>
+                <div className="flex gap-2">
+                  <select
+                    name="instructor"
+                    id="instructor"
+                    value={formData.instructor}
+                    onChange={handleChange}
+                    required
+                    className="w-full px-4 py-3 border rounded-lg bg-white"
+                  >
+                    <option value="">Select Trainer</option>
+                    {trainers.map((trainer) => (
+                      <option key={trainer.id} value={trainer.name}>
+                        {trainer.name.charAt(0).toUpperCase() + trainer.name.slice(1)}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!editingCourseId) writeDraft(formData);
+                      navigate("/trainers");
+                    }}
+                    title="Add a new trainer"
+                    aria-label="Add a new trainer"
+                    className="shrink-0 px-4 border rounded-lg bg-white text-green-700 hover:bg-green-50"
+                  >
+                    <Plus className="w-5 h-5" />
+                  </button>
+                </div>
               </div>
               <div>
                 <label htmlFor="duration" className="block text-sm font-medium text-gray-700 mb-1">
                   Duration <span className="text-red-500">*</span>
                 </label>
-                <input id="duration" name="duration" value={formData.duration} onChange={handleChange} placeholder="e.g. 3 Months" required className="w-full px-4 py-3 border rounded-lg" />
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="relative">
+                    <input
+                      id="durationMonths"
+                      name="durationMonths"
+                      type="number"
+                      inputMode="numeric"
+                      min="0"
+                      max="120"
+                      step="1"
+                      value={formData.durationMonths}
+                      onChange={handleChange}
+                      placeholder="0"
+                      aria-label="Duration in months"
+                      className="w-full pl-4 pr-20 py-3 border rounded-lg"
+                    />
+                    <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm text-gray-400">months</span>
+                  </div>
+                  <div className="relative">
+                    <input
+                      id="durationDays"
+                      name="durationDays"
+                      type="number"
+                      inputMode="numeric"
+                      min="0"
+                      step="1"
+                      value={formData.durationDays}
+                      onChange={handleChange}
+                      placeholder="0"
+                      aria-label="Duration in days"
+                      className="w-full pl-4 pr-16 py-3 border rounded-lg"
+                    />
+                    <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm text-gray-400">days</span>
+                  </div>
+                </div>
+                {formData.duration && <p className="mt-1 text-xs text-gray-500">Saved as: {formData.duration}</p>}
               </div>
               <div>
                 <label htmlFor="category" className="block text-sm font-medium text-gray-700 mb-1">

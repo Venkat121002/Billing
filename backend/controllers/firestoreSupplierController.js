@@ -31,6 +31,7 @@ exports.createSupplier = async (req, res) => {
             gst,
             pan,
             mobile,
+            countryCode,
             email,
             address,
             paymentMode
@@ -43,6 +44,7 @@ exports.createSupplier = async (req, res) => {
             gst: gst || "",
             pan: pan || "",
             mobile: mobile || "",
+            countryCode: countryCode || "",
             email: email || "",
             address: address || "",
             paymentMode: paymentMode || "Cash",

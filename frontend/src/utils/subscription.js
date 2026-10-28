@@ -33,10 +33,17 @@ export function getSubscription(user, now = new Date()) {
       ? "amber"
       : "green";
 
+  // Premium on a yearly (or longer) cycle is the top of what can be bought.
+  const cycle = String(tenant.subscription_cycle || "").toLowerCase();
+  const isTopPlan = planKey === "premium" && (cycle === "yearly" || cycle === "3years");
+
   return {
     planKey,
     label: PLAN_LABELS[planKey] || tenant.subscription_plan || "No plan",
     isTrial: planKey === "trial",
+    isTopPlan,
+    // Offer the upgrade/renew button unless the store already has the top plan with time left.
+    canUpgrade: !isTopPlan || expired || (daysLeft !== null && daysLeft <= 30),
     expired,
     daysLeft,
     totalDays,

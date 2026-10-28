@@ -164,6 +164,10 @@ const AcademyBilling = () => {
 
   const [keyword, setKeyword] = useState("");
   const [cart, setCart] = useState(initialCart);
+  // Per-bill choice: untick "Include GST" to bill without tax (e.g. small courses). The cart keeps each
+  // item's real GST rate; billCart is what gets totalled, printed and saved.
+  const [includeGst, setIncludeGst] = useState(true);
+  const billCart = includeGst ? cart : cart.map((item) => ({ ...item, gstRate: 0 }));
   const [cash, setCash] = useState(initialCash);
   const [discount, setDiscount] = useState(0); // Added discount state
   const [change, setChange] = useState(0);
@@ -368,7 +372,7 @@ const AcademyBilling = () => {
 
     const isInclusive = userData?.Tenant?.sales_tax_type === "inclusive";
 
-    cart.forEach((item) => {
+    billCart.forEach((item) => {
       const price = Number(item.price);
       const qty = Number(item.qty);
       const gstRate = Number(item.gstRate || 0);
@@ -424,7 +428,7 @@ const AcademyBilling = () => {
   const numberFormat = (number) => (number || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const priceFormat = (number) => `₹${numberFormat(number)}`;
 
-  const clear = () => { setCash(0); setDiscount(0); setCart([]); setPaymentMethod("cash"); updateChange(); clearSound(); };
+  const clear = () => { setCash(0); setDiscount(0); setCart([]); setIncludeGst(true); setPaymentMethod("cash"); updateChange(); clearSound(); };
   const clearSound = () => playSound("/sound/button-21.mp3");
   const playSound = (src) => { const sound = new Audio(src); sound.play().catch(() => { }); sound.onended = () => sound.remove(); };
 
@@ -515,7 +519,7 @@ const AcademyBilling = () => {
         mobile: customer.phone,
         address: customer.location || "",
         gstin: customer.gstin || "",
-        products: cart.map(item => {
+        products: billCart.map(item => {
           const price = Number(item.price);
           const gstRate = Number(item.gstRate || 0);
           const gstAmount = (price * gstRate) / 100;
@@ -583,7 +587,7 @@ const AcademyBilling = () => {
       const saleData = {
         receiptNo: receiptNo || "N/A", receiptDate: receiptDate || new Date().toISOString(), customerId: customerId || null,
         customerName: customerForm.name || "", customerPhone: customerForm.phone || "",
-        items: cart.map(item => ({ sku: item.productSku || "NA", name: item.name || "Unknown", price: Number(item.price || 0), qty: Number(item.qty || 1), category: item.category || "Uncategorized", gstRate: Number(item.gstRate || 0), hsn: item.hsn || "" })),
+        items: billCart.map(item => ({ sku: item.productSku || "NA", name: item.name || "Unknown", price: Number(item.price || 0), qty: Number(item.qty || 1), category: item.category || "Uncategorized", gstRate: Number(item.gstRate || 0), hsn: item.hsn || "" })),
         totals: getTotals(),
         paymentMethod: paymentMethod === "term" ? `Term - ${termDuration}` : paymentMethod,
         printFormat: printerFormat, // names the WhatsApp PDF (Bill / Tax_Invoice)
@@ -720,7 +724,7 @@ const AcademyBilling = () => {
         const creditData = {
             name: customerForm.name, phone: customerForm.phone, address: customerForm.location,
             date: new Date().toISOString(), total: grandTotal, credit: cash, balance: dueAmount, totalbalance: dueAmount,
-            products: cart.map(item => ({ productId: item.productId, description: item.name, quantity: item.qty, price: item.price, gst: item.gstRate })),
+            products: billCart.map(item => ({ productId: item.productId, description: item.name, quantity: item.qty, price: item.price, gst: item.gstRate })),
             dueSession: paymentMethod === 'term' ? dueSession : 1, payments, customerId, createdBy: currentUser.uid || currentUser.userId,
         };
         try {
@@ -828,7 +832,7 @@ const AcademyBilling = () => {
           business={business}
           customer={customerForm}
           customerLabel={"Student"}
-          items={cart}
+          items={billCart}
           receiptNo={receiptNo}
           receiptDate={receiptDate}
           inclusive={inclusive}
@@ -855,7 +859,7 @@ const AcademyBilling = () => {
         size={formatStr.includes("a5") ? "a5" : "a4"}
         business={business}
         customer={customerForm}
-        items={cart}
+        items={billCart}
         invoiceNo={receiptNo}
         invoiceDate={new Date()}
         inclusive={inclusive}
@@ -1097,7 +1101,7 @@ const AcademyBilling = () => {
               </div>
             ) : (
               <div className="p-2 space-y-1">
-                {cart.map((item, index) => (
+                {billCart.map((item, index) => (
                   <div key={item.productSku} className="flex items-center gap-2 p-2 rounded-lg bg-gray-50/60 hover:bg-green-50/40 border border-transparent hover:border-green-100 transition-all">
                     <span className="w-5 h-5 rounded-md bg-green-100/80 text-green-600 text-[10px] font-bold flex items-center justify-center flex-shrink-0">
                       {index + 1}
@@ -1351,6 +1355,16 @@ const AcademyBilling = () => {
 
           {/* ── Bottom Actions ── */}
           <div className="px-5 py-10 border-t border-gray-100 bg-white flex-shrink-0 space-y-2">
+            <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={includeGst}
+                onChange={(e) => setIncludeGst(e.target.checked)}
+                className="w-4 h-4 accent-green-600"
+              />
+              <span>Include GST</span>
+              {!includeGst && <span className="text-xs text-amber-600">Billing without GST</span>}
+            </label>
             {cart.length > 0 && (
               <button
                 onClick={clear}

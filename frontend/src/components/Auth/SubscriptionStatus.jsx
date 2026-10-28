@@ -27,10 +27,11 @@ export function SubscriptionBadge({ user }) {
   );
 }
 
-/** Dashboard widget: current plan, days left, progress and an upgrade button. Owners only. */
+/** Dashboard widget: days left, progress and an upgrade button. Owners only, and only while on the free trial. */
 export function SubscriptionCard({ user }) {
   if (!["owner", "TenantAdmin"].includes(user?.role)) return null;
   const sub = getSubscription(user);
+  if (!sub.isTrial) return null; // paid plans: the header badge is enough
   const t = TONES[sub.tone];
   const pct =
     sub.daysLeft !== null && sub.totalDays
