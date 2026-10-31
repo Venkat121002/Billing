@@ -1,10 +1,17 @@
 {
+  "name": "billing-root",
+  "version": "1.0.0",
+  "private": true,
   "scripts": {
+    "dev": "concurrently -n \"backend,frontend\" -c \"yellow,cyan\" \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:frontend": "cd frontend && npm run dev",
+    "dev:backend": "cd backend && npm run dev",
     "build:frontend": "cd frontend && npm run build",
     "build:electron": "cd frontend && npm run electron:build",
     "dist": "npm run build:frontend && npm run build:electron"
   },
   "devDependencies": {
+    "concurrently": "^9.2.1",
     "electron": "^39.2.7",
     "electron-builder": "^26.4.0"
   },

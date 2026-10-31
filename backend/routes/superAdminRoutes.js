@@ -44,4 +44,10 @@ router.post('/whatsapp/run-reminders', superAdminAuth, async (req, res) => {
     }
 });
 
+// Email Management (Automated daily emails & subscribers)
+router.get('/email-management', superAdminAuth, controller.getEmailManagement);
+router.patch('/email-management/toggle', superAdminAuth, controller.toggleEmailAutomation);
+router.patch('/email-management/subscribers/:id/subscription', superAdminAuth, controller.updateSubscriberStatus);
+router.post('/email-management/trigger-now', superAdminAuth, controller.triggerDailyEmailsNow);
+
 module.exports = router;

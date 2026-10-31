@@ -333,6 +333,11 @@ app.use(
 );
 
 // Payments: public pay-link endpoints (token-authenticated) + Razorpay webhook
+// Email management endpoints (unsubscribe, resubscribe, status)
+app.use('/api/v2/email', require('./routes/emailRoutes'));
+app.use('/v2/email', require('./routes/emailRoutes'));
+app.use('/api/email', require('./routes/emailRoutes'));
+
 app.use('/api/v2/pay', require('./routes/paymentRoutes'));
 app.use('/v2/pay', require('./routes/paymentRoutes'));
 

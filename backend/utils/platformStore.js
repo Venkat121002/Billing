@@ -152,13 +152,24 @@ exports.updateSupportRequest = async (id, patch) => {
 };
 
 // ---------- Platform settings (single 'global' record) ----------
-const PLATFORM_DEFAULTS = { billDeliveryMode: 'pdf' };
+const PLATFORM_DEFAULTS = {
+    billDeliveryMode: 'pdf',
+    dailyEmailsEnabled: true,
+    dailyEmailsLastRunAt: null
+};
 const settingsDoc = () => root().collection('platform').doc('settings');
 
 exports.getPlatformSettings = async () => {
     if (isMongo()) {
         const doc = await models.PlatformSetting.findOne({ key: 'global' }).lean();
-        return { ...PLATFORM_DEFAULTS, ...(doc ? { billDeliveryMode: doc.billDeliveryMode } : {}) };
+        return {
+            ...PLATFORM_DEFAULTS,
+            ...(doc ? {
+                billDeliveryMode: doc.billDeliveryMode,
+                dailyEmailsEnabled: doc.dailyEmailsEnabled !== undefined ? doc.dailyEmailsEnabled : true,
+                dailyEmailsLastRunAt: doc.dailyEmailsLastRunAt || null
+            } : {})
+        };
     }
     const doc = await settingsDoc().get();
     return { ...PLATFORM_DEFAULTS, ...(doc.exists ? doc.data() : {}) };

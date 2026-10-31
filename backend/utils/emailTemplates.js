@@ -94,7 +94,7 @@ const note = (html) =>
  *   onBehalfOf: for emails a business sends its own customers (pay links, receipts);
  *               replaces SwordNex support details with "Sent by <business>".
  */
-function layout({ preheader = '', heading, body, onBehalfOf }) {
+function layout({ preheader = '', heading, body, onBehalfOf, unsubscribeUrl }) {
     const footer = onBehalfOf
         ? `Sent by <b>${esc(onBehalfOf)}</b> using SwordNex Billing.`
         : `Need help? Write to <a href="mailto:${SUPPORT_EMAIL}" style="color:${BRAND_DARK};text-decoration:none">${SUPPORT_EMAIL}</a>
@@ -128,6 +128,16 @@ function layout({ preheader = '', heading, body, onBehalfOf }) {
         </td></tr>
         <tr><td align="center" style="padding:20px 16px 0">
           <p style="margin:0 0 8px;font-size:13px;line-height:20px;color:${MUTED}">${footer}</p>
+          ${unsubscribeUrl ? `
+          <div style="margin:14px 0 10px;padding:12px 16px;background:#FEF2F2;border:1px solid #FECACA;border-radius:8px;text-align:center">
+            <p style="margin:0 0 6px;font-size:12px;line-height:16px;color:#991B1B">
+              You received this daily email as a registered SwordNex Billing store owner.
+            </p>
+            <a href="${esc(unsubscribeUrl)}" target="_blank"
+               style="display:inline-block;padding:5px 14px;background:#FFFFFF;border:1px solid #DC2626;border-radius:6px;font-size:12px;font-weight:600;color:#DC2626;text-decoration:none">
+              Unsubscribe from Daily Emails
+            </a>
+          </div>` : ''}
           <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:12px auto 4px">
             <tr>
               <td valign="middle" align="center" style="padding-right:8px">
@@ -397,6 +407,7 @@ exports.dailySalesSummary = ({ storeName, ownerName, date, totalSales, totalBill
             preheader: `Daily sales report for ${storeName} on ${date}. Total Sales: ${totalSales}.`,
             heading: 'Daily Sales & Closing Report',
             onBehalfOf: storeName,
+            unsubscribeUrl,
             body: [
                 p(`Hi ${esc(ownerName || 'Store Owner')},`),
                 p(`Here is the business performance summary for <b>${esc(storeName)}</b> on <b>${esc(date)}</b>:`),

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Building2, ChevronDown, Gauge, LayoutDashboard, LifeBuoy, LogOut, Menu, Settings, Tag, X } from "lucide-react";
+import { Building2, ChevronDown, Gauge, LayoutDashboard, LifeBuoy, LogOut, Mail, Menu, Settings, Tag, X } from "lucide-react";
 import { useSuperAdminAuth } from "../../contexts/SuperAdminAuthContext";
 import Overview from "./Overview";
 import Stores from "./Stores";
@@ -9,6 +9,7 @@ import DataExplorer from "./DataExplorer";
 import PlansView from "./PlansView";
 import SupportView from "./SupportView";
 import SettingsView from "./SettingsView";
+import EmailManagementView from "./EmailManagementView";
 import StorePicker, { ALL_STORES, StoreSwitcher } from "./StorePicker";
 import { GROUP_ICONS, GROUP_ORDER } from "./datasetGroups";
 import { ThemeToggle } from "./theme";
@@ -167,6 +168,7 @@ export default function SuperAdminConsole() {
             navItem(view === "overview", () => go({ view: "overview" }), LayoutDashboard, "Dashboard")
           )}
           {navItem(view === "support", () => go({ view: "support" }), LifeBuoy, "Support requests", pendingSupport, true)}
+          {navItem(view === "email-management", () => go({ view: "email-management" }), Mail, "Email management")}
           {isAll && navItem(view === "settings", () => go({ view: "settings" }), Settings, "Platform settings")}
         </div>
         {GROUP_ORDER.map((group) => {
@@ -201,6 +203,8 @@ export default function SuperAdminConsole() {
   let content;
   if (!isAll && !tenantStore) {
     content = storesLoading ? <Spinner label="Loading store..." /> : null;
+  } else if (view === "email-management") {
+    content = <EmailManagementView />;
   } else if (view === "support") {
     content = <SupportView key={tenant} storeId={isAll ? null : tenant} onOpenStore={selectTenant} onChanged={loadPendingSupport} />;
   } else if (view === "data" && dsKey) {
@@ -229,6 +233,7 @@ export default function SuperAdminConsole() {
     content = <Stores stores={stores} loading={storesLoading} error={storesError} onReload={refreshAll} onOpenStore={selectTenant} />;
   } else if (view === "plans") {
     content = <PlansView />;
+
   } else if (view === "settings") {
     content = <SettingsView />;
   } else {

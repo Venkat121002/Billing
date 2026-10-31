@@ -456,3 +456,100 @@ exports.updateTenantBillDelivery = async (req, res) => {
         res.status(500).json({ msg: 'Server error: ' + err.message });
     }
 };
+
+// ---------------------------------------------------------------------------
+// Email Management (Automated daily emails & subscribers)
+// ---------------------------------------------------------------------------
+
+// @desc    Get email management overview, automation toggle status, and subscriber list
+// @route   GET /superadmin/email-management
+exports.getEmailManagement = async (req, res) => {
+    try {
+        const settings = await store.getPlatformSettings();
+        const owners = await store.listOwners();
+
+        const subscribers = owners.map((owner) => {
+            const fullName = [owner.firstName, owner.lastName].filter(Boolean).join(' ') || owner.name || '';
+            const companyName = owner.companyDetails?.name || owner.businessName || '';
+            const isSubscribed = owner.dailyEmailSubscribed !== false;
+
+            return {
+                id: owner.userId || owner._id?.toString(),
+                name: fullName || companyName || 'Store Owner',
+                company: companyName,
+                email: owner.email,
+                mobile: owner.mobile || '',
+                dailyEmailSubscribed: isSubscribed,
+                unsubscribedAt: owner.unsubscribedAt || null,
+                createdAt: owner.createdAt || null
+            };
+        });
+
+        const stats = {
+            totalUsers: subscribers.length,
+            activeSubscribers: subscribers.filter((s) => s.dailyEmailSubscribed).length,
+            unsubscribedCount: subscribers.filter((s) => !s.dailyEmailSubscribed).length,
+            dailyEmailsEnabled: settings.dailyEmailsEnabled !== false,
+            lastRunAt: settings.dailyEmailsLastRunAt || null
+        };
+
+        res.json({ settings, stats, subscribers });
+    } catch (err) {
+        console.error('SuperAdmin getEmailManagement Error:', err.message);
+        res.status(500).json({ msg: 'Server error: ' + err.message });
+    }
+};
+
+// @desc    Toggle automated daily emails on/off (Start / Stop)
+// @route   PATCH /superadmin/email-management/toggle   body: { enabled: boolean }
+exports.toggleEmailAutomation = async (req, res) => {
+    try {
+        const { enabled } = req.body;
+        const isEnabled = Boolean(enabled);
+        const settings = await store.updatePlatformSettings({ dailyEmailsEnabled: isEnabled });
+        res.json({
+            msg: `Daily automated emails have been ${isEnabled ? 'STARTED' : 'STOPPED'} successfully.`,
+            settings
+        });
+    } catch (err) {
+        console.error('SuperAdmin toggleEmailAutomation Error:', err.message);
+        res.status(500).json({ msg: 'Server error: ' + err.message });
+    }
+};
+
+// @desc    Update individual subscriber status (subscribe / unsubscribe)
+// @route   PATCH /superadmin/email-management/subscribers/:id/subscription   body: { subscribed: boolean }
+exports.updateSubscriberStatus = async (req, res) => {
+    try {
+        const { subscribed } = req.body;
+        const isSubscribed = Boolean(subscribed);
+        const patch = {
+            dailyEmailSubscribed: isSubscribed,
+            unsubscribedAt: isSubscribed ? null : new Date().toISOString()
+        };
+
+        const owner = await store.updateOwner(req.params.id, patch);
+        if (!owner) return res.status(404).json({ msg: 'Tenant not found' });
+
+        res.json({
+            msg: `Subscriber status updated to ${isSubscribed ? 'Subscribed' : 'Unsubscribed'}`,
+            owner: saData.sanitize(owner)
+        });
+    } catch (err) {
+        console.error('SuperAdmin updateSubscriberStatus Error:', err.message);
+        res.status(500).json({ msg: 'Server error: ' + err.message });
+    }
+};
+
+// @desc    Trigger daily email dispatch immediately (test / manual trigger)
+// @route   POST /superadmin/email-management/trigger-now
+exports.triggerDailyEmailsNow = async (req, res) => {
+    try {
+        const { runAllOwnersDailySalesSummary } = require('../utils/salesSummary');
+        const result = await runAllOwnersDailySalesSummary(new Date(), { force: true });
+        res.json({ msg: 'Daily emails batch processed', result });
+    } catch (err) {
+        console.error('SuperAdmin triggerDailyEmailsNow Error:', err.message);
+        res.status(500).json({ msg: 'Server error: ' + err.message });
+    }
+};

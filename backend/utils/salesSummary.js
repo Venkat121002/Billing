@@ -10,6 +10,7 @@ const { money } = require('./paymentService');
 const { generateDailyReportPDF } = require('./reportPdfGenerator');
 const { listStoreRecords } = require('./storeRecords');
 const { Bill, Credit, Product, EmailLog } = require('../models/mongodb');
+const { getUnsubscribeUrl } = require('./unsubscribeToken');
 
 /**
  * Returns Start & End of day in IST (Asia/Kolkata)
@@ -174,37 +175,59 @@ async function generateDailySalesSummary({ ownerId, date = new Date() }) {
 
         // 2. Send Email Summary to Owner (with attached PDF)
         if (ownerEmail && /^\S+@\S+\.\S+$/.test(ownerEmail)) {
-            const emailTemplate = emailTemplates.dailySalesSummary(summaryData);
-            try {
-                await sendEmail({
-                    to: ownerEmail,
-                    ...emailTemplate,
-                    attachment: pdfAttachment ? [pdfAttachment] : []
-                });
-                result.emailSent = true;
+            if (owner.dailyEmailSubscribed === false) {
+                console.log(`[salesSummary] User ${ownerEmail} has unsubscribed from daily emails. Skipping.`);
+                result.emailSkipped = true;
+                result.skipReason = 'unsubscribed';
                 if (EmailLog) {
                     await EmailLog.create({
                         tenantId: owner.tenantId || process.env.TENANT_ID || 'SwordNexBilling-4pzp8',
                         ownerId,
                         recipient: ownerEmail,
-                        subject: emailTemplate.subject,
+                        subject: `Daily Business Summary - ${storeName}`,
                         type: 'daily_closing_summary',
-                        status: 'sent',
-                        metadata: { storeName, totalSales: summaryData.totalSales, totalBills: bills.length }
-                    }).catch((e) => console.error('[salesSummary] EmailLog error:', e.message));
-                }
-            } catch (err) {
-                console.error(`[salesSummary] Email failed for ${ownerEmail}:`, err.message);
-                if (EmailLog) {
-                    await EmailLog.create({
-                        tenantId: owner.tenantId || process.env.TENANT_ID || 'SwordNexBilling-4pzp8',
-                        ownerId,
-                        recipient: ownerEmail,
-                        subject: emailTemplate.subject,
-                        type: 'daily_closing_summary',
-                        status: 'failed',
-                        error: err.message
+                        status: 'skipped',
+                        error: 'User unsubscribed',
+                        metadata: { storeName, reason: 'unsubscribed' }
                     }).catch(() => {});
+                }
+            } else {
+                const unsubscribeUrl = getUnsubscribeUrl(ownerEmail);
+                const emailTemplate = emailTemplates.dailySalesSummary({
+                    ...summaryData,
+                    unsubscribeUrl
+                });
+                try {
+                    await sendEmail({
+                        to: ownerEmail,
+                        ...emailTemplate,
+                        attachment: pdfAttachment ? [pdfAttachment] : []
+                    });
+                    result.emailSent = true;
+                    if (EmailLog) {
+                        await EmailLog.create({
+                            tenantId: owner.tenantId || process.env.TENANT_ID || 'SwordNexBilling-4pzp8',
+                            ownerId,
+                            recipient: ownerEmail,
+                            subject: emailTemplate.subject,
+                            type: 'daily_closing_summary',
+                            status: 'sent',
+                            metadata: { storeName, totalSales: summaryData.totalSales, totalBills: bills.length }
+                        }).catch((e) => console.error('[salesSummary] EmailLog error:', e.message));
+                    }
+                } catch (err) {
+                    console.error(`[salesSummary] Email failed for ${ownerEmail}:`, err.message);
+                    if (EmailLog) {
+                        await EmailLog.create({
+                            tenantId: owner.tenantId || process.env.TENANT_ID || 'SwordNexBilling-4pzp8',
+                            ownerId,
+                            recipient: ownerEmail,
+                            subject: emailTemplate.subject,
+                            type: 'daily_closing_summary',
+                            status: 'failed',
+                            error: err.message
+                        }).catch(() => {});
+                    }
                 }
             }
         }
@@ -219,19 +242,45 @@ async function generateDailySalesSummary({ ownerId, date = new Date() }) {
 /**
  * Runs daily sales summary for all active owners in the system.
  */
-async function runAllOwnersDailySalesSummary(date = new Date()) {
-    const summary = { processed: 0, whatsappSent: 0, emailsSent: 0, errors: 0 };
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function runAllOwnersDailySalesSummary(date = new Date(), options = {}) {
+    const summary = { processed: 0, whatsappSent: 0, emailsSent: 0, skippedUnsubscribed: 0, errors: 0, dailyEmailsEnabled: true };
     try {
-        const owners = await platformStore.listOwners();
-        for (const owner of owners) {
-            // Business records carry the owner's userId, not the Mongo _id.
-            const ownerId = owner.userId || owner._id?.toString();
-            const res = await generateDailySalesSummary({ ownerId, date });
-            summary.processed += 1;
-            if (res.whatsappSent) summary.whatsappSent += 1;
-            if (res.emailSent) summary.emailsSent += 1;
-            if (res.error) summary.errors += 1;
+        const settings = await platformStore.getPlatformSettings();
+        if (settings.dailyEmailsEnabled === false && !options.force) {
+            console.log('🛑 [Scheduler] Daily automated emails are currently STOPPED / PAUSED by Admin. Skipping run.');
+            summary.dailyEmailsEnabled = false;
+            summary.message = 'Daily automated emails are currently stopped by Admin.';
+            return summary;
         }
+
+        const owners = await platformStore.listOwners();
+        console.log(`⏰ [Daily Emails] Initiating batch run for ${owners.length} registered owners...`);
+
+        for (const owner of owners) {
+            try {
+                // Business records carry the owner's userId, not the Mongo _id.
+                const ownerId = owner.userId || owner._id?.toString();
+                const res = await generateDailySalesSummary({ ownerId, date });
+                summary.processed += 1;
+                if (res.whatsappSent) summary.whatsappSent += 1;
+                if (res.emailSent) {
+                    summary.emailsSent += 1;
+                    // SMTP rate-limit safety pacing: 250ms gap between user dispatches
+                    await sleep(250);
+                }
+                if (res.emailSkipped && res.skipReason === 'unsubscribed') summary.skippedUnsubscribed += 1;
+                if (res.error) summary.errors += 1;
+            } catch (singleOwnerErr) {
+                console.error(`[salesSummary] Error dispatching for owner ${owner.email || owner.userId}:`, singleOwnerErr.message);
+                summary.errors += 1;
+            }
+        }
+
+        // Record the last run timestamp in platform settings
+        await platformStore.updatePlatformSettings({ dailyEmailsLastRunAt: new Date().toISOString() });
+        console.log('✅ [Daily Emails] Batch run completed:', summary);
     } catch (err) {
         console.error('[salesSummary] Error in runAllOwnersDailySalesSummary:', err);
     }
