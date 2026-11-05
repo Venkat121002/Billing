@@ -33,6 +33,7 @@ import CashBook from "./components/Expenses/CashBook.jsx"
 import Credit from "./components/Billing/credit";
 import { Sessionrecord } from "./components/Auth/Sessionrecord";
 import Support from "./components/Billing/Support";
+import UnsubscribePage from "./pages/UnsubscribePage";
 import ForgotPassword from "./components/Auth/forgot";
 import Reports from "./components/Billing/Reports";
 
@@ -138,6 +139,7 @@ function App() {
               <Route path="/support" element={<Support />} />
               <Route path="/forgot" element={<ForgotPassword />} />
               <Route path="/forgot-password" element={<ForgotPassword />} />
+              <Route path="/unsubscribe" element={<UnsubscribePage />} />
 
               {/* Super Admin — separate, isolated auth domain (single hardcoded account) */}
               <Route

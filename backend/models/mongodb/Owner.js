@@ -53,6 +53,8 @@ const OwnerSchema = new mongoose.Schema({
     invoice_prefix: { type: String, default: 'INV-' },
     next_invoice_number: { type: Number, default: 1 },
     invoice_terms: { type: String }, // unset = default terms
+    dailyEmailSubscribed: { type: Boolean, default: true, index: true },
+    unsubscribedAt: { type: String, default: null },
     lastLogin: { type: String, default: null },
     createdAt: { type: String, default: () => new Date().toISOString() }
 }, {
