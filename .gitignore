@@ -10,8 +10,10 @@ node_modules/
 # Production & Build Outputs
 # ==========================================
 dist/
+*/dist/
 dist-electron/
 build/
+*/build/
 out/
 release/
 temp/
@@ -53,14 +55,17 @@ firestore-debug.log*
 ui-debug.log*
 
 # ==========================================
-# Firebase Cache
+# Firebase & Build Caches
 # ==========================================
 .firebase/
+*/.firebase/
+*.cache
 
 # ==========================================
 # Vite & Tooling Cache
 # ==========================================
 .vite/
+*/.vite/
 *.timestamp-*.mjs
 .eslintcache
 
