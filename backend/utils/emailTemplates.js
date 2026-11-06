@@ -335,7 +335,7 @@ exports.lowStockSummary = ({ storeName, ownerName, date, items = [] }) => {
 };
 
 /** Daily sales summary email for store owner with both rich HTML and complete Plain Text details. */
-exports.dailySalesSummary = ({ storeName, ownerName, date, totalSales, totalBills, paymentBreakdown = {}, topProducts = [], duesIncurred = '₹0', lowStockItems = [] }) => {
+exports.dailySalesSummary = ({ storeName, ownerName, date, totalSales, totalBills, paymentBreakdown = {}, topProducts = [], duesIncurred = '₹0', lowStockItems = [], unsubscribeUrl }) => {
     const dashboardUrl = siteUrl();
 
     // Top products HTML table rows
