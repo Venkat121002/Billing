@@ -2,20 +2,48 @@
 # Dependencies
 # ==========================================
 node_modules/
-*/node_modules/
+**/node_modules/
 .pnp
 .pnp.js
+.pnp.*
+.npm/
+.pnpm-store/
+.yarn/cache/
+.yarn/unplugged/
+.yarn/build-state.yml
+.yarn/install-state.gz
 
 # ==========================================
 # Production & Build Outputs
 # ==========================================
 dist/
-dist-electron/
+**/dist/
 build/
+**/build/
 out/
+**/out/
+dist-electron/
+**/dist-electron/
 release/
-temp/
-tmp/
+**/release/
+
+# Electron Packager & Builder Outputs
+win-unpacked/
+**/win-unpacked/
+mac/
+**/mac/
+mac-arm64/
+**/mac-arm64/
+linux-unpacked/
+**/linux-unpacked/
+*.blockmap
+builder-debug.yml
+builder-effective-config.yaml
+*.exe
+*.dmg
+*.AppImage
+*.deb
+*.rpm
 
 # ==========================================
 # Environment & Secrets (Never commit credentials)
@@ -23,26 +51,33 @@ tmp/
 .env
 .env.*
 *.env
-backend/.env
-backend/.env.*
-frontend/.env
-frontend/.env.*
+*.env.*
+**/.env
+**/.env.*
 !.env.example
-!backend/.env.example
-!frontend/.env.example
+!**/.env.example
 
 # Service Account & Certificate Keys
 *.pem
 *.key
 *.cert
+*.crt
+*.pfx
+*.p12
+*.csr
 serviceAccountKey.json
 *-service-account.json
 firebase-adminsdk*.json
+client_secret*.json
+google-services.json
+GoogleService-Info.plist
+cashfree*.json
 
 # ==========================================
 # Logs & Debugging
 # ==========================================
 logs/
+**/logs/
 *.log
 npm-debug.log*
 yarn-debug.log*
@@ -53,39 +88,91 @@ firestore-debug.log*
 ui-debug.log*
 
 # ==========================================
-# Firebase Cache
+# Temporary Files, Uploads & Caches
+# ==========================================
+temp/
+**/temp/
+tmp/
+**/tmp/
+uploads/
+**/uploads/
+*.tmp
+*.temp
+*.cache
+*.bak
+.cache/
+**/.cache/
+
+# ==========================================
+# Firebase, Vite & Tooling Caches
 # ==========================================
 .firebase/
-
-# ==========================================
-# Vite & Tooling Cache
-# ==========================================
+**/.firebase/
 .vite/
+**/.vite/
 *.timestamp-*.mjs
 .eslintcache
+.parcel-cache/
+.turbo/
+*.tsbuildinfo
 
 # ==========================================
-# Local Databases
+# Testing & Coverage
+# ==========================================
+coverage/
+**/coverage/
+.nyc_output/
+*.lcov
+test-results/
+
+# ==========================================
+# Local Databases & Storage
 # ==========================================
 *.sqlite
 *.sqlite3
+*.sqlite-journal
 *.db
+*.db-journal
+*.db-wal
+*.db-shm
+dump.rdb
 
 # ==========================================
-# Operating System & Editor Files
+# Operating System Files
 # ==========================================
+# macOS
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+
+# Windows
 Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
 desktop.ini
+$RECYCLE.BIN/
 ~$*
 
-# IDEs
+# Linux / General
+*~
+.directory
+
+# ==========================================
+# Editors & IDEs
+# ==========================================
 .vscode/
 .idea/
+*.sublime-project
+*.sublime-workspace
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
+*.swp
+*.swo
 .claude/
 .kilo/
+.cursor/
